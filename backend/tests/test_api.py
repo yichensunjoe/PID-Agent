@@ -96,6 +96,49 @@ def test_agent_timeout_returns_structured_504(tmp_path: Path, monkeypatch):
     assert detail["provider"]["model"] == "qwen-test"
 
 
+def test_custom_provider_endpoint_accepts_api_key_without_echo(tmp_path: Path, monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_test_provider(self, provider):
+        captured["base_url"] = provider.base_url
+        captured["model"] = provider.model
+        captured["api_key"] = provider.api_key
+        captured["timeout_seconds"] = provider.timeout_seconds
+        return {
+            "ok": True,
+            "base_url": "http://127.0.0.1:9000/v1",
+            "model": "custom-model",
+            "method": "models",
+            "latency_ms": 12,
+            "model_available": True,
+            "available_model_count": 1,
+            "message": "连接成功，指定模型可用",
+        }
+
+    monkeypatch.setattr(OpenAICompatiblePlanner, "test_provider", fake_test_provider)
+    client = make_client(tmp_path)
+
+    response = client.post(
+        "/api/v2/agent/provider/test",
+        json={
+            "base_url": "http://127.0.0.1:9000/v1",
+            "api_key": "secret-provider-key",
+            "model": "custom-model",
+            "timeout_seconds": 45,
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "base_url": "http://127.0.0.1:9000/v1",
+        "model": "custom-model",
+        "api_key": "secret-provider-key",
+        "timeout_seconds": 45,
+    }
+    assert response.json()["model_available"] is True
+    assert "secret-provider-key" not in response.text
+
+
 def test_legacy_endpoint_uses_v2_document_engine(tmp_path: Path):
     client = make_client(tmp_path)
     response = client.post(
