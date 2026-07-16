@@ -139,6 +139,18 @@ def test_custom_provider_endpoint_accepts_api_key_without_echo(tmp_path: Path, m
     assert "secret-provider-key" not in response.text
 
 
+def test_custom_provider_does_not_inherit_server_api_key(monkeypatch):
+    monkeypatch.setenv("PID_AGENT_LLM_API_KEY", "server-secret")
+    resolved = OpenAICompatiblePlanner._resolve_provider(
+        ProviderConfig(
+            base_url="http://127.0.0.1:9000/v1",
+            model="custom-model",
+        )
+    )
+
+    assert resolved.api_key is None
+
+
 def test_legacy_endpoint_uses_v2_document_engine(tmp_path: Path):
     client = make_client(tmp_path)
     response = client.post(
