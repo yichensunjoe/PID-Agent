@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from time import perf_counter
 from typing import Any
 
 import httpx
@@ -66,6 +67,11 @@ class ProviderConnectionError(PlannerError):
     retryable = True
 
 
+class ProviderAuthenticationError(PlannerError):
+    code = "provider_authentication_failed"
+    status_code = 401
+
+
 class LLMResponseError(PlannerError):
     code = "provider_response_error"
     status_code = 502
@@ -84,6 +90,63 @@ class OpenAICompatiblePlanner:
     def __init__(self, service: DocumentService, symbols: SymbolRegistry):
         self.service = service
         self.symbols = symbols
+
+    def test_provider(self, override: ProviderConfig | None) -> dict[str, Any]:
+        """Verify an OpenAI-compatible provider without persisting credentials."""
+        provider = self._resolve_provider(override)
+        headers = self._headers(provider)
+        started = perf_counter()
+        models_endpoint = provider.base_url.rstrip("/") + "/models"
+
+        try:
+            with httpx.Client(timeout=provider.timeout_seconds) as client:
+                response = client.get(models_endpoint, headers=headers)
+                if response.status_code in {404, 405}:
+                    result = self._test_with_minimal_completion(client, provider, headers)
+                    result["latency_ms"] = round((perf_counter() - started) * 1000)
+                    return result
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeoutError(
+                f"model provider did not respond within {provider.timeout_seconds:g} seconds",
+                provider=provider,
+                timeout_seconds=provider.timeout_seconds,
+            ) from exc
+        except httpx.RequestError as exc:
+            raise ProviderConnectionError(
+                f"could not connect to model provider: {exc}",
+                provider=provider,
+            ) from exc
+
+        self._raise_for_response(response, provider)
+        model_ids: list[str] = []
+        try:
+            payload = response.json()
+            entries = payload.get("data", []) if isinstance(payload, dict) else []
+            model_ids = [
+                item["id"]
+                for item in entries
+                if isinstance(item, dict) and isinstance(item.get("id"), str)
+            ]
+        except ValueError:
+            model_ids = []
+
+        model_available = provider.model in model_ids if model_ids else None
+        return {
+            "ok": True,
+            "base_url": provider.base_url,
+            "model": provider.model,
+            "method": "models",
+            "latency_ms": round((perf_counter() - started) * 1000),
+            "model_available": model_available,
+            "available_model_count": len(model_ids),
+            "message": (
+                "连接成功，指定模型可用"
+                if model_available is True
+                else "连接成功，但模型列表中未找到指定名称"
+                if model_available is False
+                else "连接成功，服务未返回可解析的模型列表"
+            ),
+        }
 
     def plan(self, document_id: str, request: AgentGenerateRequest) -> AgentPlan:
         provider = self._resolve_provider(request.provider)
@@ -106,9 +169,7 @@ class OpenAICompatiblePlanner:
             "temperature": 0.1,
             "response_format": {"type": "json_object"},
         }
-        headers = {"Content-Type": "application/json"}
-        if provider.api_key:
-            headers["Authorization"] = f"Bearer {provider.api_key}"
+        headers = self._headers(provider)
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
 
         try:
@@ -130,12 +191,7 @@ class OpenAICompatiblePlanner:
                 provider=provider,
             ) from exc
 
-        if response.is_error:
-            raise LLMResponseError(
-                f"model provider returned HTTP {response.status_code}: {response.text[:1000]}",
-                provider=provider,
-                provider_status=response.status_code,
-            )
+        self._raise_for_response(response, provider)
         try:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
@@ -165,6 +221,65 @@ class OpenAICompatiblePlanner:
         if plan.transaction.expected_revision is None:
             plan.transaction.expected_revision = request.expected_revision
         return plan
+
+    @staticmethod
+    def _headers(provider: ProviderConfig) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if provider.api_key:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
+        return headers
+
+    def _test_with_minimal_completion(
+        self,
+        client: httpx.Client,
+        provider: ProviderConfig,
+        headers: dict[str, str],
+    ) -> dict[str, Any]:
+        endpoint = provider.base_url.rstrip("/") + "/chat/completions"
+        response = client.post(
+            endpoint,
+            headers=headers,
+            json={
+                "model": provider.model,
+                "messages": [{"role": "user", "content": "Reply with OK."}],
+                "temperature": 0,
+                "max_tokens": 1,
+                "stream": False,
+            },
+        )
+        self._raise_for_response(response, provider)
+        try:
+            payload = response.json()
+            payload["choices"][0]["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise LLMResponseError(
+                "provider test response did not contain choices[0].message",
+                provider=provider,
+            ) from exc
+        return {
+            "ok": True,
+            "base_url": provider.base_url,
+            "model": provider.model,
+            "method": "chat_completion",
+            "model_available": True,
+            "available_model_count": None,
+            "message": "连接成功，模型完成了最小测试请求",
+        }
+
+    @staticmethod
+    def _raise_for_response(response: httpx.Response, provider: ProviderConfig) -> None:
+        if response.status_code in {401, 403}:
+            raise ProviderAuthenticationError(
+                "API Key 无效或没有访问该模型的权限",
+                provider=provider,
+                provider_status=response.status_code,
+            )
+        if response.is_error:
+            raise LLMResponseError(
+                f"model provider returned HTTP {response.status_code}: {response.text[:1000]}",
+                provider=provider,
+                provider_status=response.status_code,
+            )
 
     def _system_prompt(self, schema: dict[str, Any]) -> str:
         return (
