@@ -93,6 +93,13 @@ class SymbolElement(ElementBase):
     properties: dict[str, Any] = Field(default_factory=dict)
 
 
+class JunctionElement(ElementBase):
+    type: Literal["junction"] = "junction"
+    position: Point
+    radius: float = Field(default=4, gt=0, le=50)
+    label: str = ""
+
+
 class ConnectorEndpoint(StrictModel):
     element_id: str | None = None
     port_id: str | None = None
@@ -100,10 +107,8 @@ class ConnectorEndpoint(StrictModel):
 
     @model_validator(mode="after")
     def validate_binding(self) -> ConnectorEndpoint:
-        if self.port_id and not self.element_id:
-            raise ValueError("port_id requires element_id")
-        if self.element_id and not self.port_id:
-            raise ValueError("element_id requires port_id")
+        if bool(self.element_id) != bool(self.port_id):
+            raise ValueError("element_id and port_id must be provided together")
         return self
 
 
@@ -112,7 +117,7 @@ class ConnectorElement(ElementBase):
     points: list[Point]
     source: ConnectorEndpoint | None = None
     target: ConnectorEndpoint | None = None
-    routing: Literal["orthogonal", "direct"] = "orthogonal"
+    routing: Literal["orthogonal", "direct", "manual"] = "orthogonal"
     process_tag: str = ""
 
     @field_validator("points")
@@ -130,6 +135,7 @@ Element = Annotated[
     | CircleElement
     | TextElement
     | SymbolElement
+    | JunctionElement
     | ConnectorElement,
     Field(discriminator="type"),
 ]
@@ -185,10 +191,14 @@ class Document(StrictModel):
                         f"connector {element.id} {endpoint_name} references missing element: "
                         f"{endpoint.element_id}"
                     )
-                if referenced.type != "symbol":
+                if referenced.type not in {"symbol", "junction"}:
                     raise ValueError(
-                        f"connector {element.id} {endpoint_name} must reference a symbol: "
+                        f"connector {element.id} {endpoint_name} must reference a symbol or junction: "
                         f"{endpoint.element_id}"
+                    )
+                if referenced.type == "junction" and endpoint.port_id != "node":
+                    raise ValueError(
+                        f"connector {element.id} {endpoint_name} must use junction port 'node'"
                     )
         return self
 
