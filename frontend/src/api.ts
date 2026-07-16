@@ -2,6 +2,24 @@ import type { Document, DocumentSummary, Operation, SymbolDefinition } from "./t
 
 const API_ROOT = import.meta.env.VITE_API_ROOT ?? "/api/v2";
 
+export type ProviderConfig = {
+  base_url?: string;
+  model?: string;
+  api_key?: string;
+  timeout_seconds?: number;
+};
+
+export type ProviderTestResult = {
+  ok: boolean;
+  base_url: string;
+  model: string;
+  method: "models" | "chat_completion";
+  latency_ms: number;
+  model_available: boolean | null;
+  available_model_count: number | null;
+  message: string;
+};
+
 export type DocumentStatus = {
   id: string;
   revision: number;
@@ -37,6 +55,7 @@ function errorMessage(detail: unknown, fallback: string): string {
       return seconds ? `模型在 ${seconds} 秒内未完成响应` : "模型未在规定时间内完成响应";
     }
     if (structured.error === "provider_connection_failed") return `无法连接模型服务：${message}`;
+    if (structured.error === "provider_authentication_failed") return "API Key 无效，或当前账号没有访问该模型的权限";
     if (structured.error === "provider_not_configured") return "尚未配置模型服务地址和模型名称";
     if (structured.error === "invalid_agent_plan") return `模型返回的事务未通过校验：${message}`;
     return message;
@@ -91,12 +110,17 @@ export const api = {
   undo: (id: string) => request<Document>(`/documents/${id}/undo`, { method: "POST" }),
   redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
+  testProvider: (provider: ProviderConfig) =>
+    request<ProviderTestResult>("/agent/provider/test", {
+      method: "POST",
+      body: JSON.stringify(provider),
+    }),
   generate: (
     id: string,
     revision: number,
     prompt: string,
     context: string,
-    provider?: { base_url?: string; model?: string; timeout_seconds?: number },
+    provider?: ProviderConfig,
   ) =>
     request<{ document: Document; plan: { explanation: string } }>(
       `/documents/${id}/agent/generate`,
@@ -107,10 +131,11 @@ export const api = {
           context,
           expected_revision: revision,
           provider:
-            provider?.base_url || provider?.model || provider?.timeout_seconds
+            provider?.base_url || provider?.model || provider?.api_key || provider?.timeout_seconds
               ? {
                   base_url: provider.base_url || undefined,
                   model: provider.model || undefined,
+                  api_key: provider.api_key || undefined,
                   timeout_seconds: provider.timeout_seconds,
                 }
               : undefined,
