@@ -62,6 +62,13 @@ export type SymbolElement = BaseElement & {
   properties: Record<string, unknown>;
 };
 
+export type JunctionElement = BaseElement & {
+  type: "junction";
+  position: Point;
+  radius: number;
+  label: string;
+};
+
 export type ConnectorEndpoint = {
   element_id?: string | null;
   port_id?: string | null;
@@ -73,7 +80,7 @@ export type ConnectorElement = BaseElement & {
   points: Point[];
   source?: ConnectorEndpoint | null;
   target?: ConnectorEndpoint | null;
-  routing: "orthogonal" | "direct";
+  routing: "orthogonal" | "direct" | "manual";
   process_tag: string;
 };
 
@@ -84,6 +91,7 @@ export type Element =
   | CircleElement
   | TextElement
   | SymbolElement
+  | JunctionElement
   | ConnectorElement;
 
 export type Layer = {
@@ -152,4 +160,12 @@ export type Operation =
   | { op: "delete_element"; element_id: string }
   | { op: "clear_document" };
 
-export type Tool = "select" | "line" | "rectangle" | "circle" | "connector" | "text" | "symbol";
+export type Tool =
+  | "select"
+  | "line"
+  | "rectangle"
+  | "circle"
+  | "connector"
+  | "junction"
+  | "text"
+  | "symbol";
