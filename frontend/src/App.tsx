@@ -8,6 +8,7 @@ const tools: Array<{ id: Tool; label: string; key: string }> = [
   { id: "select", label: "选择", key: "V" },
   { id: "line", label: "直线", key: "L" },
   { id: "connector", label: "工艺管线", key: "P" },
+  { id: "junction", label: "连接节点", key: "J" },
   { id: "rectangle", label: "矩形", key: "R" },
   { id: "circle", label: "圆", key: "C" },
   { id: "text", label: "文字", key: "T" },
@@ -28,22 +29,40 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      const match = tools.find((tool) => tool.key.toLowerCase() === event.key.toLowerCase());
-      if (match) state.setTool(match.id);
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      const command = event.ctrlKey || event.metaKey;
+      if (command && event.key.toLowerCase() === "z") {
         event.preventDefault();
         void (event.shiftKey ? state.redo() : state.undo());
+        return;
       }
-      if (event.key === "Delete" && state.selectedElementId) {
-        void state.transact(
-          [{ op: "delete_element", element_id: state.selectedElementId }],
-          "Delete element",
-        );
+      if (command && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        void state.duplicateSelection();
+        return;
       }
+      if (command && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        state.selectAll();
+        return;
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (state.selectedElementIds.length) {
+          event.preventDefault();
+          void state.deleteSelection();
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        state.clearSelection();
+        state.setTool("select");
+        return;
+      }
+      const match = tools.find((tool) => tool.key.toLowerCase() === event.key.toLowerCase());
+      if (match) state.setTool(match.id);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [state.selectedElementId, state.document]);
+  }, [state.selectedElementIds, state.document]);
 
   const runAgent = async () => {
     if (!prompt.trim()) return;
@@ -63,8 +82,8 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <strong>AgentCAD</strong>
-          <span>Agent-first P&amp;ID workspace</span>
+          <strong>P&amp;ID-Agent</strong>
+          <span>轻量 P&amp;ID 人机协同工作区</span>
         </div>
         <div className="toolbar">
           {tools.map((tool) => (
@@ -79,6 +98,9 @@ export default function App() {
           ))}
         </div>
         <div className="toolbar-actions">
+          <button onClick={() => void state.duplicateSelection()} disabled={!state.selectedElementIds.length}>
+            复制
+          </button>
           <button onClick={() => void state.undo()}>撤销</button>
           <button onClick={() => void state.redo()}>重做</button>
           {state.document ? (
@@ -119,7 +141,8 @@ export default function App() {
                 <strong>{state.document.name}</strong>
                 <span>revision {state.document.revision}</span>
                 <span>{state.document.elements.length} elements</span>
-                <span>中键平移 · 滚轮缩放 · 网格吸附</span>
+                <span>{state.selectedElementIds.length} selected</span>
+                <span>框选 · Shift 多选 · Ctrl+D 复制 · 中键平移 · 滚轮缩放</span>
               </div>
               <EditorCanvas />
             </>
@@ -129,7 +152,7 @@ export default function App() {
         </section>
 
         <aside className="sidebar agent-panel">
-          <h2>Agent 生成</h2>
+          <h2>P&amp;ID Agent</h2>
           <label>
             工艺/设计上下文
             <textarea
@@ -162,7 +185,7 @@ export default function App() {
               Model
               <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="qwen3-coder" />
             </label>
-            <p>留空时使用服务端 AGENTCAD_LLM_* 环境变量。</p>
+            <p>留空时使用服务端 PID_AGENT_LLM_* 环境变量；旧 AGENTCAD_LLM_* 仍兼容。</p>
           </details>
           <button className="primary" disabled={state.loading || !prompt.trim()} onClick={() => void runAgent()}>
             {state.loading ? "处理中…" : "生成并应用"}
@@ -170,7 +193,7 @@ export default function App() {
           {explanation ? <div className="agent-result">{explanation}</div> : null}
           {state.error ? <div className="error-box">{state.error}</div> : null}
           <div className="agent-note">
-            Agent 与网页编辑器都通过同一套原子事务修改文档。每次人工移动、删除或新增元素后，场景摘要和 revision 会同步更新。
+            人工编辑器与 Agent 共用同一事务模型、符号端口和连接节点。框选、复制、管线折点修改和分支汇合都会同步进入最新文档 revision。
           </div>
         </aside>
       </main>
