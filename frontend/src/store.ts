@@ -182,7 +182,9 @@ export const useWorkspace = create<State>((set, get) => ({
     const selected = document.elements.filter((element) => selectedIds.includes(element.id));
     const idMap = new Map(selected.map((element) => [element.id, newElementId()]));
     const offset = document.canvas.grid_size;
-    const copies = selected.map((element) => duplicateElement(element, idMap, offset));
+    const copies = selected
+      .map((element) => duplicateElement(element, idMap, offset))
+      .sort((left, right) => Number(left.type === "connector") - Number(right.type === "connector"));
     await get().transact(
       copies.map((element) => ({ op: "add_element", element }) as Operation),
       `Duplicate ${copies.length} element(s)`,
