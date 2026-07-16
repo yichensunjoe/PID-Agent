@@ -6,18 +6,74 @@ import re
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from .models import AgentGenerateRequest, AgentPlan, ProviderConfig, TransactionRequest
 from .service import DocumentService
 from .symbols import SymbolRegistry
 
 
-class ProviderNotConfiguredError(RuntimeError):
-    pass
+class PlannerError(RuntimeError):
+    code = "planner_error"
+    status_code = 502
+    retryable = False
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: ProviderConfig | None = None,
+        timeout_seconds: float | None = None,
+        provider_status: int | None = None,
+    ):
+        super().__init__(message)
+        self.provider = provider
+        self.timeout_seconds = timeout_seconds
+        self.provider_status = provider_status
+
+    def detail(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "error": self.code,
+            "message": str(self),
+            "retryable": self.retryable,
+        }
+        if self.provider is not None:
+            payload["provider"] = {
+                "base_url": self.provider.base_url,
+                "model": self.provider.model,
+            }
+        if self.timeout_seconds is not None:
+            payload["timeout_seconds"] = self.timeout_seconds
+        if self.provider_status is not None:
+            payload["provider_status"] = self.provider_status
+        return payload
 
 
-class LLMResponseError(RuntimeError):
-    pass
+class ProviderNotConfiguredError(PlannerError):
+    code = "provider_not_configured"
+    status_code = 503
+
+
+class ProviderTimeoutError(PlannerError):
+    code = "provider_timeout"
+    status_code = 504
+    retryable = True
+
+
+class ProviderConnectionError(PlannerError):
+    code = "provider_connection_failed"
+    status_code = 502
+    retryable = True
+
+
+class LLMResponseError(PlannerError):
+    code = "provider_response_error"
+    status_code = 502
+
+
+class LLMPlanValidationError(PlannerError):
+    code = "invalid_agent_plan"
+    status_code = 422
 
 
 def _env(primary: str, legacy: str) -> str | None:
@@ -54,24 +110,42 @@ class OpenAICompatiblePlanner:
         if provider.api_key:
             headers["Authorization"] = f"Bearer {provider.api_key}"
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
-        with httpx.Client(timeout=provider.timeout_seconds) as client:
-            response = client.post(endpoint, json=payload, headers=headers)
-            if response.status_code in {400, 404, 422} and "response_format" in payload:
-                fallback_payload = dict(payload)
-                fallback_payload.pop("response_format", None)
-                response = client.post(endpoint, json=fallback_payload, headers=headers)
+
+        try:
+            with httpx.Client(timeout=provider.timeout_seconds) as client:
+                response = client.post(endpoint, json=payload, headers=headers)
+                if response.status_code in {400, 404, 422} and "response_format" in payload:
+                    fallback_payload = dict(payload)
+                    fallback_payload.pop("response_format", None)
+                    response = client.post(endpoint, json=fallback_payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeoutError(
+                f"model did not finish within {provider.timeout_seconds:g} seconds",
+                provider=provider,
+                timeout_seconds=provider.timeout_seconds,
+            ) from exc
+        except httpx.RequestError as exc:
+            raise ProviderConnectionError(
+                f"could not connect to model provider: {exc}",
+                provider=provider,
+            ) from exc
+
         if response.is_error:
             raise LLMResponseError(
-                f"LLM request failed with HTTP {response.status_code}: {response.text[:1000]}"
+                f"model provider returned HTTP {response.status_code}: {response.text[:1000]}",
+                provider=provider,
+                provider_status=response.status_code,
             )
         try:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise LLMResponseError(
-                "LLM response did not contain choices[0].message.content"
+                "model response did not contain choices[0].message.content",
+                provider=provider,
             ) from exc
-        raw_plan = self._parse_json(content)
+
+        raw_plan = self._parse_json(content, provider)
         if "transaction" not in raw_plan and "operations" in raw_plan:
             raw_plan = {
                 "explanation": raw_plan.get("explanation", ""),
@@ -81,7 +155,13 @@ class OpenAICompatiblePlanner:
                     "expected_revision": request.expected_revision,
                 },
             }
-        plan = AgentPlan.model_validate(raw_plan)
+        try:
+            plan = AgentPlan.model_validate(raw_plan)
+        except ValidationError as exc:
+            raise LLMPlanValidationError(
+                f"model returned a transaction that does not match the schema: {exc}",
+                provider=provider,
+            ) from exc
         if plan.transaction.expected_revision is None:
             plan.transaction.expected_revision = request.expected_revision
         return plan
@@ -120,7 +200,7 @@ class OpenAICompatiblePlanner:
         )
 
     @staticmethod
-    def _parse_json(content: str) -> dict[str, Any]:
+    def _parse_json(content: str, provider: ProviderConfig) -> dict[str, Any]:
         text = content.strip()
         fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
         if fence:
@@ -128,7 +208,13 @@ class OpenAICompatiblePlanner:
         try:
             value = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise LLMResponseError(f"LLM returned invalid JSON: {exc}") from exc
+            raise LLMPlanValidationError(
+                f"model returned invalid JSON: {exc}",
+                provider=provider,
+            ) from exc
         if not isinstance(value, dict):
-            raise LLMResponseError("LLM plan must be a JSON object")
+            raise LLMPlanValidationError(
+                "model plan must be a JSON object",
+                provider=provider,
+            )
         return value
