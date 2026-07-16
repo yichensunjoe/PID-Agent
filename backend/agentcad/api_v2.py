@@ -10,6 +10,7 @@ from .models import (
     AgentGenerateResult,
     CreateDocumentRequest,
     Document,
+    ProviderConfig,
     TransactionRequest,
     TransactionResult,
 )
@@ -118,6 +119,13 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
     def reload_symbols():
         service.symbols.reload()
         return {"count": len(service.symbols.list())}
+
+    @router.post("/agent/provider/test")
+    def test_provider(request: ProviderConfig):
+        try:
+            return planner.test_provider(request)
+        except PlannerError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail()) from exc
 
     @router.get("/agent/tool-schema")
     def agent_tool_schema():
