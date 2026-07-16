@@ -98,12 +98,21 @@ class ConnectorEndpoint(StrictModel):
     port_id: str | None = None
     point: Point
 
+    @model_validator(mode="after")
+    def validate_binding(self) -> ConnectorEndpoint:
+        if self.port_id and not self.element_id:
+            raise ValueError("port_id requires element_id")
+        if self.element_id and not self.port_id:
+            raise ValueError("element_id requires port_id")
+        return self
+
 
 class ConnectorElement(ElementBase):
     type: Literal["connector"] = "connector"
     points: list[Point]
     source: ConnectorEndpoint | None = None
     target: ConnectorEndpoint | None = None
+    routing: Literal["orthogonal", "direct"] = "orthogonal"
     process_tag: str = ""
 
     @field_validator("points")
@@ -162,6 +171,25 @@ class Document(StrictModel):
         missing = sorted({element.layer_id for element in self.elements} - set(layer_ids))
         if missing:
             raise ValueError(f"elements reference missing layers: {missing}")
+
+        element_map = {element.id: element for element in self.elements}
+        for element in self.elements:
+            if element.type != "connector":
+                continue
+            for endpoint_name, endpoint in (("source", element.source), ("target", element.target)):
+                if endpoint is None or endpoint.element_id is None:
+                    continue
+                referenced = element_map.get(endpoint.element_id)
+                if referenced is None:
+                    raise ValueError(
+                        f"connector {element.id} {endpoint_name} references missing element: "
+                        f"{endpoint.element_id}"
+                    )
+                if referenced.type != "symbol":
+                    raise ValueError(
+                        f"connector {element.id} {endpoint_name} must reference a symbol: "
+                        f"{endpoint.element_id}"
+                    )
         return self
 
 
