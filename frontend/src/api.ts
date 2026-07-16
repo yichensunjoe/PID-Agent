@@ -29,9 +29,17 @@ export class ApiError extends Error {
 
 function errorMessage(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
-  if (detail && typeof detail === "object" && "message" in detail) {
-    const message = (detail as { message?: unknown }).message;
-    if (typeof message === "string") return message;
+  if (detail && typeof detail === "object") {
+    const structured = detail as Record<string, unknown>;
+    const message = typeof structured.message === "string" ? structured.message : fallback;
+    if (structured.error === "provider_timeout") {
+      const seconds = typeof structured.timeout_seconds === "number" ? structured.timeout_seconds : undefined;
+      return seconds ? `模型在 ${seconds} 秒内未完成响应` : "模型未在规定时间内完成响应";
+    }
+    if (structured.error === "provider_connection_failed") return `无法连接模型服务：${message}`;
+    if (structured.error === "provider_not_configured") return "尚未配置模型服务地址和模型名称";
+    if (structured.error === "invalid_agent_plan") return `模型返回的事务未通过校验：${message}`;
+    return message;
   }
   return fallback;
 }
