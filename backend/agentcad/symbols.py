@@ -10,7 +10,7 @@ from .models import SymbolDefinition
 class SymbolRegistry:
     def __init__(self, search_paths: list[Path] | None = None):
         package_data = Path(__file__).parent / "data" / "symbols.json"
-        configured = os.getenv("AGENTCAD_SYMBOL_PATHS", "")
+        configured = os.getenv("PID_AGENT_SYMBOL_PATHS", os.getenv("AGENTCAD_SYMBOL_PATHS", ""))
         env_paths = [Path(item) for item in configured.split(os.pathsep) if item]
         self._search_paths = [package_data, *env_paths, *(search_paths or [])]
         self._symbols: dict[str, SymbolDefinition] = {}
