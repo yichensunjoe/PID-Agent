@@ -12,6 +12,9 @@ from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
 
 
+VERSION = "2.1.0-alpha.1"
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     symbols = SymbolRegistry()
@@ -20,9 +23,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     planner = OpenAICompatiblePlanner(service=service, symbols=symbols)
 
     app = FastAPI(
-        title="AgentCAD",
-        version="2.0.0-alpha.1",
-        description="Agent-first, editable P&ID document engine",
+        title="P&ID-Agent",
+        version=VERSION,
+        description="Lightweight, editable and agent-ready P&ID workspace",
     )
     app.state.service = service
     app.add_middleware(
@@ -37,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "service": "AgentCAD", "version": "2.0.0-alpha.1"}
+        return {"status": "ok", "service": "P&ID-Agent", "version": VERSION}
 
     if settings.frontend_dist.exists():
         app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="frontend")
