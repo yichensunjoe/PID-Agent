@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from .llm import LLMResponseError, OpenAICompatiblePlanner, ProviderNotConfiguredError
+from .llm import OpenAICompatiblePlanner, PlannerError
 from .models import (
     AgentGenerateRequest,
     AgentGenerateResult,
@@ -23,11 +23,11 @@ from .svg import render_svg
 
 
 def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner) -> APIRouter:
-    router = APIRouter(prefix="/api/v2", tags=["AgentCAD v2"])
+    router = APIRouter(prefix="/api/v2", tags=["P&ID-Agent v2"])
 
     @router.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "service": "AgentCAD", "api_version": "v2"}
+        return {"status": "ok", "service": "P&ID-Agent", "api_version": "v2"}
 
     @router.get("/documents")
     def list_documents():
@@ -40,6 +40,15 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
     @router.get("/documents/{document_id}", response_model=Document)
     def get_document(document_id: str):
         return _call(service.get_document, document_id)
+
+    @router.get("/documents/{document_id}/status")
+    def document_status(document_id: str):
+        document = _call(service.get_document, document_id)
+        return {
+            "id": document.id,
+            "revision": document.revision,
+            "updated_at": document.updated_at,
+        }
 
     @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_document(document_id: str):
@@ -113,9 +122,9 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
     @router.get("/agent/tool-schema")
     def agent_tool_schema():
         return {
-            "name": "apply_agentcad_transaction",
+            "name": "apply_pid_agent_transaction",
             "description": (
-                "Apply an atomic, validated set of drawing operations to one AgentCAD document. "
+                "Apply an atomic, validated set of drawing operations to one P&ID-Agent document. "
                 "Use scene-summary first when modifying an existing drawing."
             ),
             "input_schema": TransactionRequest.model_json_schema(),
@@ -132,10 +141,8 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
                 return AgentGenerateResult(plan=plan)
             result = service.apply_transaction(document_id, plan.transaction)
             return AgentGenerateResult(plan=plan, document=result.document)
-        except ProviderNotConfiguredError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except LLMResponseError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except PlannerError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail()) from exc
         except (DocumentNotFoundError, InvalidOperationError, RevisionConflictError) as exc:
             return _raise_service_error(exc)
 
