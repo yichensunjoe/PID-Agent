@@ -4,6 +4,7 @@ import type {
   ConnectorElement,
   ConnectorEndpoint,
   Element,
+  JunctionElement,
   Operation,
   Point,
   SymbolDefinition,
@@ -12,10 +13,11 @@ import type {
   SymbolShape,
 } from "../types";
 
-type PortHit = {
-  element: SymbolElement;
-  definition: SymbolDefinition;
-  port: SymbolPort;
+type ConnectableElement = SymbolElement | JunctionElement;
+
+type ConnectionHit = {
+  element: ConnectableElement;
+  port: { id: string; name: string };
   point: Point;
 };
 
@@ -24,11 +26,21 @@ type Draft = {
   current: Point;
   source?: ConnectorEndpoint;
   target?: ConnectorEndpoint;
-  activePort?: PortHit;
+  activeConnection?: ConnectionHit;
 } | null;
 
-type DragState = { element: Element; start: Point; current: Point } | null;
+type DragState = { elementIds: string[]; start: Point; current: Point } | null;
+type SegmentDrag = {
+  connector: ConnectorElement;
+  segmentIndex: number;
+  start: Point;
+  current: Point;
+} | null;
+type BoxSelection = { start: Point; current: Point; additive: boolean } | null;
 type ViewBox = { x: number; y: number; width: number; height: number };
+type Bounds = { x1: number; y1: number; x2: number; y2: number };
+
+const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
 function shapeNode(shape: SymbolShape, key: number) {
   if (shape.type === "line") return <line key={key} {...shape} />;
@@ -78,6 +90,25 @@ function renderElement(element: Element, symbols: Map<string, SymbolDefinition>)
       </text>
     );
   }
+  if (element.type === "junction") {
+    return (
+      <g>
+        <circle
+          cx={element.position.x}
+          cy={element.position.y}
+          r={element.radius}
+          fill={element.style.stroke}
+          stroke={element.style.stroke}
+          vectorEffect="non-scaling-stroke"
+        />
+        {element.label ? (
+          <text x={element.position.x + 8} y={element.position.y - 8} fontSize={12} fill={element.style.stroke}>
+            {element.label}
+          </text>
+        ) : null}
+      </g>
+    );
+  }
   const definition = symbols.get(element.symbol_key);
   if (!definition) return null;
   const scaleX = element.width / definition.width;
@@ -103,27 +134,27 @@ function renderElement(element: Element, symbols: Map<string, SymbolDefinition>)
   );
 }
 
+function shiftPoint(point: Point, dx: number, dy: number): Point {
+  return { x: point.x + dx, y: point.y + dy };
+}
+
 function translateElement(element: Element, dx: number, dy: number): Element {
   const clone = structuredClone(element);
   if (clone.type === "line") {
-    clone.start.x += dx;
-    clone.start.y += dy;
-    clone.end.x += dx;
-    clone.end.y += dy;
+    clone.start = shiftPoint(clone.start, dx, dy);
+    clone.end = shiftPoint(clone.end, dx, dy);
   } else if (clone.type === "rectangle") {
     clone.x += dx;
     clone.y += dy;
   } else if (clone.type === "circle") {
-    clone.center.x += dx;
-    clone.center.y += dy;
-  } else if (clone.type === "text" || clone.type === "symbol") {
-    clone.position.x += dx;
-    clone.position.y += dy;
+    clone.center = shiftPoint(clone.center, dx, dy);
+  } else if (clone.type === "text" || clone.type === "symbol" || clone.type === "junction") {
+    clone.position = shiftPoint(clone.position, dx, dy);
   } else {
-    clone.points = clone.points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+    clone.points = clone.points.map((point) => shiftPoint(point, dx, dy));
     if (clone.type === "connector") {
-      if (clone.source) clone.source.point = { x: clone.source.point.x + dx, y: clone.source.point.y + dy };
-      if (clone.target) clone.target.point = { x: clone.target.point.x + dx, y: clone.target.point.y + dy };
+      if (clone.source && !clone.source.element_id) clone.source.point = shiftPoint(clone.source.point, dx, dy);
+      if (clone.target && !clone.target.element_id) clone.target.point = shiftPoint(clone.target.point, dx, dy);
     }
   }
   return clone;
@@ -133,9 +164,11 @@ function updatePatch(element: Element): Record<string, unknown> {
   if (element.type === "line") return { start: element.start, end: element.end };
   if (element.type === "rectangle") return { x: element.x, y: element.y };
   if (element.type === "circle") return { center: element.center };
-  if (element.type === "text" || element.type === "symbol") return { position: element.position };
+  if (element.type === "text" || element.type === "symbol" || element.type === "junction") {
+    return { position: element.position };
+  }
   if (element.type === "connector") {
-    return { points: element.points, source: element.source, target: element.target };
+    return { points: element.points, source: element.source, target: element.target, routing: element.routing };
   }
   return { points: element.points };
 }
@@ -158,16 +191,36 @@ function symbolPortPoint(
   };
 }
 
-function findNearestPort(
+function connectionPoint(
+  element: ConnectableElement,
+  portId: string,
+  symbols: Map<string, SymbolDefinition>,
+): Point | undefined {
+  if (element.type === "junction") return portId === "node" ? element.position : undefined;
+  const definition = symbols.get(element.symbol_key);
+  const port = definition?.ports.find((item) => item.id === portId);
+  return definition && port ? symbolPortPoint(element, definition, port) : undefined;
+}
+
+function findNearestConnection(
   point: Point,
   elements: Element[],
   symbols: Map<string, SymbolDefinition>,
   tolerance: number,
   excluded?: ConnectorEndpoint,
-): PortHit | undefined {
-  let nearest: PortHit | undefined;
+): ConnectionHit | undefined {
+  let nearest: ConnectionHit | undefined;
   let nearestDistance = tolerance;
   for (const element of elements) {
+    if (element.type === "junction") {
+      if (excluded?.element_id === element.id && excluded.port_id === "node") continue;
+      const distance = Math.hypot(element.position.x - point.x, element.position.y - point.y);
+      if (distance <= nearestDistance) {
+        nearestDistance = distance;
+        nearest = { element, port: { id: "node", name: "连接节点" }, point: element.position };
+      }
+      continue;
+    }
     if (element.type !== "symbol") continue;
     const definition = symbols.get(element.symbol_key);
     if (!definition) continue;
@@ -177,14 +230,14 @@ function findNearestPort(
       const distance = Math.hypot(portPoint.x - point.x, portPoint.y - point.y);
       if (distance <= nearestDistance) {
         nearestDistance = distance;
-        nearest = { element, definition, port, point: portPoint };
+        nearest = { element, port, point: portPoint };
       }
     }
   }
   return nearest;
 }
 
-function endpointFromHit(hit: PortHit): ConnectorEndpoint {
+function endpointFromHit(hit: ConnectionHit): ConnectorEndpoint {
   return {
     element_id: hit.element.id,
     port_id: hit.port.id,
@@ -210,33 +263,169 @@ function orthogonalRoute(start: Point, end: Point): Point[] {
   return dedupePoints([start, { x: start.x, y: middle }, { x: end.x, y: middle }, end]);
 }
 
+function moveInternalSegment(connector: ConnectorElement, segmentIndex: number, point: Point): ConnectorElement {
+  const clone = structuredClone(connector);
+  const start = clone.points[segmentIndex];
+  const end = clone.points[segmentIndex + 1];
+  if (start.y === end.y) {
+    clone.points[segmentIndex].y = point.y;
+    clone.points[segmentIndex + 1].y = point.y;
+  } else {
+    clone.points[segmentIndex].x = point.x;
+    clone.points[segmentIndex + 1].x = point.x;
+  }
+  clone.routing = "manual";
+  clone.points = dedupePoints(clone.points);
+  return clone;
+}
+
 function syncConnectorPreview(
   connector: ConnectorElement,
-  movedSymbol: SymbolElement,
+  moved: Map<string, ConnectableElement>,
   symbols: Map<string, SymbolDefinition>,
 ): ConnectorElement {
   const clone = structuredClone(connector);
   let start = clone.points[0];
   let end = clone.points[clone.points.length - 1];
-  const definition = symbols.get(movedSymbol.symbol_key);
-  if (!definition) return clone;
-
-  if (clone.source?.element_id === movedSymbol.id && clone.source.port_id) {
-    const port = definition.ports.find((item) => item.id === clone.source?.port_id);
-    if (port) {
-      start = symbolPortPoint(movedSymbol, definition, port);
-      clone.source.point = start;
+  if (clone.source?.element_id && clone.source.port_id) {
+    const element = moved.get(clone.source.element_id);
+    const point = element ? connectionPoint(element, clone.source.port_id, symbols) : undefined;
+    if (point) {
+      start = point;
+      clone.source.point = point;
     }
   }
-  if (clone.target?.element_id === movedSymbol.id && clone.target.port_id) {
-    const port = definition.ports.find((item) => item.id === clone.target?.port_id);
-    if (port) {
-      end = symbolPortPoint(movedSymbol, definition, port);
-      clone.target.point = end;
+  if (clone.target?.element_id && clone.target.port_id) {
+    const element = moved.get(clone.target.element_id);
+    const point = element ? connectionPoint(element, clone.target.port_id, symbols) : undefined;
+    if (point) {
+      end = point;
+      clone.target.point = point;
     }
   }
-  clone.points = clone.routing === "direct" ? [start, end] : orthogonalRoute(start, end);
+  if (clone.routing === "orthogonal") clone.points = orthogonalRoute(start, end);
+  else {
+    clone.points[0] = start;
+    clone.points[clone.points.length - 1] = end;
+  }
   return clone;
+}
+
+function boundsFor(element: Element): Bounds {
+  if (element.type === "line") {
+    return {
+      x1: Math.min(element.start.x, element.end.x),
+      y1: Math.min(element.start.y, element.end.y),
+      x2: Math.max(element.start.x, element.end.x),
+      y2: Math.max(element.start.y, element.end.y),
+    };
+  }
+  if (element.type === "rectangle") {
+    return { x1: element.x, y1: element.y, x2: element.x + element.width, y2: element.y + element.height };
+  }
+  if (element.type === "circle") {
+    return {
+      x1: element.center.x - element.radius,
+      y1: element.center.y - element.radius,
+      x2: element.center.x + element.radius,
+      y2: element.center.y + element.radius,
+    };
+  }
+  if (element.type === "text") {
+    const width = Math.max(element.font_size, element.text.length * element.font_size * 0.6);
+    return {
+      x1: element.position.x,
+      y1: element.position.y - element.font_size,
+      x2: element.position.x + width,
+      y2: element.position.y + element.font_size * 0.3,
+    };
+  }
+  if (element.type === "symbol") {
+    return {
+      x1: element.position.x,
+      y1: element.position.y,
+      x2: element.position.x + element.width,
+      y2: element.position.y + element.height,
+    };
+  }
+  if (element.type === "junction") {
+    return {
+      x1: element.position.x - element.radius,
+      y1: element.position.y - element.radius,
+      x2: element.position.x + element.radius,
+      y2: element.position.y + element.radius,
+    };
+  }
+  const xs = element.points.map((point) => point.x);
+  const ys = element.points.map((point) => point.y);
+  return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+}
+
+function normalizeBounds(a: Point, b: Point): Bounds {
+  return { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) };
+}
+
+function intersects(a: Bounds, b: Bounds): boolean {
+  return a.x1 <= b.x2 && a.x2 >= b.x1 && a.y1 <= b.y2 && a.y2 >= b.y1;
+}
+
+function closestPointOnSegment(point: Point, start: Point, end: Point): { point: Point; distance: number } {
+  if (start.x === end.x) {
+    const y = Math.max(Math.min(point.y, Math.max(start.y, end.y)), Math.min(start.y, end.y));
+    const projected = { x: start.x, y };
+    return { point: projected, distance: Math.hypot(projected.x - point.x, projected.y - point.y) };
+  }
+  const x = Math.max(Math.min(point.x, Math.max(start.x, end.x)), Math.min(start.x, end.x));
+  const projected = { x, y: start.y };
+  return { point: projected, distance: Math.hypot(projected.x - point.x, projected.y - point.y) };
+}
+
+function nearestConnectorSegment(
+  point: Point,
+  elements: Element[],
+  tolerance: number,
+): { connector: ConnectorElement; segmentIndex: number; point: Point } | undefined {
+  let result: { connector: ConnectorElement; segmentIndex: number; point: Point } | undefined;
+  let best = tolerance;
+  for (const element of elements) {
+    if (element.type !== "connector") continue;
+    for (let index = 0; index < element.points.length - 1; index += 1) {
+      const candidate = closestPointOnSegment(point, element.points[index], element.points[index + 1]);
+      if (candidate.distance > best) continue;
+      const firstDistance = Math.hypot(candidate.point.x - element.points[0].x, candidate.point.y - element.points[0].y);
+      const last = element.points[element.points.length - 1];
+      const lastDistance = Math.hypot(candidate.point.x - last.x, candidate.point.y - last.y);
+      if (firstDistance < tolerance || lastDistance < tolerance) continue;
+      best = candidate.distance;
+      result = { connector: element, segmentIndex: index, point: candidate.point };
+    }
+  }
+  return result;
+}
+
+function splitConnector(
+  connector: ConnectorElement,
+  segmentIndex: number,
+  point: Point,
+  junction: JunctionElement,
+): [ConnectorElement, ConnectorElement] {
+  const junctionEndpoint: ConnectorEndpoint = {
+    element_id: junction.id,
+    port_id: "node",
+    point,
+  };
+  const first = structuredClone(connector);
+  first.id = newElementId();
+  first.points = dedupePoints([...connector.points.slice(0, segmentIndex + 1), point]);
+  first.target = junctionEndpoint;
+  first.routing = "manual";
+
+  const second = structuredClone(connector);
+  second.id = newElementId();
+  second.points = dedupePoints([point, ...connector.points.slice(segmentIndex + 1)]);
+  second.source = junctionEndpoint;
+  second.routing = "manual";
+  return [first, second];
 }
 
 export function EditorCanvas() {
@@ -245,15 +434,20 @@ export function EditorCanvas() {
   const symbols = useWorkspace((state) => state.symbols);
   const tool = useWorkspace((state) => state.tool);
   const selectedSymbolKey = useWorkspace((state) => state.selectedSymbolKey);
-  const selectedElementId = useWorkspace((state) => state.selectedElementId);
-  const setSelectedElement = useWorkspace((state) => state.setSelectedElement);
+  const selectedElementIds = useWorkspace((state) => state.selectedElementIds);
+  const setSelection = useWorkspace((state) => state.setSelection);
+  const toggleSelection = useWorkspace((state) => state.toggleSelection);
+  const clearSelection = useWorkspace((state) => state.clearSelection);
   const transact = useWorkspace((state) => state.transact);
   const [draft, setDraft] = useState<Draft>(null);
   const [drag, setDrag] = useState<DragState>(null);
+  const [segmentDrag, setSegmentDrag] = useState<SegmentDrag>(null);
+  const [boxSelection, setBoxSelection] = useState<BoxSelection>(null);
   const [pan, setPan] = useState<{ start: Point; view: ViewBox } | null>(null);
   const [viewBox, setViewBox] = useState<ViewBox | null>(null);
 
   const symbolMap = useMemo(() => new Map(symbols.map((symbol) => [symbol.key, symbol])), [symbols]);
+  const selectedSet = useMemo(() => new Set(selectedElementIds), [selectedElementIds]);
   if (!document) return <div className="empty-canvas">正在加载文档…</div>;
   const view = viewBox ?? { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height };
 
@@ -283,14 +477,54 @@ export function EditorCanvas() {
   const connectorPointFromEvent = (
     event: React.PointerEvent,
     excluded?: ConnectorEndpoint,
-  ): { point: Point; hit?: PortHit } => {
+  ): { point: Point; hit?: ConnectionHit } => {
     const raw = rawPointFromEvent(event);
-    const hit = findNearestPort(raw, document.elements, symbolMap, snapTolerance(), excluded);
+    const hit = findNearestConnection(raw, document.elements, symbolMap, snapTolerance(), excluded);
     return hit ? { point: hit.point, hit } : { point: snapToGrid(raw) };
   };
 
   const addElement = async (element: Record<string, unknown>, label: string) => {
     await transact([{ op: "add_element", element } as Operation], label);
+  };
+
+  const addJunction = async (event: React.PointerEvent<SVGSVGElement>) => {
+    const raw = rawPointFromEvent(event);
+    const point = snapToGrid(raw);
+    const nearby = document.elements.find(
+      (element) => element.type === "junction" && Math.hypot(element.position.x - raw.x, element.position.y - raw.y) <= snapTolerance(),
+    );
+    if (nearby) {
+      setSelection([nearby.id]);
+      return;
+    }
+    const hit = nearestConnectorSegment(raw, document.elements, snapTolerance());
+    const junction: JunctionElement = {
+      id: newElementId(),
+      type: "junction",
+      position: hit?.point ?? point,
+      radius: 4,
+      label: "",
+      layer_id: hit?.connector.layer_id ?? "layer_default",
+      style: hit?.connector.style ?? { stroke: "#111827", fill: "none", stroke_width: 1.5, opacity: 1, dash: [] },
+      name: "",
+      metadata: {},
+    };
+    if (!hit) {
+      await transact([{ op: "add_element", element: junction } as Operation], "Add connection junction");
+      setSelection([junction.id]);
+      return;
+    }
+    const [first, second] = splitConnector(hit.connector, hit.segmentIndex, hit.point, junction);
+    await transact(
+      [
+        { op: "add_element", element: junction } as Operation,
+        { op: "delete_element", element_id: hit.connector.id },
+        { op: "add_element", element: first } as Operation,
+        { op: "add_element", element: second } as Operation,
+      ],
+      "Split connector at junction",
+    );
+    setSelection([junction.id]);
   };
 
   const onCanvasPointerDown = async (event: React.PointerEvent<SVGSVGElement>) => {
@@ -300,7 +534,17 @@ export function EditorCanvas() {
       return;
     }
     if (event.button !== 0) return;
-    setSelectedElement(null);
+    if (tool === "select") {
+      const point = rawPointFromEvent(event);
+      if (!event.shiftKey) clearSelection();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setBoxSelection({ start: point, current: point, additive: event.shiftKey });
+      return;
+    }
+    if (tool === "junction") {
+      await addJunction(event);
+      return;
+    }
     const point = pointFromEvent(event);
     if (tool === "symbol" && selectedSymbolKey) {
       const definition = symbolMap.get(selectedSymbolKey);
@@ -322,9 +566,7 @@ export function EditorCanvas() {
     }
     if (tool === "text") {
       const text = window.prompt("文字内容", "")?.trim();
-      if (text) {
-        await addElement({ type: "text", position: point, text, font_size: 16 }, "Add text");
-      }
+      if (text) await addElement({ type: "text", position: point, text, font_size: 16 }, "Add text");
       return;
     }
     if (tool === "connector") {
@@ -334,7 +576,7 @@ export function EditorCanvas() {
         start: snapped.point,
         current: snapped.point,
         source: snapped.hit ? endpointFromHit(snapped.hit) : undefined,
-        activePort: snapped.hit,
+        activeConnection: snapped.hit,
       });
       return;
     }
@@ -352,6 +594,18 @@ export function EditorCanvas() {
       setViewBox({ ...pan.view, x: pan.view.x - dx, y: pan.view.y - dy });
       return;
     }
+    if (segmentDrag) {
+      setSegmentDrag({ ...segmentDrag, current: pointFromEvent(event) });
+      return;
+    }
+    if (drag) {
+      setDrag({ ...drag, current: pointFromEvent(event) });
+      return;
+    }
+    if (boxSelection) {
+      setBoxSelection({ ...boxSelection, current: rawPointFromEvent(event) });
+      return;
+    }
     if (draft) {
       if (tool === "connector") {
         const snapped = connectorPointFromEvent(event, draft.source);
@@ -359,31 +613,62 @@ export function EditorCanvas() {
           ...draft,
           current: snapped.point,
           target: snapped.hit ? endpointFromHit(snapped.hit) : undefined,
-          activePort: snapped.hit,
+          activeConnection: snapped.hit,
         });
       } else {
         setDraft({ ...draft, current: pointFromEvent(event) });
       }
     }
-    if (drag) setDrag({ ...drag, current: pointFromEvent(event) });
+  };
+
+  const releaseCapture = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const onPointerUp = async (event: React.PointerEvent<SVGSVGElement>) => {
     if (pan) {
       setPan(null);
+      releaseCapture(event);
+      return;
+    }
+    if (segmentDrag) {
+      const updated = moveInternalSegment(segmentDrag.connector, segmentDrag.segmentIndex, segmentDrag.current);
+      setSegmentDrag(null);
+      await transact(
+        [{ op: "update_element", element_id: updated.id, patch: updatePatch(updated) }],
+        "Edit connector route",
+      );
+      releaseCapture(event);
       return;
     }
     if (drag) {
       const dx = drag.current.x - drag.start.x;
       const dy = drag.current.y - drag.start.y;
-      const translated = translateElement(drag.element, dx, dy);
-      setDrag(null);
-      if (dx || dy) {
-        await transact(
-          [{ op: "update_element", element_id: translated.id, patch: updatePatch(translated) }],
-          "Move element",
-        );
+      const operations: Operation[] = [];
+      for (const id of drag.elementIds) {
+        const element = document.elements.find((item) => item.id === id);
+        if (!element) continue;
+        if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue;
+        const translated = translateElement(element, dx, dy);
+        operations.push({ op: "update_element", element_id: id, patch: updatePatch(translated) });
       }
+      setDrag(null);
+      if ((dx || dy) && operations.length) await transact(operations, `Move ${operations.length} element(s)`);
+      releaseCapture(event);
+      return;
+    }
+    if (boxSelection) {
+      const bounds = normalizeBounds(boxSelection.start, boxSelection.current);
+      const width = bounds.x2 - bounds.x1;
+      const height = bounds.y2 - bounds.y1;
+      const hits = width < 3 && height < 3
+        ? []
+        : document.elements.filter((element) => intersects(bounds, boundsFor(element))).map((element) => element.id);
+      setSelection(boxSelection.additive ? [...selectedElementIds, ...hits] : hits);
+      setBoxSelection(null);
+      releaseCapture(event);
       return;
     }
     if (!draft) return;
@@ -423,17 +708,33 @@ export function EditorCanvas() {
       const radius = Math.hypot(current.x - start.x, current.y - start.y);
       if (radius > 0) await addElement({ type: "circle", center: start, radius }, "Draw circle");
     }
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    releaseCapture(event);
   };
 
   const onElementPointerDown = (event: React.PointerEvent, element: Element) => {
     if (tool !== "select" || event.button !== 0) return;
     event.stopPropagation();
+    if (event.shiftKey) {
+      toggleSelection(element.id);
+      return;
+    }
+    const ids = selectedSet.has(element.id) ? selectedElementIds : [element.id];
+    if (!selectedSet.has(element.id)) setSelection(ids);
     const point = pointFromEvent(event);
-    setSelectedElement(element.id);
-    setDrag({ element, start: point, current: point });
+    setDrag({ elementIds: ids, start: point, current: point });
+    svgRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const onSegmentHandlePointerDown = (
+    event: React.PointerEvent,
+    connector: ConnectorElement,
+    segmentIndex: number,
+  ) => {
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    setSelection([connector.id]);
+    const point = pointFromEvent(event);
+    setSegmentDrag({ connector, segmentIndex, start: point, current: point });
     svgRef.current?.setPointerCapture(event.pointerId);
   };
 
@@ -456,23 +757,34 @@ export function EditorCanvas() {
   };
 
   const activeElements = (() => {
+    if (segmentDrag) {
+      const changed = moveInternalSegment(segmentDrag.connector, segmentDrag.segmentIndex, segmentDrag.current);
+      return document.elements.map((element) => (element.id === changed.id ? changed : element));
+    }
     if (!drag) return document.elements;
     const dx = drag.current.x - drag.start.x;
     const dy = drag.current.y - drag.start.y;
-    const translated = translateElement(drag.element, dx, dy);
-    if (translated.type !== "symbol") {
-      return document.elements.map((element) => (element.id === translated.id ? translated : element));
+    const moved = new Map<string, ConnectableElement>();
+    const directlyMoved = new Map<string, Element>();
+    for (const id of drag.elementIds) {
+      const element = document.elements.find((item) => item.id === id);
+      if (!element) continue;
+      if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue;
+      const translated = translateElement(element, dx, dy);
+      directlyMoved.set(id, translated);
+      if (translated.type === "symbol" || translated.type === "junction") moved.set(id, translated);
     }
     return document.elements.map((element) => {
-      if (element.id === translated.id) return translated;
-      if (element.type === "connector") return syncConnectorPreview(element, translated, symbolMap);
+      const direct = directlyMoved.get(element.id);
+      if (direct) return direct;
+      if (element.type === "connector" && moved.size) return syncConnectorPreview(element, moved, symbolMap);
       return element;
     });
   })();
 
   const portScale = view.width / (svgRef.current?.clientWidth || 1000);
   const portRadius = 5 * portScale;
-  const showAllPorts = tool === "connector";
+  const showAllConnections = tool === "connector";
 
   return (
     <svg
@@ -494,15 +806,33 @@ export function EditorCanvas() {
       {activeElements.map((element) => (
         <g
           key={element.id}
-          className={`canvas-element ${selectedElementId === element.id ? "is-selected" : ""}`}
+          className={`canvas-element ${selectedSet.has(element.id) ? "is-selected" : ""}`}
           onPointerDown={(event) => onElementPointerDown(event, element)}
         >
           {renderElement(element, symbolMap)}
         </g>
       ))}
       {activeElements.map((element) => {
+        if (element.type === "junction") {
+          const visible = showAllConnections || selectedSet.has(element.id) || drag?.elementIds.includes(element.id);
+          if (!visible) return null;
+          const active = draft?.activeConnection?.element.id === element.id;
+          return (
+            <circle
+              key={`port-${element.id}`}
+              cx={element.position.x}
+              cy={element.position.y}
+              r={active ? portRadius * 1.6 : portRadius * 1.15}
+              fill={active ? "#f97316" : "#ffffff"}
+              stroke={active ? "#c2410c" : "#2563eb"}
+              strokeWidth={2 * portScale}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          );
+        }
         if (element.type !== "symbol") return null;
-        const visible = showAllPorts || selectedElementId === element.id || drag?.element.id === element.id;
+        const visible = showAllConnections || selectedSet.has(element.id) || drag?.elementIds.includes(element.id);
         if (!visible) return null;
         const definition = symbolMap.get(element.symbol_key);
         if (!definition) return null;
@@ -510,7 +840,7 @@ export function EditorCanvas() {
           <g key={`ports-${element.id}`} pointerEvents="none">
             {definition.ports.map((port) => {
               const point = symbolPortPoint(element, definition, port);
-              const active = draft?.activePort?.element.id === element.id && draft.activePort.port.id === port.id;
+              const active = draft?.activeConnection?.element.id === element.id && draft.activeConnection.port.id === port.id;
               return (
                 <g key={port.id}>
                   <circle
@@ -522,13 +852,8 @@ export function EditorCanvas() {
                     strokeWidth={2 * portScale}
                     vectorEffect="non-scaling-stroke"
                   />
-                  {selectedElementId === element.id ? (
-                    <text
-                      x={point.x + portRadius * 1.8}
-                      y={point.y - portRadius * 1.2}
-                      fontSize={11 * portScale}
-                      fill="#1d4ed8"
-                    >
+                  {selectedSet.has(element.id) ? (
+                    <text x={point.x + portRadius * 1.8} y={point.y - portRadius * 1.2} fontSize={11 * portScale} fill="#1d4ed8">
                       {port.name}
                     </text>
                   ) : null}
@@ -538,7 +863,28 @@ export function EditorCanvas() {
           </g>
         );
       })}
+      {activeElements.map((element) => {
+        if (element.type !== "connector" || !selectedSet.has(element.id)) return null;
+        return element.points.slice(0, -1).map((point, segmentIndex) => {
+          if (segmentIndex === 0 || segmentIndex >= element.points.length - 2) return null;
+          const next = element.points[segmentIndex + 1];
+          const middle = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
+          return (
+            <rect
+              key={`segment-${element.id}-${segmentIndex}`}
+              className="connector-segment-handle"
+              x={middle.x - 5 * portScale}
+              y={middle.y - 5 * portScale}
+              width={10 * portScale}
+              height={10 * portScale}
+              rx={2 * portScale}
+              onPointerDown={(event) => onSegmentHandlePointerDown(event, element, segmentIndex)}
+            />
+          );
+        });
+      })}
       {draft ? <DraftPreview tool={tool} start={draft.start} current={draft.current} /> : null}
+      {boxSelection ? <SelectionBox start={boxSelection.start} current={boxSelection.current} /> : null}
     </svg>
   );
 }
@@ -553,4 +899,18 @@ function DraftPreview({ tool, start, current }: { tool: string; start: Point; cu
     return <rect x={Math.min(start.x, current.x)} y={Math.min(start.y, current.y)} width={Math.abs(current.x - start.x)} height={Math.abs(current.y - start.y)} {...common} />;
   }
   return <circle cx={start.x} cy={start.y} r={Math.hypot(current.x - start.x, current.y - start.y)} {...common} />;
+}
+
+function SelectionBox({ start, current }: { start: Point; current: Point }) {
+  const bounds = normalizeBounds(start, current);
+  return (
+    <rect
+      className="selection-box"
+      x={bounds.x1}
+      y={bounds.y1}
+      width={bounds.x2 - bounds.x1}
+      height={bounds.y2 - bounds.y1}
+      pointerEvents="none"
+    />
+  );
 }
