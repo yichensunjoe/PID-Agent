@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { EditorCanvas } from "./editor/EditorCanvas";
 import { SymbolPalette } from "./editor/SymbolPalette";
+import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
 import { useWorkspace } from "./store";
 import type { Tool } from "./types";
 
@@ -20,7 +21,12 @@ export default function App() {
   const [context, setContext] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
+  const [testingProvider, setTestingProvider] = useState(false);
+  const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
+  const [providerTestError, setProviderTestError] = useState("");
   const [explanation, setExplanation] = useState("");
   const [canvasPointerActive, setCanvasPointerActive] = useState(false);
 
@@ -87,15 +93,37 @@ export default function App() {
   const runAgent = async () => {
     if (!prompt.trim()) return;
     try {
-      const message = await state.generate(prompt.trim(), context.trim(), {
+      const provider: ProviderConfig = {
         base_url: baseUrl.trim() || undefined,
         model: model.trim() || undefined,
+        api_key: apiKey.trim() || undefined,
         timeout_seconds: timeoutSeconds,
-      });
+      };
+      const message = await state.generate(prompt.trim(), context.trim(), provider);
       setExplanation(message);
       setPrompt("");
     } catch {
       // Store displays the structured error.
+    }
+  };
+
+  const testCustomProvider = async () => {
+    if (!baseUrl.trim() || !model.trim()) return;
+    setTestingProvider(true);
+    setProviderTest(null);
+    setProviderTestError("");
+    try {
+      const result = await api.testProvider({
+        base_url: baseUrl.trim(),
+        model: model.trim(),
+        api_key: apiKey.trim() || undefined,
+        timeout_seconds: timeoutSeconds,
+      });
+      setProviderTest(result);
+    } catch (error) {
+      setProviderTestError(error instanceof ApiError ? error.message : String(error));
+    } finally {
+      setTestingProvider(false);
     }
   };
 
@@ -208,18 +236,34 @@ export default function App() {
             />
           </label>
           <details>
-            <summary>模型连接与超时（可选）</summary>
+            <summary>自定义模型 API（可选）</summary>
             <label>
-              OpenAI-compatible Base URL
+              Base URL（可含自定义端口）
               <input
                 value={baseUrl}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseUrl(event.target.value)}
-                placeholder="http://localhost:11434/v1"
+                placeholder="例如 http://127.0.0.1:11434/v1"
               />
             </label>
             <label>
               Model
               <input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="qwen3-coder" />
+            </label>
+            <label>
+              API Key
+              <div className="secret-input-row">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setApiKey(event.target.value)}
+                  placeholder="sk-...；本地无鉴权服务可留空"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button type="button" onClick={() => setShowApiKey(!showApiKey)}>
+                  {showApiKey ? "隐藏" : "显示"}
+                </button>
+              </div>
             </label>
             <label>
               超时（秒）
@@ -231,7 +275,23 @@ export default function App() {
                 onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(600, Math.max(10, Number(event.target.value) || 120)))}
               />
             </label>
-            <p>留空连接信息时使用服务端 PID_AGENT_LLM_* 环境变量；MCP 外部 Agent 不需要填写这里。</p>
+            <div className="provider-actions">
+              <button
+                type="button"
+                onClick={() => void testCustomProvider()}
+                disabled={testingProvider || !baseUrl.trim() || !model.trim()}
+              >
+                {testingProvider ? "正在测试…" : "测试连接"}
+              </button>
+            </div>
+            {providerTest ? (
+              <div className={`provider-test provider-test-${providerTest.model_available === false ? "warning" : "success"}`}>
+                <strong>{providerTest.message}</strong>
+                <span>{providerTest.model} · {providerTest.latency_ms} ms · {providerTest.method}</span>
+              </div>
+            ) : null}
+            {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
+            <p>Base URL 可直接包含端口和 `/v1` 路径。API Key 仅保存在当前页面内存，并随测试或生成请求发送，不写入数据库或浏览器存储。留空全部连接信息时使用服务端 PID_AGENT_LLM_* 环境变量；MCP 外部 Agent 不需要填写这里。</p>
           </details>
           <button className="primary" disabled={state.loading || !prompt.trim()} onClick={() => void runAgent()}>
             {state.loading ? "等待模型并校验事务…" : "生成并应用"}
