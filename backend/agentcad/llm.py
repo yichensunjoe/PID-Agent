@@ -20,6 +20,10 @@ class LLMResponseError(RuntimeError):
     pass
 
 
+def _env(primary: str, legacy: str) -> str | None:
+    return os.getenv(primary) or os.getenv(legacy)
+
+
 class OpenAICompatiblePlanner:
     def __init__(self, service: DocumentService, symbols: SymbolRegistry):
         self.service = service
@@ -84,10 +88,11 @@ class OpenAICompatiblePlanner:
 
     def _system_prompt(self, schema: dict[str, Any]) -> str:
         return (
-            "You are AgentCAD's P&ID planning engine. Convert the user's process description "
+            "You are P&ID-Agent's planning engine. Convert the user's process description "
             "into one valid atomic drawing transaction. Use only symbols from the catalog. "
             "Preserve existing elements unless the user explicitly asks to modify or delete them. "
             "Prefer connector elements for process pipes so source/target semantics remain machine-readable. "
+            "Use junction elements for real branch and merge topology, not visual overlaps. "
             "Use orthogonal connector point sequences when practical. Return JSON only with keys "
             "'explanation' and 'transaction'. Never invent operation types or symbol keys.\n\n"
             f"Available symbol catalog:\n{self.symbols.as_prompt_catalog()}\n\n"
@@ -97,12 +102,12 @@ class OpenAICompatiblePlanner:
     @staticmethod
     def _resolve_provider(override: ProviderConfig | None) -> ProviderConfig:
         provider = override or ProviderConfig()
-        base_url = provider.base_url or os.getenv("AGENTCAD_LLM_BASE_URL")
-        model = provider.model or os.getenv("AGENTCAD_LLM_MODEL")
-        api_key = provider.api_key or os.getenv("AGENTCAD_LLM_API_KEY")
+        base_url = provider.base_url or _env("PID_AGENT_LLM_BASE_URL", "AGENTCAD_LLM_BASE_URL")
+        model = provider.model or _env("PID_AGENT_LLM_MODEL", "AGENTCAD_LLM_MODEL")
+        api_key = provider.api_key or _env("PID_AGENT_LLM_API_KEY", "AGENTCAD_LLM_API_KEY")
         if not base_url or not model:
             raise ProviderNotConfiguredError(
-                "configure AGENTCAD_LLM_BASE_URL and AGENTCAD_LLM_MODEL, "
+                "configure PID_AGENT_LLM_BASE_URL and PID_AGENT_LLM_MODEL, "
                 "or pass provider.base_url and provider.model"
             )
         root = base_url.rstrip("/")
