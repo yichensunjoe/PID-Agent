@@ -62,9 +62,18 @@ export type SymbolElement = BaseElement & {
   properties: Record<string, unknown>;
 };
 
+export type ConnectorEndpoint = {
+  element_id?: string | null;
+  port_id?: string | null;
+  point: Point;
+};
+
 export type ConnectorElement = BaseElement & {
   type: "connector";
   points: Point[];
+  source?: ConnectorEndpoint | null;
+  target?: ConnectorEndpoint | null;
+  routing: "orthogonal" | "direct";
   process_tag: string;
 };
 
@@ -117,6 +126,15 @@ export type SymbolShape =
   | { type: "path"; d: string }
   | { type: "text"; x: number; y: number; text: string; font_size?: number; anchor?: string };
 
+export type SymbolPort = {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  direction: "in" | "out" | "bidirectional" | "none";
+  medium: string;
+};
+
 export type SymbolDefinition = {
   key: string;
   name: string;
@@ -124,14 +142,7 @@ export type SymbolDefinition = {
   description: string;
   width: number;
   height: number;
-  ports: Array<{
-    id: string;
-    name: string;
-    x: number;
-    y: number;
-    direction: string;
-    medium: string;
-  }>;
+  ports: SymbolPort[];
   shapes: SymbolShape[];
 };
 
