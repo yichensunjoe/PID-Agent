@@ -11,17 +11,21 @@ P&ID-Agent 支持两类 Agent 使用方式：
 
 ## 推荐调用顺序
 
-修改已有图纸时：
+修改已有图纸时，推荐使用结构化 MCP 闭环：
 
-1. `list_documents`
-2. `get_scene_summary(document_id)`
-3. 必要时 `get_document(document_id)`
-4. `list_symbols()`
-5. 生成一个事务
-6. `apply_transaction(document_id, transaction_json)`
-7. 再次读取 scene summary 确认结果
+1. `get_server_info()`，确认数据库实例和版本；
+2. `list_documents()`；
+3. `get_scene_summary(document_id)`；
+4. 必要时 `get_document(document_id)`；
+5. `list_symbols()`；
+6. 生成结构化 transaction；
+7. `validate_transaction(document_id, transaction)`；
+8. `apply_transaction_v2(document_id, transaction)`；
+9. 再次读取 scene summary 确认结果。
 
-不要在未读取 revision 的情况下根据旧上下文持续修改。REST 请求应传 `expected_revision`；revision 冲突时重新读取文档并重新规划。
+旧的 `apply_transaction(document_id, transaction_json)` 字符串接口仍保留兼容，但新 Agent 应优先使用 `apply_transaction_v2`。
+
+不要在未读取 revision 的情况下根据旧上下文持续修改。transaction 应传 `expected_revision`；revision 冲突时重新读取文档并重新规划。
 
 ## 连接语义
 
@@ -68,6 +72,26 @@ Agent 绘制管线时应优先使用 `connector`：
 }
 ```
 
+## 网页与 MCP 自动同步
+
+网页使用轻量状态接口检查当前文档 revision：
+
+```http
+GET /api/v2/documents/{document_id}/status
+```
+
+MCP、REST 或其他客户端提交新 revision 后，已打开的网页会自动重新读取文档。默认检查周期为约 1.5 秒，并保留画布缩放、平移以及仍然存在的选中元素。
+
+用户正在拖拽或绘制时，网页不会直接覆盖当前预览，而是显示“检测到外部更新”，由用户点击载入或在操作结束后自动载入。
+
+页面顶部的同步状态包括：
+
+- `已同步至 rN`；
+- `正在检查外部修改`；
+- `检测到外部更新 rN`；
+- `已载入外部更新 rN`；
+- 自动同步失败。
+
 ## 网页内生成
 
 ```http
@@ -82,7 +106,8 @@ Content-Type: application/json
   "expected_revision": 3,
   "provider": {
     "base_url": "http://localhost:11434/v1",
-    "model": "your-model"
+    "model": "your-model",
+    "timeout_seconds": 180
   }
 }
 ```
@@ -107,6 +132,25 @@ export PID_AGENT_LLM_API_KEY=optional
 
 API key 只用于当前请求或环境变量，不写入数据库。旧 `AGENTCAD_LLM_*` 变量暂时兼容。
 
+模型连接失败、读取超时、非法 JSON 和事务 schema 校验失败会返回结构化错误。典型超时响应为 HTTP 504：
+
+```json
+{
+  "detail": {
+    "error": "provider_timeout",
+    "message": "model did not finish within 120 seconds",
+    "retryable": true,
+    "provider": {
+      "base_url": "http://127.0.0.1:11434/v1",
+      "model": "qwen3.6:35b"
+    },
+    "timeout_seconds": 120
+  }
+}
+```
+
+超时发生在 transaction 应用之前，因此不会留下部分图纸修改。
+
 ## MCP
 
 ```bash
@@ -118,6 +162,21 @@ pid-agent-mcp
 ```bash
 export PID_AGENT_DATABASE_PATH=/absolute/path/pid-agent.db
 ```
+
+当前 MCP 工具：
+
+- `get_server_info`：返回版本、transport、数据库绝对路径和实例标识、符号库来源；
+- `list_documents`；
+- `create_document`；
+- `get_scene_summary`；
+- `get_document`；
+- `list_symbols`；
+- `get_transaction_schema`；
+- `validate_transaction`：完整校验但不写数据库；
+- `apply_transaction_v2`：接收结构化 transaction；
+- `apply_transaction`：旧字符串接口。
+
+修改 MCP Server 配置或升级版本后，应重新连接 Agent 客户端，使客户端重新发现工具 schema。
 
 ## 后续知识库
 
