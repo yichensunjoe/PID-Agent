@@ -1,54 +1,61 @@
-# AgentCAD 2
+# P&ID-Agent
 
-AgentCAD 是一个面向 AI Agent、工程人员和 P&ID 场景的二维流程图文档引擎。
+P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 
-核心目标不是让模型直接“画一张不可编辑的图片”，而是让模型与人在同一份结构化文档上协作：
+它不是 AutoCAD 的通用替代品，也不计划加入三维建模、机械零件、BIM 或与 P&ID 无关的复杂命令。它只围绕一件事设计：让工程人员和 AI Agent 使用同一套单位图例、同一份结构化图纸和同一套连接语义，共同创建、修改、解释和检查工艺流程图。
 
-- Agent 根据自然语言和工艺上下文生成经过校验的绘图事务；
-- 浏览器编辑器可以继续移动、删除、补充图元和单位图例；
-- 每次修改都会形成新的 document revision；
-- Agent 可以读取最新场景摘要，理解人工修改后的设备、位号和连接关系；
-- 单位图例使用声明式 JSON 文件维护，替换图例无需修改 CAD 内核。
+> 当前版本：`2.1.0-alpha.1`
+>
+> GitHub 仓库 slug 使用 `PID-Agent`，产品显示名称使用 `P&ID-Agent`。Python 导入路径暂时保留为 `agentcad`，避免已有客户端立即失效。
 
-> 当前版本为 `2.0.0-alpha.1`。旧仓库中的原型实现已被替换，但 `/api/v1` 主要绘图接口仍由新的文档内核提供兼容。
+## 产品目标
 
-## 已实现能力
+- 工程人员可以像使用轻量流程图工具一样自由放置设备、阀门、仪表和文字；
+- 工艺管线连接到明确的设备端口或连接节点，而不是退化为无意义线段；
+- Agent 可以读取最新设备、位号、端口、管线、分支和汇合拓扑；
+- Agent 的修改经过 JSON Schema 和原子事务验证，并且可撤销；
+- 单位图例使用声明式 JSON 维护，人工编辑器和 Agent 共用同一份符号定义；
+- 最终支持生成和继续编辑与实际复杂 P&ID 相当的工程图纸。
 
-### 结构化 P&ID 文档
+完整产品边界见 [`docs/product-vision.md`](docs/product-vision.md)。
 
-- 文档、图层、图元、符号和工艺连接线统一数据模型
-- 设备符号包含可供 Agent 理解的端口、方向和介质类型
-- SQLite 文档持久化
-- 原子批量事务
-- revision 乐观并发控制，避免 Agent 覆盖人工刚完成的修改
-- 撤销/重做使用完整文档快照，不再只支持“撤销新增”
+## 当前能力
 
-### Agent 接入
+### P&ID 文档内核
 
-- OpenAI-compatible Chat Completions 规划器
-- 服务端 JSON Schema 验证
-- REST API
-- Python Client
-- MCP stdio server
-- 适用于云模型和本地 OpenAI-compatible 服务
-- 场景摘要接口，避免 Agent 每次都读取整份大文档
+- 文档、图层、图元、设备符号、连接节点和工艺管线统一模型；
+- SQLite 持久化；
+- 原子批量事务；
+- document revision 乐观并发，防止 Agent 覆盖人工修改；
+- 完整文档快照撤销和重做；
+- JSON、SVG、PNG 导出；
+- 场景摘要包含符号端口、连接节点和管线 source/target。
 
 ### 浏览器编辑器
 
-- React + TypeScript + Vite + Zustand
-- SVG 编辑画布
-- 选择、拖动、删除、撤销、重做
-- 直线、矩形、圆、文字、工艺管线和工业符号
-- 网格吸附、中键平移、滚轮缩放
-- 自然语言生成面板
+- React、TypeScript、Vite、Zustand 和 SVG；
+- 设备符号、基础图元、文字和工艺管线；
+- 设备端口显示与吸附；
+- 正交管线；
+- 移动设备后关联管线自动保持连接；
+- 单选、Shift 多选和拖拽框选；
+- 多元素移动、删除和复制；
+- `Ctrl/Cmd+D` 复制选择；
+- `Ctrl/Cmd+A` 全选；
+- 连接节点工具；
+- 在既有管线上放置连接节点时，主管线原子拆分为两段；
+- 支路可以吸附到同一连接节点，形成 Agent 可查询的真实分支/汇合拓扑；
+- 选择管线后可拖动内部线段手柄，调整折线路径并保持正交；
+- 中键平移、滚轮缩放和网格吸附。
 
-### 导入与导出基础
+### Agent 接入
 
-- JSON 文档
-- SVG
-- PNG
-
-DXF、PDF、工艺文件知识库和严格标准图例属于后续阶段。
+- OpenAI-compatible Chat Completions 规划器；
+- REST API；
+- Python Client；
+- MCP stdio Server；
+- 适用于 OpenAI API、Ollama、LM Studio 及其他 OpenAI-compatible 服务；
+- 模型只生成结构化事务，不能绕过服务层直接写数据库。
 
 ## 快速开始
 
@@ -64,45 +71,70 @@ npm install
 npm run build
 cd ..
 
-agentcad serve --host 0.0.0.0 --port 8000
+pid-agent serve --host 0.0.0.0 --port 8000
 ```
 
 打开 `http://localhost:8000`。
 
-开发前端：
+开发模式：
 
 ```bash
 # 终端 1
-agentcad serve --reload
+pid-agent serve --reload
 
 # 终端 2
 cd frontend
 npm run dev
 ```
 
-前端开发地址为 `http://localhost:5173`，Vite 会把 `/api` 代理到后端。
+旧命令 `agentcad` 和 `agentcad-mcp` 暂时保留为兼容别名。
 
 ## 模型配置
 
-服务端默认读取：
-
 ```bash
-export AGENTCAD_LLM_BASE_URL="http://localhost:11434/v1"
-export AGENTCAD_LLM_MODEL="your-model-name"
-export AGENTCAD_LLM_API_KEY="optional-api-key"
+export PID_AGENT_LLM_BASE_URL="http://localhost:11434/v1"
+export PID_AGENT_LLM_MODEL="your-model-name"
+export PID_AGENT_LLM_API_KEY="optional-api-key"
 ```
 
-`AGENTCAD_LLM_BASE_URL` 指向任意 OpenAI-compatible `/v1` 服务。网页生成面板也可以对单次请求覆盖 Base URL 和模型名称。
+旧的 `AGENTCAD_LLM_*` 环境变量仍可使用，但新部署应使用 `PID_AGENT_*`。
 
 规划流程：
 
-1. 后端读取最新 document revision、完整文档和场景摘要；
-2. 把单位图例目录和事务 JSON Schema 提供给模型；
+1. 后端读取最新文档、revision 和语义场景摘要；
+2. 将单位图例目录与事务 JSON Schema 提供给模型；
 3. 模型只返回结构化事务；
-4. 后端重新验证图例名称、图层、字段和 revision；
+4. 后端重新验证图例 key、端口、连接节点、图层和 revision；
 5. 整个事务一次成功，或完全不写入。
 
+## 单位图例
+
+内置占位图例：
+
+```text
+backend/agentcad/data/symbols.json
+```
+
+通过外部路径加载单位图例：
+
+```bash
+export PID_AGENT_SYMBOL_PATHS="/path/company-symbols:/path/project-symbols"
+```
+
+相同 `key` 的后加载定义会覆盖内置图例。结构说明见 [`docs/symbol-schema.md`](docs/symbol-schema.md)。
+
+每个单位符号建议至少提供：
+
+- 稳定的英文 `key`；
+- 中文名称、分类和工程用途；
+- 默认宽高和 SVG 基础形状；
+- 可连接端口、端口方向和介质类型；
+- 位号规则和可填写属性；
+- Agent 可理解的使用约束。
+
 ## Python 接入
+
+安装的发行包名称为 `pid-agent`，兼容导入路径仍为 `agentcad`：
 
 ```python
 from agentcad.client import AgentCADClient
@@ -129,23 +161,21 @@ with AgentCADClient("http://127.0.0.1:8000") as cad:
 
 ## MCP 接入
 
-安装 MCP 可选依赖后运行：
-
 ```bash
-agentcad-mcp
+pid-agent-mcp
 # 或
-agentcad mcp
+pid-agent mcp
 ```
 
-通用 MCP 客户端配置形式：
+通用配置示例：
 
 ```json
 {
   "mcpServers": {
-    "agentcad": {
-      "command": "agentcad-mcp",
+    "pid-agent": {
+      "command": "pid-agent-mcp",
       "env": {
-        "AGENTCAD_DATABASE_PATH": "/absolute/path/to/agentcad.db"
+        "PID_AGENT_DATABASE_PATH": "/absolute/path/to/pid-agent.db"
       }
     }
   }
@@ -161,36 +191,7 @@ MCP 工具包括：
 - `apply_transaction`
 - `list_symbols`
 
-不同客户端的 MCP 配置文件位置不同，但服务端本身使用标准输入输出，不依赖某一家模型供应商。
-
-## 替换为单位图例
-
-内置占位图例位于：
-
-```text
-backend/agentcad/data/symbols.json
-```
-
-也可以不改仓库文件，通过环境变量加载一个或多个外部 JSON 文件或目录：
-
-```bash
-export AGENTCAD_SYMBOL_PATHS="/path/company-symbols:/path/project-symbols"
-```
-
-后加载的相同 `key` 会覆盖内置定义。图例结构见 [docs/symbol-schema.md](docs/symbol-schema.md)。
-
-单位图例建议至少提供：
-
-- 稳定的英文 `key`
-- 中文名称和分类
-- 默认宽高
-- SVG 基础形状
-- 可连接端口及其方向
-- 位号或设备属性说明
-
 ## API 概览
-
-### v2 文档 API
 
 ```text
 GET    /api/v2/documents
@@ -209,53 +210,29 @@ GET    /api/v2/symbols
 GET    /api/v2/agent/tool-schema
 ```
 
-运行服务后可访问 `/docs` 查看 OpenAPI 文档。
+运行后访问 `/docs` 查看 OpenAPI。
 
-### v1 兼容层
+`/api/v1` 主要旧端点仍由新文档引擎提供兼容。
 
-保留了原型中的主要端点：基本图元、工业符号、批量绘制、图元查询/删除、图层、撤销/重做、清空和 SVG 导出。所有数据实际写入新的 `doc_legacy` 文档。
+## 本地验证
 
-## 本地校验
-
-本仓库不依赖 GitHub Actions。提交前可运行：
+本仓库不依赖 GitHub Actions：
 
 ```bash
 pytest -q
+ruff check backend
 cd frontend && npm run build
 ```
 
-## 目录
+## 近期路线
 
-```text
-backend/agentcad/
-  models.py       领域模型和事务 Schema
-  service.py      文档操作、并发和历史
-  store.py        SQLite 持久化
-  symbols.py      声明式图例注册表
-  svg.py          SVG/PNG 导出基础
-  llm.py          OpenAI-compatible Agent 规划器
-  api_v2.py       文档、导出与 Agent API
-  api_v1.py       旧接口兼容层
-  client.py       Python REST Client
-  mcp_server.py   MCP 工具服务
-frontend/src/
-  editor/         SVG 编辑器和图例面板
-  store.ts        共享工作区状态
-  api.ts          v2 API 客户端
-docs/
-  architecture.md
-  agent-integration.md
-  symbol-schema.md
-```
-
-## 下一阶段
-
-1. 上传工艺设计文件并建立可检索的项目知识库；
-2. 图例图片/SVG 自动转换为声明式符号；
-3. 连接口吸附、自动正交布管和自动布局；
-4. 设备表、管线表和仪表索引双向同步；
-5. DXF/PDF 导出；
-6. 图纸规则检查和单位内部标准校验。
+1. 完善属性编辑、图层和系统显隐；
+2. 增加管线折点增删、自动整理和跨线表达；
+3. 增加流向箭头、介质、管径、颜色和线型面板；
+4. 让 Agent 按自然语言执行局部移动、替换、删除和重新连接；
+5. 导入单位图例及历史图纸知识；
+6. 自动布局、避让和大型图纸性能优化；
+7. 设备表、管线表、仪表索引、规则检查、PDF 和 DXF。
 
 ## License
 
