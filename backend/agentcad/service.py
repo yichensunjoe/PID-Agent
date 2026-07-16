@@ -18,6 +18,7 @@ from .models import (
     DeleteLayerOperation,
     Document,
     Element,
+    JunctionElement,
     Layer,
     Point,
     SymbolElement,
@@ -161,6 +162,7 @@ class DocumentService:
         document = self.get_document(document_id)
         by_type: dict[str, int] = {}
         symbols: list[dict[str, Any]] = []
+        junctions: list[dict[str, Any]] = []
         connectors: list[dict[str, Any]] = []
         for element in document.elements:
             by_type[element.type] = by_type.get(element.type, 0) + 1
@@ -174,6 +176,14 @@ class DocumentService:
                         "position": element.position.model_dump(),
                         "properties": element.properties,
                         "ports": [port.model_dump() for port in definition.ports],
+                    }
+                )
+            elif element.type == "junction":
+                junctions.append(
+                    {
+                        "id": element.id,
+                        "position": element.position.model_dump(),
+                        "label": element.label,
                     }
                 )
             elif element.type == "connector":
@@ -195,6 +205,7 @@ class DocumentService:
             "element_count": len(document.elements),
             "elements_by_type": by_type,
             "symbols": symbols,
+            "junctions": junctions,
             "connectors": connectors,
         }
 
@@ -226,15 +237,15 @@ class DocumentService:
                 raise InvalidOperationError(str(exc)) from exc
             updated = self._prepare_element(document, updated)
             document.elements[index] = updated
-            if updated.type == "symbol":
+            if updated.type in {"symbol", "junction"}:
                 self._refresh_connected_connectors(document, updated.id)
             return
 
         if isinstance(operation, DeleteElementOperation):
             index = self._element_index(document, operation.element_id)
             removed = document.elements.pop(index)
-            if removed.type == "symbol":
-                self._detach_symbol_connectors(document, removed.id)
+            if removed.type in {"symbol", "junction"}:
+                self._detach_connectable_connectors(document, removed.id)
             return
 
         if isinstance(operation, AddLayerOperation):
@@ -304,11 +315,11 @@ class DocumentService:
 
         if normalized.routing == "orthogonal":
             normalized.points = self._orthogonal_route(start, end)
+        elif normalized.routing == "direct":
+            normalized.points = self._dedupe_points([start, end])
         else:
             points = [Point.model_validate(point.model_dump()) for point in normalized.points]
-            points[0] = Point.model_validate(start.model_dump())
-            points[-1] = Point.model_validate(end.model_dump())
-            normalized.points = self._dedupe_points(points)
+            normalized.points = self._bind_manual_endpoints(points, start, end)
         return normalized
 
     def _normalize_endpoint(
@@ -324,10 +335,17 @@ class DocumentService:
         if endpoint.port_id is None:
             raise InvalidOperationError(f"{endpoint_name} element_id requires port_id")
 
-        symbol = self._symbol_by_id(document, endpoint.element_id)
-        point = self._symbol_port_point(symbol, endpoint.port_id)
+        connectable = self._connectable_by_id(document, endpoint.element_id)
+        if connectable.type == "symbol":
+            point = self._symbol_port_point(connectable, endpoint.port_id)
+        else:
+            if endpoint.port_id != "node":
+                raise InvalidOperationError(
+                    f"junction {connectable.id} only exposes port 'node', not '{endpoint.port_id}'"
+                )
+            point = Point.model_validate(connectable.position.model_dump())
         return ConnectorEndpoint(
-            element_id=symbol.id,
+            element_id=connectable.id,
             port_id=endpoint.port_id,
             point=point,
         )
@@ -351,24 +369,24 @@ class DocumentService:
         rotated_y = center_y + dx * sin(angle) + dy * cos(angle)
         return Point(x=symbol.position.x + rotated_x, y=symbol.position.y + rotated_y)
 
-    def _refresh_connected_connectors(self, document: Document, symbol_id: str) -> None:
+    def _refresh_connected_connectors(self, document: Document, element_id: str) -> None:
         for index, element in enumerate(document.elements):
             if element.type != "connector":
                 continue
-            source_match = element.source is not None and element.source.element_id == symbol_id
-            target_match = element.target is not None and element.target.element_id == symbol_id
+            source_match = element.source is not None and element.source.element_id == element_id
+            target_match = element.target is not None and element.target.element_id == element_id
             if source_match or target_match:
                 document.elements[index] = self._normalize_connector(document, element)
 
     @staticmethod
-    def _detach_symbol_connectors(document: Document, symbol_id: str) -> None:
+    def _detach_connectable_connectors(document: Document, element_id: str) -> None:
         for element in document.elements:
             if element.type != "connector":
                 continue
-            if element.source is not None and element.source.element_id == symbol_id:
-                element.source = None
-            if element.target is not None and element.target.element_id == symbol_id:
-                element.target = None
+            if element.source is not None and element.source.element_id == element_id:
+                element.source = ConnectorEndpoint(point=element.source.point)
+            if element.target is not None and element.target.element_id == element_id:
+                element.target = ConnectorEndpoint(point=element.target.point)
 
     @staticmethod
     def _orthogonal_route(start: Point, end: Point) -> list[Point]:
@@ -391,6 +409,42 @@ class DocumentService:
                 end,
             ]
         return DocumentService._dedupe_points(points)
+
+    @staticmethod
+    def _bind_manual_endpoints(points: list[Point], start: Point, end: Point) -> list[Point]:
+        endpoints_changed = (
+            points[0].x != start.x
+            or points[0].y != start.y
+            or points[-1].x != end.x
+            or points[-1].y != end.y
+        )
+        if len(points) <= 2:
+            if endpoints_changed:
+                return DocumentService._orthogonal_route(start, end)
+            return DocumentService._validate_manual_route(points)
+        original = [Point.model_validate(point.model_dump()) for point in points]
+        result = [Point.model_validate(point.model_dump()) for point in points]
+        first_vertical = original[0].x == original[1].x
+        last_vertical = original[-2].x == original[-1].x
+        result[0] = Point.model_validate(start.model_dump())
+        result[-1] = Point.model_validate(end.model_dump())
+        if first_vertical:
+            result[1].x = start.x
+        else:
+            result[1].y = start.y
+        if last_vertical:
+            result[-2].x = end.x
+        else:
+            result[-2].y = end.y
+        return DocumentService._validate_manual_route(result)
+
+    @staticmethod
+    def _validate_manual_route(points: list[Point]) -> list[Point]:
+        result = DocumentService._dedupe_points(points)
+        for first, second in zip(result, result[1:], strict=False):
+            if first.x != second.x and first.y != second.y:
+                raise InvalidOperationError("manual connector segments must remain orthogonal")
+        return result
 
     @staticmethod
     def _dedupe_points(points: list[Point]) -> list[Point]:
@@ -418,12 +472,14 @@ class DocumentService:
         raise InvalidOperationError(f"layer not found: {layer_id}")
 
     @staticmethod
-    def _symbol_by_id(document: Document, element_id: str) -> SymbolElement:
+    def _connectable_by_id(
+        document: Document, element_id: str
+    ) -> SymbolElement | JunctionElement:
         for element in document.elements:
             if element.id == element_id:
-                if element.type != "symbol":
+                if element.type not in {"symbol", "junction"}:
                     raise InvalidOperationError(
-                        f"connector endpoint must reference a symbol: {element_id}"
+                        f"connector endpoint must reference a symbol or junction: {element_id}"
                     )
                 return element
-        raise InvalidOperationError(f"connector endpoint symbol not found: {element_id}")
+        raise InvalidOperationError(f"connector endpoint element not found: {element_id}")
