@@ -297,9 +297,18 @@ class OpenAICompatiblePlanner:
     @staticmethod
     def _resolve_provider(override: ProviderConfig | None) -> ProviderConfig:
         provider = override or ProviderConfig()
-        base_url = provider.base_url or _env("PID_AGENT_LLM_BASE_URL", "AGENTCAD_LLM_BASE_URL")
-        model = provider.model or _env("PID_AGENT_LLM_MODEL", "AGENTCAD_LLM_MODEL")
-        api_key = provider.api_key or _env("PID_AGENT_LLM_API_KEY", "AGENTCAD_LLM_API_KEY")
+        custom_connection = bool(
+            override is not None
+            and (provider.base_url or provider.model or provider.api_key)
+        )
+        if custom_connection:
+            base_url = provider.base_url
+            model = provider.model
+            api_key = provider.api_key
+        else:
+            base_url = _env("PID_AGENT_LLM_BASE_URL", "AGENTCAD_LLM_BASE_URL")
+            model = _env("PID_AGENT_LLM_MODEL", "AGENTCAD_LLM_MODEL")
+            api_key = _env("PID_AGENT_LLM_API_KEY", "AGENTCAD_LLM_API_KEY")
         if not base_url or not model:
             raise ProviderNotConfiguredError(
                 "configure PID_AGENT_LLM_BASE_URL and PID_AGENT_LLM_MODEL, "
