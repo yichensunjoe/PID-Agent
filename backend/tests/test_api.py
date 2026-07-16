@@ -3,7 +3,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from agentcad.config import Settings
+from agentcad.llm import OpenAICompatiblePlanner, ProviderTimeoutError
 from agentcad.main import create_app
+from agentcad.models import ProviderConfig
 
 
 def make_client(tmp_path: Path) -> TestClient:
@@ -17,11 +19,15 @@ def make_client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
-def test_document_transaction_and_svg_export(tmp_path: Path):
+def test_document_transaction_status_and_svg_export(tmp_path: Path):
     client = make_client(tmp_path)
     created = client.post("/api/v2/documents", json={"name": "Demo"})
     assert created.status_code == 201
     document = created.json()
+
+    initial_status = client.get(f"/api/v2/documents/{document['id']}/status")
+    assert initial_status.status_code == 200
+    assert initial_status.json()["revision"] == 0
 
     response = client.post(
         f"/api/v2/documents/{document['id']}/transactions",
@@ -42,6 +48,11 @@ def test_document_transaction_and_svg_export(tmp_path: Path):
     assert response.status_code == 200
     assert response.json()["document"]["revision"] == 1
 
+    changed_status = client.get(f"/api/v2/documents/{document['id']}/status")
+    assert changed_status.status_code == 200
+    assert changed_status.json()["revision"] == 1
+    assert changed_status.json()["updated_at"]
+
     svg = client.get(f"/api/v2/documents/{document['id']}/export.svg")
     assert svg.status_code == 200
     assert "A&amp;B &lt;safe&gt;" in svg.text
@@ -53,6 +64,36 @@ def test_document_transaction_and_svg_export(tmp_path: Path):
     exported_json = client.get(f"/api/v2/documents/{document['id']}/export.json")
     assert exported_json.status_code == 200
     assert exported_json.json()["revision"] == 1
+
+
+def test_agent_timeout_returns_structured_504(tmp_path: Path, monkeypatch):
+    def raise_timeout(self, document_id, request):
+        provider = ProviderConfig(
+            base_url="http://127.0.0.1:11434/v1",
+            model="qwen-test",
+            timeout_seconds=5,
+        )
+        raise ProviderTimeoutError(
+            "model did not finish within 5 seconds",
+            provider=provider,
+            timeout_seconds=5,
+        )
+
+    monkeypatch.setattr(OpenAICompatiblePlanner, "plan", raise_timeout)
+    client = make_client(tmp_path)
+    document = client.post("/api/v2/documents", json={"name": "Timeout"}).json()
+
+    response = client.post(
+        f"/api/v2/documents/{document['id']}/agent/generate",
+        json={"prompt": "draw something", "expected_revision": 0},
+    )
+
+    assert response.status_code == 504
+    detail = response.json()["detail"]
+    assert detail["error"] == "provider_timeout"
+    assert detail["retryable"] is True
+    assert detail["timeout_seconds"] == 5
+    assert detail["provider"]["model"] == "qwen-test"
 
 
 def test_legacy_endpoint_uses_v2_document_engine(tmp_path: Path):
