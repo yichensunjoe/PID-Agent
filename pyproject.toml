@@ -3,13 +3,13 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentcad"
-version = "2.0.0a1"
-description = "Agent-first, editable P&ID document engine"
+name = "pid-agent"
+version = "2.1.0a1"
+description = "Lightweight human-agent collaborative P&ID editor and document engine"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "AgentCAD contributors" }]
+authors = [{ name = "P&ID-Agent contributors" }]
 dependencies = [
   "cairosvg>=2.8,<3",
   "fastapi>=0.128,<1",
@@ -27,6 +27,8 @@ dev = [
 ]
 
 [project.scripts]
+pid-agent = "agentcad.cli:main"
+pid-agent-mcp = "agentcad.mcp_server:main"
 agentcad = "agentcad.cli:main"
 agentcad-mcp = "agentcad.mcp_server:main"
 
