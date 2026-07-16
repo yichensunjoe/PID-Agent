@@ -172,7 +172,7 @@ def test_connector_snaps_to_ports_and_follows_symbol_move(service: DocumentServi
     assert connector.points[-1].model_dump() == {"x": 400.0, "y": 158.0}
     assert all(
         first.x == second.x or first.y == second.y
-        for first, second in zip(connector.points, connector.points[1:])
+        for first, second in zip(connector.points, connector.points[1:], strict=False)
     )
 
     summary = service.scene_summary(document.id)
