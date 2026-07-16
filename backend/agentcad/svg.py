@@ -81,10 +81,26 @@ def _render_element(element: Element, registry: SymbolRegistry) -> str:
             f'text-anchor="{element.anchor}" fill="{escape(element.style.stroke, quote=True)}" '
             f'opacity="{element.style.opacity}">{escape(element.text)}</text>'
         )
+    if element.type == "junction":
+        label = ""
+        if element.label:
+            label = (
+                f'<text x="{element.position.x + 8}" y="{element.position.y - 8}" '
+                f'font-size="12" fill="{escape(element.style.stroke, quote=True)}">'
+                f"{escape(element.label)}</text>"
+            )
+        return (
+            f'<g id="{escape(element.id, quote=True)}" data-element-type="junction">'
+            f'<circle cx="{element.position.x}" cy="{element.position.y}" r="{element.radius}" '
+            f'fill="{escape(element.style.stroke, quote=True)}" '
+            f'stroke="{escape(element.style.stroke, quote=True)}" '
+            f'opacity="{element.style.opacity}" />{label}</g>'
+        )
     if element.type == "connector":
         return (
             f'<polyline id="{escape(element.id, quote=True)}" points="{_points(element.points)}"'
-            f'{attrs} data-process-tag="{escape(element.process_tag, quote=True)}" />'
+            f'{attrs} data-process-tag="{escape(element.process_tag, quote=True)}" '
+            f'data-routing="{escape(element.routing, quote=True)}" />'
         )
     if element.type == "symbol":
         definition = registry.get(element.symbol_key)
