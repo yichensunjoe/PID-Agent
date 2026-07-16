@@ -7,10 +7,10 @@ from .models import TransactionRequest
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="agentcad")
+    parser = argparse.ArgumentParser(prog="pid-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    serve_parser = subparsers.add_parser("serve", help="Run the AgentCAD API and web app")
+    serve_parser = subparsers.add_parser("serve", help="Run the P&ID-Agent API and web app")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
     serve_parser.add_argument("--reload", action="store_true")
