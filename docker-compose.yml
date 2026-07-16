@@ -1,18 +1,18 @@
 services:
-  agentcad:
+  pid-agent:
     build: .
     ports:
       - "8000:8000"
     volumes:
-      - agentcad-data:/data
+      - pid-agent-data:/data
       # Optional company symbols:
       # - ./company-symbols:/symbols:ro
     environment:
-      AGENTCAD_DATABASE_PATH: /data/agentcad.db
-      # AGENTCAD_SYMBOL_PATHS: /symbols
-      # AGENTCAD_LLM_BASE_URL: http://host.docker.internal:11434/v1
-      # AGENTCAD_LLM_MODEL: your-model
-      # AGENTCAD_LLM_API_KEY: optional
+      PID_AGENT_DATABASE_PATH: /data/pid-agent.db
+      # PID_AGENT_SYMBOL_PATHS: /symbols
+      # PID_AGENT_LLM_BASE_URL: http://host.docker.internal:11434/v1
+      # PID_AGENT_LLM_MODEL: your-model
+      # PID_AGENT_LLM_API_KEY: optional
 
 volumes:
-  agentcad-data:
+  pid-agent-data:
