@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentCAD — AI Agent 绘图系统</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 顶部工具栏 -->
+    <header class="toolbar">
+        <div class="toolbar-left">
+            <h1 class="logo">📐 AgentCAD</h1>
+            <span class="subtitle">AI Agent 绘图系统</span>
+        </div>
+        <div class="toolbar-center">
+            <button id="btn-select" class="tool-btn active" title="选择/移动">🖱️ 选择</button>
+            <button id="btn-line" class="tool-btn" title="直线">〰️ 直线</button>
+            <button id="btn-circle" class="tool-btn" title="圆">⭕ 圆</button>
+            <button id="btn-rect" class="tool-btn" title="矩形">▭ 矩形</button>
+            <button id="btn-polyline" class="tool-btn" title="多段线">⤫ 多段线</button>
+            <button id="btn-arc" class="tool-btn" title="圆弧">⌒ 圆弧</button>
+            <button id="btn-text" class="tool-btn" title="文字">🔤 文字</button>
+            <button id="btn-stencil-toggle" class="tool-btn stencil-btn" title="工业符号面板">🏭 符号库</button>
+        </div>
+        <div class="toolbar-right">
+            <button id="btn-undo" class="action-btn" title="撤销">↩ 撤销</button>
+            <button id="btn-redo" class="action-btn" title="重做">↪ 重做</button>
+            <button id="btn-clear" class="action-btn danger" title="清空">🗑 清空</button>
+            <button id="btn-export-svg" class="action-btn" title="导出SVG">💾 导出SVG</button>
+        </div>
+    </header>
+
+    <!-- 主区域 -->
+    <main class="main-area">
+        <!-- 左侧面板：工业符号库（Stencil Palette） -->
+        <aside id="stencil-panel" class="panel panel-left stencil-panel hidden">
+            <h3>🏭 工业符号库</h3>
+            <div id="stencil-categories" class="stencil-categories"></div>
+        </aside>
+
+        <!-- 左侧面板：图层 -->
+        <aside class="panel panel-left layer-panel">
+            <h3>图层</h3>
+            <div id="layer-list" class="layer-list"></div>
+            <button id="btn-add-layer" class="action-btn small">+ 新建图层</button>
+        </aside>
+
+        <!-- 画布 -->
+        <div class="canvas-container">
+            <canvas id="cad-canvas" width="1280" height="720"></canvas>
+            <div id="crosshair" class="crosshair"></div>
+            <div id="coord-display" class="coord-display">X: 0, Y: 0</div>
+        </div>
+
+        <!-- 右侧面板：属性 -->
+        <aside class="panel panel-right">
+            <h3>属性</h3>
+            <div class="prop-group">
+                <label>颜色</label>
+                <select id="prop-color">
+                    <option value="black">黑色</option>
+                    <option value="red">红色</option>
+                    <option value="blue">蓝色</option>
+                    <option value="green">绿色</option>
+                    <option value="yellow">黄色</option>
+                    <option value="cyan">青色</option>
+                    <option value="magenta">品红</option>
+                    <option value="orange">橙色</option>
+                    <option value="purple">紫色</option>
+                    <option value="gray">灰色</option>
+                </select>
+            </div>
+            <div class="prop-group">
+                <label>线宽</label>
+                <input type="range" id="prop-linewidth" min="0.5" max="10" step="0.5" value="1">
+                <span id="prop-linewidth-val">1.0</span>
+            </div>
+            <div class="prop-group">
+                <label>图层</label>
+                <select id="prop-layer"></select>
+            </div>
+            <hr>
+            <h3>统计</h3>
+            <div id="stats" class="stats">
+                <div>图元数量: <span id="stat-count">0</span></div>
+                <div>撤销步数: <span id="stat-undo">0</span></div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- 底部状态栏 -->
+    <footer class="statusbar">
+        <span id="status-message">就绪</span>
+        <span id="status-help">点击工具按钮开始绘图</span>
+    </footer>
+
+    <!-- 文字输入弹窗 -->
+    <div id="text-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>输入文字</h3>
+            <input type="text" id="text-input" placeholder="请输入文字内容..." autofocus>
+            <div class="modal-actions">
+                <button id="text-confirm" class="action-btn">确定</button>
+                <button id="text-cancel" class="action-btn danger">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
