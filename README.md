@@ -6,7 +6,7 @@ P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 
 > 当前版本：`2.1.0-alpha.1`
 >
-> GitHub 仓库 slug 使用 `PID-Agent`，产品显示名称使用 `P&ID-Agent`。Python 导入路径暂时保留为 `agentcad`，避免已有客户端立即失效。
+> 仓库 slug 的规范名称为 `PID-Agent`，产品显示名称为 `P&ID-Agent`。Python 导入路径暂时保留为 `agentcad`，避免已有客户端立即失效。
 
 ## 产品目标
 
