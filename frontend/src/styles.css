@@ -9,12 +9,13 @@
 body { margin: 0; min-width: 1180px; min-height: 100vh; overflow: hidden; }
 button, input, textarea { font: inherit; }
 button, a { transition: background 120ms ease, border-color 120ms ease, color 120ms ease; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .app-shell { height: 100vh; display: flex; flex-direction: column; }
 .topbar {
   height: 58px;
   display: grid;
-  grid-template-columns: 260px 1fr auto;
+  grid-template-columns: 280px 1fr auto;
   align-items: center;
   gap: 18px;
   padding: 0 16px;
@@ -23,9 +24,10 @@ button, a { transition: background 120ms ease, border-color 120ms ease, color 12
   border-bottom: 1px solid #293548;
 }
 .brand { display: flex; align-items: baseline; gap: 10px; }
-.brand strong { font-size: 19px; letter-spacing: -0.02em; }
-.brand span { color: #9aa8bc; font-size: 11px; }
+.brand strong { font-size: 19px; letter-spacing: -0.02em; white-space: nowrap; }
+.brand span { color: #9aa8bc; font-size: 11px; white-space: nowrap; }
 .toolbar, .toolbar-actions { display: flex; align-items: center; gap: 6px; }
+.toolbar { overflow-x: auto; }
 .toolbar button, .toolbar-actions button, .toolbar-actions a {
   border: 1px solid #39465a;
   color: #dce5f2;
@@ -34,6 +36,7 @@ button, a { transition: background 120ms ease, border-color 120ms ease, color 12
   padding: 7px 10px;
   text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
 }
 .toolbar button:hover, .toolbar-actions button:hover, .toolbar-actions a:hover { background: #2b3a50; }
 .toolbar button.active { background: #2563eb; border-color: #60a5fa; color: white; }
@@ -61,13 +64,16 @@ button, a { transition: background 120ms ease, border-color 120ms ease, color 12
 .symbol-card span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 
 .canvas-stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #69778a; }
-.document-bar { height: 34px; display: flex; align-items: center; gap: 14px; padding: 0 12px; color: #dbe5f2; background: #334155; font-size: 12px; }
-.document-bar span { color: #adbbce; }
+.document-bar { height: 34px; display: flex; align-items: center; gap: 14px; padding: 0 12px; color: #dbe5f2; background: #334155; font-size: 12px; overflow: hidden; }
+.document-bar span { color: #adbbce; white-space: nowrap; }
 .editor-canvas { flex: 1; width: 100%; min-height: 0; touch-action: none; background: #9ba8b8; cursor: crosshair; }
 .editor-canvas.tool-select { cursor: default; }
+.editor-canvas.tool-junction { cursor: cell; }
 .canvas-element { cursor: pointer; }
 .canvas-element.is-selected { filter: drop-shadow(0 0 2px #2563eb); }
 .canvas-element.is-selected > * { stroke: #2563eb; }
+.selection-box { fill: rgba(37, 99, 235, 0.12); stroke: #2563eb; stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+.connector-segment-handle { fill: #ffffff; stroke: #f97316; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
 .empty-canvas { flex: 1; display: grid; place-items: center; color: #e2e8f0; }
 
 .agent-panel label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 11px; color: #526176; font-size: 12px; }
