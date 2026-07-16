@@ -1,13 +1,13 @@
-# Agent 接入
+# P&ID-Agent 的 Agent 接入
 
 ## 目标
 
-AgentCAD 支持两类 Agent 使用方式：
+P&ID-Agent 支持两类 Agent 使用方式：
 
-1. Agent 自己决定何时调用 CAD 工具：使用 MCP 或 REST；
-2. 用户在 AgentCAD 网页内输入自然语言：由内置 OpenAI-compatible 规划器生成事务。
+1. Agent 自己决定何时调用 P&ID 工具：使用 MCP、REST 或 Python Client；
+2. 用户在 P&ID-Agent 网页内输入自然语言：由内置 OpenAI-compatible 规划器生成事务。
 
-两者最终都调用同一个 `DocumentService.apply_transaction`。
+两者最终都调用同一个 `DocumentService.apply_transaction`，因此人工编辑和 Agent 修改不会形成两份状态。
 
 ## 推荐调用顺序
 
@@ -23,33 +23,45 @@ AgentCAD 支持两类 Agent 使用方式：
 
 不要在未读取 revision 的情况下根据旧上下文持续修改。REST 请求应传 `expected_revision`；revision 冲突时重新读取文档并重新规划。
 
-## 事务示例
+## 连接语义
+
+Agent 绘制管线时应优先使用 `connector`：
+
+- 连接设备时，source/target 使用设备 `element_id` 和符号定义中的 `port_id`；
+- 分支或汇合时，先创建 `junction`，其端口固定为 `node`；
+- 多条管线应连接到同一 junction，而不是仅让线段视觉交叉；
+- `routing: orthogonal` 由服务端生成基础正交路径；
+- `routing: manual` 用于保存人工调整后的正交折线路径；
+- 手工路径中的每一段仍必须水平或垂直。
+
+连接节点示例：
 
 ```json
 {
   "expected_revision": 4,
-  "label": "Add feed pump and discharge pressure indication",
+  "label": "Add a semantic process branch",
   "operations": [
     {
       "op": "add_element",
       "element": {
-        "type": "symbol",
-        "symbol_key": "centrifugal_pump",
-        "position": {"x": 420, "y": 260},
-        "width": 80,
-        "height": 70,
-        "label": "P-101A"
+        "id": "junction_feed_1",
+        "type": "junction",
+        "position": {"x": 420, "y": 260}
       }
     },
     {
       "op": "add_element",
       "element": {
-        "type": "symbol",
-        "symbol_key": "pressure_indicator",
-        "position": {"x": 570, "y": 190},
-        "width": 50,
-        "height": 60,
-        "label": "PI-101"
+        "type": "connector",
+        "points": [{"x": 420, "y": 260}, {"x": 620, "y": 260}],
+        "source": {
+          "element_id": "junction_feed_1",
+          "port_id": "node",
+          "point": {"x": 420, "y": 260}
+        },
+        "target": {"point": {"x": 620, "y": 260}},
+        "routing": "manual",
+        "process_tag": "L-101-BR"
       }
     }
   ]
@@ -79,7 +91,7 @@ Content-Type: application/json
 
 ## OpenAI-compatible 供应商
 
-规划器直接调用：
+规划器调用：
 
 ```text
 {base_url}/chat/completions
@@ -87,20 +99,24 @@ Content-Type: application/json
 
 并支持无 `response_format` 的回退请求，以兼容实现程度不同的本地服务。
 
-API key 只用于当前请求或环境变量，不写入 AgentCAD 数据库。
+```bash
+export PID_AGENT_LLM_BASE_URL=http://localhost:11434/v1
+export PID_AGENT_LLM_MODEL=your-model
+export PID_AGENT_LLM_API_KEY=optional
+```
+
+API key 只用于当前请求或环境变量，不写入数据库。旧 `AGENTCAD_LLM_*` 变量暂时兼容。
 
 ## MCP
 
-MCP server 通过 stdio 运行：
-
 ```bash
-agentcad-mcp
+pid-agent-mcp
 ```
 
-数据库路径和网页服务应指向同一 SQLite 文件，才能让命令行 Agent 和网页编辑器实时看到同一批文档：
+数据库路径和网页服务应指向同一 SQLite 文件：
 
 ```bash
-export AGENTCAD_DATABASE_PATH=/absolute/path/agentcad.db
+export PID_AGENT_DATABASE_PATH=/absolute/path/pid-agent.db
 ```
 
 ## 后续知识库
