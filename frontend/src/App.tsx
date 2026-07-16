@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { EditorCanvas } from "./editor/EditorCanvas";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { useWorkspace } from "./store";
@@ -20,10 +20,30 @@ export default function App() {
   const [context, setContext] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
+  const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [explanation, setExplanation] = useState("");
+  const [canvasPointerActive, setCanvasPointerActive] = useState(false);
 
   useEffect(() => {
     void state.loadWorkspace();
+  }, []);
+
+  useEffect(() => {
+    if (!state.document) return;
+    const check = () => void state.checkForExternalUpdates(!canvasPointerActive);
+    check();
+    const timer = window.setInterval(check, 1500);
+    return () => window.clearInterval(timer);
+  }, [state.document?.id, canvasPointerActive]);
+
+  useEffect(() => {
+    const releasePointer = () => setCanvasPointerActive(false);
+    window.addEventListener("pointerup", releasePointer);
+    window.addEventListener("pointercancel", releasePointer);
+    return () => {
+      window.removeEventListener("pointerup", releasePointer);
+      window.removeEventListener("pointercancel", releasePointer);
+    };
   }, []);
 
   useEffect(() => {
@@ -70,13 +90,16 @@ export default function App() {
       const message = await state.generate(prompt.trim(), context.trim(), {
         base_url: baseUrl.trim() || undefined,
         model: model.trim() || undefined,
+        timeout_seconds: timeoutSeconds,
       });
       setExplanation(message);
       setPrompt("");
     } catch {
-      // Store displays the error.
+      // Store displays the structured error.
     }
   };
+
+  const syncActionable = state.syncState === "pending" || state.syncState === "error";
 
   return (
     <div className="app-shell">
@@ -134,7 +157,12 @@ export default function App() {
           <SymbolPalette />
         </aside>
 
-        <section className="canvas-stage">
+        <section
+          className="canvas-stage"
+          onPointerDownCapture={() => setCanvasPointerActive(true)}
+          onPointerUpCapture={() => setCanvasPointerActive(false)}
+          onPointerCancelCapture={() => setCanvasPointerActive(false)}
+        >
           {state.document ? (
             <>
               <div className="document-bar">
@@ -142,6 +170,14 @@ export default function App() {
                 <span>revision {state.document.revision}</span>
                 <span>{state.document.elements.length} elements</span>
                 <span>{state.selectedElementIds.length} selected</span>
+                <button
+                  className={`sync-badge sync-${state.syncState}`}
+                  onClick={() => syncActionable && void state.refreshDocument()}
+                  disabled={!syncActionable}
+                  title={state.pendingExternalRevision ? `服务器 revision ${state.pendingExternalRevision}` : undefined}
+                >
+                  {state.syncMessage}
+                </button>
                 <span>框选 · Shift 多选 · Ctrl+D 复制 · 中键平移 · 滚轮缩放</span>
               </div>
               <EditorCanvas />
@@ -157,7 +193,7 @@ export default function App() {
             工艺/设计上下文
             <textarea
               value={context}
-              onChange={(event) => setContext(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContext(event.target.value)}
               placeholder="粘贴工艺原则、设备要求、位号规则、管线说明等。后续将支持文件知识库。"
               rows={7}
             />
@@ -166,34 +202,50 @@ export default function App() {
             自然语言指令
             <textarea
               value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)}
               placeholder="例如：从 V-101 出料，经 P-101A/B 两台并联泵送入换热器 E-101，泵出口设置止回阀和压力表。"
               rows={6}
             />
           </label>
           <details>
-            <summary>模型连接（可选）</summary>
+            <summary>模型连接与超时（可选）</summary>
             <label>
               OpenAI-compatible Base URL
               <input
                 value={baseUrl}
-                onChange={(event) => setBaseUrl(event.target.value)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseUrl(event.target.value)}
                 placeholder="http://localhost:11434/v1"
               />
             </label>
             <label>
               Model
-              <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="qwen3-coder" />
+              <input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="qwen3-coder" />
             </label>
-            <p>留空时使用服务端 PID_AGENT_LLM_* 环境变量；旧 AGENTCAD_LLM_* 仍兼容。</p>
+            <label>
+              超时（秒）
+              <input
+                type="number"
+                min={10}
+                max={600}
+                value={timeoutSeconds}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(600, Math.max(10, Number(event.target.value) || 120)))}
+              />
+            </label>
+            <p>留空连接信息时使用服务端 PID_AGENT_LLM_* 环境变量；MCP 外部 Agent 不需要填写这里。</p>
           </details>
           <button className="primary" disabled={state.loading || !prompt.trim()} onClick={() => void runAgent()}>
-            {state.loading ? "处理中…" : "生成并应用"}
+            {state.loading ? "等待模型并校验事务…" : "生成并应用"}
           </button>
           {explanation ? <div className="agent-result">{explanation}</div> : null}
-          {state.error ? <div className="error-box">{state.error}</div> : null}
+          {state.error ? (
+            <div className="error-box">
+              <strong>操作未完成</strong>
+              <span>{state.error}</span>
+              {prompt.trim() ? <button onClick={() => void runAgent()}>重试</button> : null}
+            </div>
+          ) : null}
           <div className="agent-note">
-            人工编辑器与 Agent 共用同一事务模型、符号端口和连接节点。框选、复制、管线折点修改和分支汇合都会同步进入最新文档 revision。
+            网页每 1.5 秒检查当前 revision。MCP 或其他客户端提交后会自动载入新文档；正在拖拽时只提示外部更新，不会覆盖当前预览。
           </div>
         </aside>
       </main>
