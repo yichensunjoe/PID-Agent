@@ -1,0 +1,287 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
+from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+
+class Point(StrictModel):
+    x: float
+    y: float
+
+
+class Style(StrictModel):
+    stroke: str = "#111827"
+    fill: str = "none"
+    stroke_width: float = Field(default=1.5, gt=0, le=100)
+    opacity: float = Field(default=1.0, ge=0, le=1)
+    dash: list[float] = Field(default_factory=list)
+
+
+class ElementBase(StrictModel):
+    id: str = Field(default_factory=lambda: new_id("el"))
+    layer_id: str = "layer_default"
+    style: Style = Field(default_factory=Style)
+    name: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class LineElement(ElementBase):
+    type: Literal["line"] = "line"
+    start: Point
+    end: Point
+
+
+class PolylineElement(ElementBase):
+    type: Literal["polyline"] = "polyline"
+    points: list[Point]
+    closed: bool = False
+
+    @field_validator("points")
+    @classmethod
+    def validate_points(cls, value: list[Point]) -> list[Point]:
+        if len(value) < 2:
+            raise ValueError("polyline requires at least two points")
+        return value
+
+
+class RectangleElement(ElementBase):
+    type: Literal["rectangle"] = "rectangle"
+    x: float
+    y: float
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    corner_radius: float = Field(default=0, ge=0)
+
+
+class CircleElement(ElementBase):
+    type: Literal["circle"] = "circle"
+    center: Point
+    radius: float = Field(gt=0)
+
+
+class TextElement(ElementBase):
+    type: Literal["text"] = "text"
+    position: Point
+    text: str
+    font_size: float = Field(default=14, gt=0, le=500)
+    anchor: Literal["start", "middle", "end"] = "start"
+
+
+class SymbolElement(ElementBase):
+    type: Literal["symbol"] = "symbol"
+    symbol_key: str
+    position: Point
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    rotation: float = 0
+    label: str = ""
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConnectorEndpoint(StrictModel):
+    element_id: str | None = None
+    port_id: str | None = None
+    point: Point
+
+
+class ConnectorElement(ElementBase):
+    type: Literal["connector"] = "connector"
+    points: list[Point]
+    source: ConnectorEndpoint | None = None
+    target: ConnectorEndpoint | None = None
+    process_tag: str = ""
+
+    @field_validator("points")
+    @classmethod
+    def validate_points(cls, value: list[Point]) -> list[Point]:
+        if len(value) < 2:
+            raise ValueError("connector requires at least two points")
+        return value
+
+
+Element = Annotated[
+    LineElement
+    | PolylineElement
+    | RectangleElement
+    | CircleElement
+    | TextElement
+    | SymbolElement
+    | ConnectorElement,
+    Field(discriminator="type"),
+]
+
+
+class Layer(StrictModel):
+    id: str = Field(default_factory=lambda: new_id("layer"))
+    name: str
+    visible: bool = True
+    locked: bool = False
+
+
+class CanvasSettings(StrictModel):
+    width: float = Field(default=1600, gt=0)
+    height: float = Field(default=900, gt=0)
+    grid_size: float = Field(default=20, gt=0)
+    background: str = "#ffffff"
+
+
+class Document(StrictModel):
+    id: str = Field(default_factory=lambda: new_id("doc"))
+    name: str = "Untitled P&ID"
+    revision: int = Field(default=0, ge=0)
+    canvas: CanvasSettings = Field(default_factory=CanvasSettings)
+    layers: list[Layer] = Field(default_factory=lambda: [Layer(id="layer_default", name="Default")])
+    elements: list[Element] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def validate_references(self) -> Document:
+        layer_ids = [layer.id for layer in self.layers]
+        if len(layer_ids) != len(set(layer_ids)):
+            raise ValueError("layer ids must be unique")
+        element_ids = [element.id for element in self.elements]
+        if len(element_ids) != len(set(element_ids)):
+            raise ValueError("element ids must be unique")
+        missing = sorted({element.layer_id for element in self.elements} - set(layer_ids))
+        if missing:
+            raise ValueError(f"elements reference missing layers: {missing}")
+        return self
+
+
+class CreateDocumentRequest(StrictModel):
+    name: str = "Untitled P&ID"
+    width: float = Field(default=1600, gt=0)
+    height: float = Field(default=900, gt=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AddElementOperation(StrictModel):
+    op: Literal["add_element"] = "add_element"
+    element: Element
+
+
+class UpdateElementOperation(StrictModel):
+    op: Literal["update_element"] = "update_element"
+    element_id: str
+    patch: dict[str, Any]
+
+
+class DeleteElementOperation(StrictModel):
+    op: Literal["delete_element"] = "delete_element"
+    element_id: str
+
+
+class AddLayerOperation(StrictModel):
+    op: Literal["add_layer"] = "add_layer"
+    layer: Layer
+
+
+class UpdateLayerOperation(StrictModel):
+    op: Literal["update_layer"] = "update_layer"
+    layer_id: str
+    patch: dict[str, Any]
+
+
+class DeleteLayerOperation(StrictModel):
+    op: Literal["delete_layer"] = "delete_layer"
+    layer_id: str
+    move_elements_to: str = "layer_default"
+
+
+class ClearDocumentOperation(StrictModel):
+    op: Literal["clear_document"] = "clear_document"
+
+
+Operation = Annotated[
+    AddElementOperation
+    | UpdateElementOperation
+    | DeleteElementOperation
+    | AddLayerOperation
+    | UpdateLayerOperation
+    | DeleteLayerOperation
+    | ClearDocumentOperation,
+    Field(discriminator="op"),
+]
+
+
+class TransactionRequest(StrictModel):
+    operations: list[Operation] = Field(min_length=1, max_length=500)
+    expected_revision: int | None = Field(default=None, ge=0)
+    label: str = ""
+
+
+class TransactionResult(StrictModel):
+    document: Document
+    applied_operations: int
+    label: str = ""
+
+
+class DocumentSummary(StrictModel):
+    id: str
+    name: str
+    revision: int
+    element_count: int
+    updated_at: datetime
+
+
+class SymbolPort(StrictModel):
+    id: str
+    name: str
+    x: float
+    y: float
+    direction: Literal["in", "out", "bidirectional", "none"] = "bidirectional"
+    medium: str = "process"
+
+
+class SymbolDefinition(StrictModel):
+    key: str
+    name: str
+    category: str
+    description: str = ""
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    ports: list[SymbolPort] = Field(default_factory=list)
+    shapes: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProviderConfig(StrictModel):
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+    timeout_seconds: float = Field(default=120, gt=0, le=600)
+
+
+class AgentGenerateRequest(StrictModel):
+    prompt: str = Field(min_length=1, max_length=100_000)
+    context: str = Field(default="", max_length=200_000)
+    dry_run: bool = False
+    provider: ProviderConfig | None = None
+    expected_revision: int | None = Field(default=None, ge=0)
+
+
+class AgentPlan(StrictModel):
+    explanation: str = ""
+    transaction: TransactionRequest
+
+
+class AgentGenerateResult(StrictModel):
+    plan: AgentPlan
+    document: Document | None = None

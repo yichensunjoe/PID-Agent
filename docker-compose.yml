@@ -1,0 +1,18 @@
+services:
+  agentcad:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - agentcad-data:/data
+      # Optional company symbols:
+      # - ./company-symbols:/symbols:ro
+    environment:
+      AGENTCAD_DATABASE_PATH: /data/agentcad.db
+      # AGENTCAD_SYMBOL_PATHS: /symbols
+      # AGENTCAD_LLM_BASE_URL: http://host.docker.internal:11434/v1
+      # AGENTCAD_LLM_MODEL: your-model
+      # AGENTCAD_LLM_API_KEY: optional
+
+volumes:
+  agentcad-data:

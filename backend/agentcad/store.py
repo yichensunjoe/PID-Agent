@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from pathlib import Path
+from threading import RLock
+from typing import Any
+
+from .models import Document, DocumentSummary
+
+
+class StoreRevisionConflictError(RuntimeError):
+    pass
+
+
+@dataclass
+class StoredDocument:
+    document: Document
+    undo_stack: list[dict[str, Any]]
+    redo_stack: list[dict[str, Any]]
+
+
+class SQLiteDocumentStore:
+    def __init__(self, database_path: str | Path):
+        self.database_path = Path(database_path)
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = RLock()
+        self._initialize()
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.database_path, timeout=30)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        return connection
+
+    def _initialize(self) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS documents (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    data_json TEXT NOT NULL,
+                    undo_json TEXT NOT NULL,
+                    redo_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)"
+            )
+
+    @staticmethod
+    def _encode(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+
+    def save(
+        self,
+        stored: StoredDocument,
+        *,
+        expected_revision: int | None = None,
+    ) -> None:
+        document = stored.document
+        values = (
+            document.name,
+            document.revision,
+            self._encode(document.model_dump(mode="json")),
+            self._encode(stored.undo_stack),
+            self._encode(stored.redo_stack),
+            document.updated_at.isoformat(),
+        )
+        with self._lock, self._connect() as connection:
+            if expected_revision is not None:
+                cursor = connection.execute(
+                    """
+                    UPDATE documents SET
+                        name = ?,
+                        revision = ?,
+                        data_json = ?,
+                        undo_json = ?,
+                        redo_json = ?,
+                        updated_at = ?
+                    WHERE id = ? AND revision = ?
+                    """,
+                    (*values, document.id, expected_revision),
+                )
+                if cursor.rowcount != 1:
+                    raise StoreRevisionConflictError(
+                        f"document {document.id} no longer has revision {expected_revision}"
+                    )
+                return
+
+            connection.execute(
+                """
+                INSERT INTO documents (
+                    id, name, revision, data_json, undo_json, redo_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    revision=excluded.revision,
+                    data_json=excluded.data_json,
+                    undo_json=excluded.undo_json,
+                    redo_json=excluded.redo_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    document.id,
+                    *values[:5],
+                    document.created_at.isoformat(),
+                    values[5],
+                ),
+            )
+
+    def get(self, document_id: str) -> StoredDocument | None:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT data_json, undo_json, redo_json FROM documents WHERE id = ?",
+                (document_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return StoredDocument(
+            document=Document.model_validate_json(row["data_json"]),
+            undo_stack=json.loads(row["undo_json"]),
+            redo_stack=json.loads(row["redo_json"]),
+        )
+
+    def delete(self, document_id: str) -> bool:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM documents WHERE id = ?", (document_id,))
+            return cursor.rowcount > 0
+
+    def list(self) -> list[DocumentSummary]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                "SELECT data_json FROM documents ORDER BY updated_at DESC"
+            ).fetchall()
+        summaries: list[DocumentSummary] = []
+        for row in rows:
+            document = Document.model_validate_json(row["data_json"])
+            summaries.append(
+                DocumentSummary(
+                    id=document.id,
+                    name=document.name,
+                    revision=document.revision,
+                    element_count=len(document.elements),
+                    updated_at=document.updated_at,
+                )
+            )
+        return summaries

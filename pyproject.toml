@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentcad"
+version = "2.0.0a1"
+description = "Agent-first, editable P&ID document engine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "AgentCAD contributors" }]
+dependencies = [
+  "cairosvg>=2.8,<3",
+  "fastapi>=0.128,<1",
+  "httpx>=0.28,<1",
+  "pydantic>=2.10,<3",
+  "uvicorn[standard]>=0.39,<1"
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.12,<2"]
+dev = [
+  "pytest>=8,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.12,<1"
+]
+
+[project.scripts]
+agentcad = "agentcad.cli:main"
+agentcad-mcp = "agentcad.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/agentcad"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"backend/agentcad/data" = "agentcad/data"
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["backend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
