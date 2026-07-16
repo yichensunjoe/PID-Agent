@@ -1,3 +1,3 @@
-"""AgentCAD domain and API package."""
+"""P&ID-Agent core package (legacy import name: agentcad)."""
 
-__version__ = "2.0.0-alpha.1"
+__version__ = "2.1.0-alpha.1"
