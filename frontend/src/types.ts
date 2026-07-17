@@ -125,4 +125,26 @@ export type Operation =
   | { op: "delete_system"; system_id: string; move_elements_to?: string }
   | { op: "clear_document" };
 
+export type AgentTransaction = {
+  operations: Operation[];
+  expected_revision?: number | null;
+  label: string;
+  source?: "web" | "llm" | "mcp" | "system" | null;
+};
+
+export type AgentPlan = {
+  explanation: string;
+  transaction: AgentTransaction;
+};
+
+export type TransactionValidation = {
+  valid: boolean;
+  document_id: string;
+  current_revision: number;
+  next_revision: number;
+  operation_count: number;
+  resulting_element_count: number;
+  affected_element_ids: string[];
+};
+
 export type Tool = "select" | "line" | "rectangle" | "circle" | "connector" | "junction" | "text" | "symbol";
