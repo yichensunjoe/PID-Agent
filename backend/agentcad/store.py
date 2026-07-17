@@ -172,20 +172,23 @@ class SQLiteDocumentStore:
         revision: int,
         details: dict[str, Any],
     ) -> bool:
-        with self._lock, self._connect() as connection:
-            cursor = connection.execute(
-                """
-                UPDATE document_history
-                SET details_json = ?
-                WHERE id = (
-                    SELECT id FROM document_history
-                    WHERE document_id = ? AND revision = ?
-                    ORDER BY id DESC LIMIT 1
+        try:
+            with self._lock, self._connect() as connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE document_history
+                    SET details_json = ?
+                    WHERE id = (
+                        SELECT id FROM document_history
+                        WHERE document_id = ? AND revision = ?
+                        ORDER BY id DESC LIMIT 1
+                    )
+                    """,
+                    (self._encode(details), document_id, revision),
                 )
-                """,
-                (self._encode(details), document_id, revision),
-            )
-            return cursor.rowcount == 1
+                return cursor.rowcount == 1
+        except sqlite3.Error:
+            return False
 
     def get(self, document_id: str) -> StoredDocument | None:
         with self._lock, self._connect() as connection:
