@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
@@ -11,6 +12,21 @@ from uuid import uuid4
 
 _SECRET_KEY_PARTS = ("api_key", "apikey", "authorization", "secret", "token", "password")
 _TEXT_KEY_PARTS = ("prompt", "context")
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
+    re.compile(r"(?i)(api[_-]?key|token|secret|password)=([^&\s]+)"),
+)
+
+
+def _redact_string(value: str) -> str:
+    result = value
+    for pattern in _SECRET_PATTERNS:
+        if pattern.groups:
+            result = pattern.sub(lambda match: f"{match.group(1)}=<redacted>", result)
+        else:
+            result = pattern.sub("<redacted>", result)
+    return result
 
 
 def _redact(value: Any, key: str = "") -> Any:
@@ -30,10 +46,16 @@ def _redact(value: Any, key: str = "") -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, BaseException):
-        return {"type": type(value).__name__, "message": str(value)}
-    if isinstance(value, (str, int, float, bool)) or value is None:
+        return {
+            "type": type(value).__name__,
+            "message": "<redacted>",
+            "message_chars": len(str(value)),
+        }
+    if isinstance(value, str):
+        return _redact_string(value)
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
-    return str(value)
+    return _redact_string(str(value))
 
 
 class DiagnosticLogger:
@@ -55,13 +77,14 @@ class DiagnosticLogger:
         self._lock = RLock()
 
     def emit(self, event: str, **fields: Any) -> dict[str, Any]:
+        redacted_fields = _redact(fields)
         record = {
             "event_id": uuid4().hex,
             "timestamp": datetime.now(UTC).isoformat(),
             "service": "P&ID-Agent",
             "version": self.service_version,
             "event": event,
-            **_redact(fields),
+            **redacted_fields,
         }
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":"), default=str) + "\n"
         with self._lock:
