@@ -146,6 +146,8 @@ class SemanticAgentPlanner:
             "You are P&ID-Agent's semantic planning engine. Return JSON only with keys "
             "'explanation' and 'transaction'. Preserve unrelated elements. Use only real element IDs, "
             "symbol keys and port IDs from the supplied document and catalog. "
+            "When a later operation references an element or connector added earlier in the same transaction, "
+            "assign an explicit unique id in the add operation and reuse that exact id. "
             "Use connect_ports to create a semantic pipe between two real ports. "
             "Use reconnect_connector to move one existing connector endpoint; never edit source or target "
             "through update_element. Use replace_symbol to replace equipment while preserving connector IDs; "
