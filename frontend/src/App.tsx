@@ -6,7 +6,7 @@ import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
 import { useWorkspace } from "./store";
-import type { AgentPlan, Operation, Tool, TransactionValidation } from "./types";
+import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
 import "./issue1.css";
 
 const tools: Array<{ id: Tool; label: string; key: string }> = [
@@ -21,11 +21,14 @@ const tools: Array<{ id: Tool; label: string; key: string }> = [
 
 type RightPanel = "properties" | "groups" | "history" | "agent";
 
-function operationDescription(operation: Operation): string {
+function operationDescription(operation: SemanticOperation): string {
   switch (operation.op) {
     case "add_element": return `新增 ${operation.element.type}${operation.element.id ? ` · ${operation.element.id}` : ""}`;
     case "update_element": return `修改 ${operation.element_id} · ${Object.keys(operation.patch).join(", ") || "空 patch"}`;
-    case "delete_element": return `删除 ${operation.element_id}`;
+    case "delete_element": return `删除 ${operation.element_id} · ${operation.connection_policy ?? "reject_if_connected"}`;
+    case "replace_symbol": return `替换设备 ${operation.element_id} → ${operation.symbol_key}`;
+    case "reconnect_connector": return `重连 ${operation.connector_id}.${operation.endpoint} → ${operation.element_id ? `${operation.element_id}.${operation.port_id}` : "自由端点"}`;
+    case "connect_ports": return `连接 ${operation.source_element_id}.${operation.source_port_id} → ${operation.target_element_id}.${operation.target_port_id}`;
     case "add_layer": return `新增图层 ${operation.layer.name}`;
     case "update_layer": return `修改图层 ${operation.layer_id}`;
     case "delete_layer": return `删除图层 ${operation.layer_id}`;
@@ -51,10 +54,10 @@ export default function App() {
   const [canvasPointerActive, setCanvasPointerActive] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel>("properties");
   const [planningAgent, setPlanningAgent] = useState(false);
+  const [repairingAgent, setRepairingAgent] = useState(false);
   const [applyingAgent, setApplyingAgent] = useState(false);
   const [agentError, setAgentError] = useState("");
-  const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
-  const [pendingValidation, setPendingValidation] = useState<TransactionValidation | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<SemanticAgentPlanResult | null>(null);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
   useEffect(() => { if (state.selectedElementIds.length) setRightPanel("properties"); }, [state.selectedElementIds]);
@@ -127,12 +130,17 @@ export default function App() {
     const document = state.document;
     if (!document || state.selectedElementIds.length === 0) return context.trim();
     const selected = document.elements.filter((element) => state.selectedElementIds.includes(element.id));
+    const selectedIds = new Set(selected.map((element) => element.id));
+    const connected = document.elements.filter((element) => element.type === "connector" && (
+      (element.source?.element_id && selectedIds.has(element.source.element_id))
+      || (element.target?.element_id && selectedIds.has(element.target.element_id))
+    ));
     return [
       context.trim(),
       "",
       "Local modification scope:",
       `The user selected ${selected.length} element(s). Prefer modifying these elements and their directly connected pipes. Preserve unrelated elements unless the instruction explicitly requires a wider change.`,
-      JSON.stringify(selected, null, 2),
+      JSON.stringify({ selected, directly_connected_connectors: connected }, null, 2),
     ].filter(Boolean).join("\n");
   };
 
@@ -141,26 +149,15 @@ export default function App() {
     setPlanningAgent(true);
     setAgentError("");
     setPendingPlan(null);
-    setPendingValidation(null);
     try {
-      const response = await api.planAgent(
+      const response = await api.planSemanticAgent(
         state.document.id,
         state.document.revision,
         prompt.trim(),
         scopedContext(),
         providerConfig(),
       );
-      const plan: AgentPlan = {
-        ...response.plan,
-        transaction: {
-          ...response.plan.transaction,
-          expected_revision: response.plan.transaction.expected_revision ?? state.document.revision,
-          label: response.plan.transaction.label || "Agent planned modification",
-        },
-      };
-      const validation = await api.validateTransaction(state.document.id, plan.transaction);
-      setPendingPlan(plan);
-      setPendingValidation(validation);
+      setPendingPlan(response);
     } catch (error) {
       setAgentError(error instanceof ApiError ? error.message : String(error));
     } finally {
@@ -168,31 +165,55 @@ export default function App() {
     }
   };
 
+  const replanAgent = async () => {
+    const document = state.document;
+    if (!document || !pendingPlan || !prompt.trim()) return;
+    const attempt = Math.min(5, pendingPlan.attempt + 1);
+    setRepairingAgent(true);
+    setAgentError("");
+    try {
+      const response = await api.replanSemanticAgent(
+        document.id,
+        document.revision,
+        prompt.trim(),
+        scopedContext(),
+        pendingPlan.plan,
+        attempt,
+        providerConfig(),
+      );
+      setPendingPlan(response);
+    } catch (error) {
+      setAgentError(error instanceof ApiError ? error.message : String(error));
+    } finally {
+      setRepairingAgent(false);
+    }
+  };
+
   const applyAgentPlan = async () => {
     const document = state.document;
-    if (!document || !pendingPlan) return;
-    const expectedRevision = pendingPlan.transaction.expected_revision;
+    const compiled = pendingPlan?.compiled_plan;
+    if (!document || !pendingPlan || !compiled || !pendingPlan.assessment.valid) return;
+    const expectedRevision = compiled.transaction.expected_revision;
     if (expectedRevision !== null && expectedRevision !== undefined && expectedRevision !== document.revision) {
-      setAgentError(`预览基于 r${expectedRevision}，当前网页已是 r${document.revision}。请重新生成预览。`);
+      setAgentError(`预览基于 r${expectedRevision}，当前网页已是 r${document.revision}。请按当前 revision 局部重规划。`);
       return;
     }
     setApplyingAgent(true);
     setAgentError("");
     try {
-      const result = await api.applyAgentPlan(document.id, pendingPlan.transaction);
+      const result = await api.applyAgentPlan(document.id, compiled.transaction);
       const documents = await api.listDocuments();
       const existing = new Set(result.document.elements.map((element) => element.id));
       useWorkspace.setState({
         document: result.document,
         documents,
-        selectedElementIds: pendingValidation?.affected_element_ids.filter((id) => existing.has(id)) ?? [],
+        selectedElementIds: pendingPlan.assessment.affected_element_ids.filter((id) => existing.has(id)),
         error: null,
         syncState: "synced",
         syncMessage: `已同步至 r${result.document.revision}`,
         pendingExternalRevision: null,
       });
       setPendingPlan(null);
-      setPendingValidation(null);
       setPrompt("");
     } catch (error) {
       setAgentError(error instanceof ApiError ? error.message : String(error));
@@ -203,7 +224,6 @@ export default function App() {
 
   const discardAgentPlan = () => {
     setPendingPlan(null);
-    setPendingValidation(null);
     setAgentError("");
   };
 
@@ -229,6 +249,7 @@ export default function App() {
     { id: "history", label: "历史" },
     { id: "agent", label: "Agent" },
   ];
+  const busyAgent = planningAgent || repairingAgent || applyingAgent;
 
   return (
     <div className="app-shell">
@@ -280,8 +301,8 @@ export default function App() {
           {rightPanel === "agent" ? <section className="agent-panel" role="tabpanel">
             <h2>P&amp;ID Agent</h2>
             <label>工艺/设计上下文<textarea value={context} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContext(event.target.value)} placeholder="粘贴工艺原则、设备要求、位号规则、管线说明等。" rows={7} /></label>
-            <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门向右移动 40，并重新整理相连管线。" rows={6} /></label>
-            {state.selectedElementIds.length ? <div className="agent-scope">局部修改范围：已选择 {state.selectedElementIds.length} 个元素</div> : <div className="agent-scope agent-scope-wide">未选择元素：Agent 将以整张图为范围</div>}
+            <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门替换为球阀，并保持原有管线连接。" rows={6} /></label>
+            {state.selectedElementIds.length ? <div className="agent-scope">局部修改范围：已选择 {state.selectedElementIds.length} 个元素，并附带其直接相连管线</div> : <div className="agent-scope agent-scope-wide">未选择元素：Agent 将以整张图为范围</div>}
             <details>
               <summary>自定义模型 API（可选）</summary>
               <label>Base URL（可含自定义端口）<input value={baseUrl} onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseUrl(event.target.value)} placeholder="例如 http://127.0.0.1:11434/v1" /></label>
@@ -293,28 +314,40 @@ export default function App() {
               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
               <p>API Key 仅保存在当前页面内存，并随测试或生成请求发送，不写入数据库或浏览器存储。</p>
             </details>
-            <button className="primary" disabled={planningAgent || applyingAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并校验中…" : "生成事务预览"}</button>
+            <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "生成语义事务预览"}</button>
 
-            {pendingPlan ? <div className="agent-preview">
-              <div className="agent-preview-heading"><strong>待确认事务</strong><span>基于 r{pendingPlan.transaction.expected_revision}</span></div>
-              <p>{pendingPlan.explanation || "模型未提供说明"}</p>
+            {pendingPlan ? <div className={`agent-preview ${pendingPlan.assessment.valid ? "agent-preview-valid" : "agent-preview-invalid"}`}>
+              <div className="agent-preview-heading"><strong>{pendingPlan.assessment.valid ? "待确认语义事务" : "事务需要修复"}</strong><span>plan {pendingPlan.plan.plan_id.slice(0, 8)} · attempt {pendingPlan.attempt}</span></div>
+              <p>{pendingPlan.plan.explanation || "模型未提供说明"}</p>
               <dl>
-                <div><dt>Label</dt><dd>{pendingPlan.transaction.label}</dd></div>
-                <div><dt>Operations</dt><dd>{pendingPlan.transaction.operations.length}</dd></div>
-                <div><dt>结果元素数</dt><dd>{pendingValidation?.resulting_element_count ?? "—"}</dd></div>
+                <div><dt>Label</dt><dd>{pendingPlan.plan.transaction.label}</dd></div>
+                <div><dt>Revision</dt><dd>r{pendingPlan.plan.transaction.expected_revision ?? pendingPlan.assessment.current_revision}</dd></div>
+                <div><dt>语义操作</dt><dd>{pendingPlan.assessment.semantic_operation_count}</dd></div>
+                <div><dt>编译操作</dt><dd>{pendingPlan.assessment.compiled_operation_count}</dd></div>
+                <div><dt>结果元素数</dt><dd>{pendingPlan.assessment.resulting_element_count ?? "—"}</dd></div>
               </dl>
               <ol className="agent-operation-list">
-                {pendingPlan.transaction.operations.slice(0, 30).map((operation, index) => <li key={index}><code>{index}</code><span>{operationDescription(operation)}</span></li>)}
+                {pendingPlan.plan.transaction.operations.slice(0, 30).map((operation, index) => <li key={index}><code>{index}</code><span>{operationDescription(operation)}</span></li>)}
               </ol>
-              {pendingPlan.transaction.operations.length > 30 ? <div className="agent-preview-more">其余 {pendingPlan.transaction.operations.length - 30} 项未展开</div> : null}
+              {pendingPlan.plan.transaction.operations.length > 30 ? <div className="agent-preview-more">其余 {pendingPlan.plan.transaction.operations.length - 30} 项未展开</div> : null}
+              {pendingPlan.assessment.issues.length ? <section className="agent-repair-issues">
+                <h3>结构化问题</h3>
+                {pendingPlan.assessment.issues.map((issue, index) => <article key={`${issue.code}-${index}`}>
+                  <div><strong>{issue.code}</strong><code>{issue.field_path}</code></div>
+                  <p>{issue.message}</p>
+                  {Object.entries(issue.available_values).map(([name, values]) => <div className="agent-available-values" key={name}><span>{name}</span><code>{values.slice(0, 20).join(", ") || "—"}</code></div>)}
+                  {issue.suggestions.length ? <ul>{issue.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul> : null}
+                </article>)}
+              </section> : null}
               <div className="agent-preview-actions">
-                <button type="button" className="confirm" disabled={applyingAgent} onClick={() => void applyAgentPlan()}>{applyingAgent ? "正在应用…" : "确认应用"}</button>
-                <button type="button" disabled={applyingAgent} onClick={discardAgentPlan}>放弃预览</button>
+                <button type="button" className="confirm" disabled={busyAgent || !pendingPlan.assessment.valid || !pendingPlan.compiled_plan} onClick={() => void applyAgentPlan()}>{applyingAgent ? "正在应用…" : "确认应用"}</button>
+                <button type="button" className="repair" disabled={busyAgent || pendingPlan.attempt >= 5} onClick={() => void replanAgent()}>{repairingAgent ? "局部重规划中…" : `按失败原因重规划${pendingPlan.attempt ? `（${pendingPlan.attempt + 1}/5）` : ""}`}</button>
+                <button type="button" disabled={busyAgent} onClick={discardAgentPlan}>放弃预览</button>
               </div>
             </div> : null}
 
-            {agentError ? <div className="error-box"><strong>Agent 操作未完成</strong><span>{agentError}</span><button onClick={() => void planAgent()}>重新生成预览</button></div> : null}
-            <div className="agent-note">预览阶段不会写入文档。确认时仍使用预览 revision，若期间发生人工或 MCP 修改，服务端会返回 409，防止旧计划覆盖新内容。</div>
+            {agentError ? <div className="error-box"><strong>Agent 操作未完成</strong><span>{agentError}</span>{pendingPlan ? <button onClick={() => void replanAgent()} disabled={busyAgent || pendingPlan.attempt >= 5}>按当前 revision 局部重规划</button> : <button onClick={() => void planAgent()} disabled={busyAgent}>重新生成预览</button>}</div> : null}
+            <div className="agent-note">语义计划会把设备替换、端口重连、端口间连接和带连接策略的删除编译为原子事务。编译或校验失败时不会写入文档，可依据真实 ID、端口和锁定状态最多局部重规划 5 次。</div>
           </section> : null}
         </aside>
       </main>
