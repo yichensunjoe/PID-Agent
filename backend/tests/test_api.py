@@ -151,6 +151,80 @@ def test_custom_provider_does_not_inherit_server_api_key(monkeypatch):
     assert resolved.api_key is None
 
 
+def test_property_transaction_updates_symbol_geometry_label_and_style(tmp_path: Path):
+    client = make_client(tmp_path)
+    document = client.post("/api/v2/documents", json={"name": "Properties"}).json()
+
+    created = client.post(
+        f"/api/v2/documents/{document['id']}/transactions",
+        json={
+            "expected_revision": 0,
+            "operations": [
+                {
+                    "op": "add_element",
+                    "element": {
+                        "id": "valve_101",
+                        "type": "symbol",
+                        "symbol_key": "ball_valve",
+                        "position": {"x": 100, "y": 120},
+                        "width": 60,
+                        "height": 40,
+                        "label": "V-101",
+                    },
+                }
+            ],
+        },
+    )
+    assert created.status_code == 200
+
+    updated = client.post(
+        f"/api/v2/documents/{document['id']}/transactions",
+        json={
+            "expected_revision": 1,
+            "label": "Update symbol valve_101",
+            "operations": [
+                {
+                    "op": "update_element",
+                    "element_id": "valve_101",
+                    "patch": {
+                        "name": "isolation valve",
+                        "label": "XV-101",
+                        "position": {"x": 240, "y": 300},
+                        "width": 72,
+                        "height": 48,
+                        "rotation": -90,
+                        "style": {
+                            "stroke": "#0f172a",
+                            "fill": "none",
+                            "stroke_width": 2.5,
+                            "opacity": 0.8,
+                            "dash": [8, 4],
+                        },
+                    },
+                }
+            ],
+        },
+    )
+
+    assert updated.status_code == 200
+    payload = updated.json()["document"]
+    assert payload["revision"] == 2
+    symbol = next(item for item in payload["elements"] if item["id"] == "valve_101")
+    assert symbol["name"] == "isolation valve"
+    assert symbol["label"] == "XV-101"
+    assert symbol["position"] == {"x": 240.0, "y": 300.0}
+    assert symbol["width"] == 72.0
+    assert symbol["height"] == 48.0
+    assert symbol["rotation"] == -90.0
+    assert symbol["style"] == {
+        "stroke": "#0f172a",
+        "fill": "none",
+        "stroke_width": 2.5,
+        "opacity": 0.8,
+        "dash": [8.0, 4.0],
+    }
+
+
 def test_legacy_endpoint_uses_v2_document_engine(tmp_path: Path):
     client = make_client(tmp_path)
     response = client.post(
