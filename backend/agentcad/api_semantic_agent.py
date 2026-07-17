@@ -29,6 +29,17 @@ def _provider_fields(request: AgentGenerateRequest | SemanticAgentReplanRequest)
     }
 
 
+def _operation_types(plan, compiled) -> dict[str, list[str]]:
+    return {
+        "semantic_operation_types": [item.op for item in plan.transaction.operations],
+        "compiled_operation_types": (
+            [item.op for item in compiled.transaction.operations]
+            if compiled.transaction is not None
+            else []
+        ),
+    }
+
+
 def _result(
     plan,
     compiled,
@@ -123,6 +134,7 @@ def create_semantic_agent_router(
                 compiled_operation_count=compiled.assessment.compiled_operation_count,
                 issue_codes=[item.code for item in compiled.assessment.issues],
                 affected_element_ids=compiled.assessment.affected_element_ids,
+                **_operation_types(plan, compiled),
             )
         return _result(plan, compiled, attempt=0)
 
@@ -143,6 +155,9 @@ def create_semantic_agent_router(
                     expected_revision=request.expected_revision,
                     failure_stage=failed.assessment.stage,
                     failure_issue_codes=[item.code for item in failed.assessment.issues],
+                    failed_semantic_operation_types=[
+                        item.op for item in request.failed_plan.transaction.operations
+                    ],
                     prompt_chars=len(request.prompt),
                     context_chars=len(request.context),
                     **_provider_fields(request),
@@ -179,6 +194,7 @@ def create_semantic_agent_router(
                 compiled_operation_count=compiled.assessment.compiled_operation_count,
                 issue_codes=[item.code for item in compiled.assessment.issues],
                 affected_element_ids=compiled.assessment.affected_element_ids,
+                **_operation_types(plan, compiled),
             )
         return _result(
             plan,
