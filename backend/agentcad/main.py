@@ -8,9 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .api import create_v1_compat_router, create_v2_router
+from .api_semantic_agent import create_semantic_agent_router
 from .config import Settings
 from .diagnostics import DiagnosticLogger
 from .llm import OpenAICompatiblePlanner
+from .semantic_planner import SemanticAgentPlanner
 from .service import DocumentService
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
@@ -25,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = SQLiteDocumentStore(settings.database_path)
     service = DocumentService(store=store, symbols=symbols)
     planner = OpenAICompatiblePlanner(service=service, symbols=symbols)
+    semantic_planner = SemanticAgentPlanner(service=service, symbols=symbols)
     diagnostics_path = settings.diagnostics_path or settings.database_path.with_suffix(
         ".diagnostics.jsonl"
     )
@@ -85,6 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     app.include_router(create_v2_router(service, planner, diagnostics, VERSION))
+    app.include_router(create_semantic_agent_router(service, semantic_planner, diagnostics))
     app.include_router(create_v1_compat_router(service))
 
     @app.get("/health")
