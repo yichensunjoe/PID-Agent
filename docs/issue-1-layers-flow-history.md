@@ -20,6 +20,10 @@
 - 系统显隐与图层显隐共同决定画布和导出结果；
 - Agent scene summary 包含图层、系统及每个设备、junction、connector 的归属。
 
+## 属性检查器
+
+单元素属性检查器现在可编辑内部名称、工程备注、图层和系统归属。工程备注保存在元素 `metadata.notes` 中，因此 JSON、MCP 和 Agent 完整文档读取均可访问。
+
 ## 管线工程属性
 
 connector 新增：
