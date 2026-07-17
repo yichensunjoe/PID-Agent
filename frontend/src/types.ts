@@ -74,6 +74,44 @@ export type Document = {
 
 export type DocumentSummary = { id: string; name: string; revision: number; element_count: number; updated_at: string };
 
+export type HistoryChange = {
+  entity_kind: "element" | "layer" | "system";
+  entity_id: string;
+  change: "added" | "updated" | "deleted";
+  entity_type?: string | null;
+  changed_fields: string[];
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+};
+
+export type HistoryOperationSummary = {
+  op: Operation["op"];
+  element_id?: string;
+  element_type?: string;
+  entity_id?: string;
+  name?: string;
+  patch_fields?: string[];
+  move_elements_to?: string;
+};
+
+export type HistoryDetails = {
+  schema_version?: number;
+  action?: string;
+  base_revision?: number;
+  result_revision?: number;
+  element_count_before?: number;
+  element_count_after?: number;
+  affected_element_ids?: string[];
+  added_element_ids?: string[];
+  updated_element_ids?: string[];
+  deleted_element_ids?: string[];
+  change_count?: number;
+  changes?: HistoryChange[];
+  diff_truncated?: boolean;
+  operation_summaries?: HistoryOperationSummary[];
+  decode_error?: boolean;
+};
+
 export type HistoryEntry = {
   id: number | null;
   document_id: string;
@@ -83,6 +121,7 @@ export type HistoryEntry = {
   action: "create" | "transaction" | "undo" | "redo";
   label: string;
   operation_count: number;
+  details?: HistoryDetails;
 };
 
 export type SymbolShape =
@@ -145,6 +184,10 @@ export type TransactionValidation = {
   operation_count: number;
   resulting_element_count: number;
   affected_element_ids: string[];
+  added_element_ids?: string[];
+  updated_element_ids?: string[];
+  deleted_element_ids?: string[];
+  change_count?: number;
 };
 
 export type Tool = "select" | "line" | "rectangle" | "circle" | "connector" | "junction" | "text" | "symbol";
