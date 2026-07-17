@@ -102,10 +102,7 @@ class DocumentService:
     ) -> TransactionResult:
         stored = self._get_stored(document_id)
         current = stored.document
-        if (
-            transaction.expected_revision is not None
-            and transaction.expected_revision != current.revision
-        ):
+        if transaction.expected_revision is not None and transaction.expected_revision != current.revision:
             raise RevisionConflictError(
                 f"expected revision {transaction.expected_revision}, current revision is {current.revision}"
             )
@@ -117,7 +114,6 @@ class DocumentService:
         working.revision = current.revision + 1
         working.updated_at = datetime.now(UTC)
         working = Document.model_validate(working.model_dump(mode="python"))
-
         undo_stack = [*stored.undo_stack, current.model_dump(mode="json")][-self.history_limit :]
         history_source = source or transaction.source or "web"
         try:
@@ -145,14 +141,12 @@ class DocumentService:
         stored = self._get_stored(document_id)
         if not stored.undo_stack:
             return stored.document
-        previous_raw = stored.undo_stack[-1]
-        previous = Document.model_validate(previous_raw)
+        previous = Document.model_validate(stored.undo_stack[-1])
         previous.revision = stored.document.revision + 1
         previous.updated_at = datetime.now(UTC)
-        redo_stack = [
-            *stored.redo_stack,
-            stored.document.model_dump(mode="json"),
-        ][-self.history_limit :]
+        redo_stack = [*stored.redo_stack, stored.document.model_dump(mode="json")][
+            -self.history_limit :
+        ]
         try:
             self.store.save(
                 StoredDocument(
@@ -178,14 +172,12 @@ class DocumentService:
         stored = self._get_stored(document_id)
         if not stored.redo_stack:
             return stored.document
-        next_raw = stored.redo_stack[-1]
-        next_document = Document.model_validate(next_raw)
+        next_document = Document.model_validate(stored.redo_stack[-1])
         next_document.revision = stored.document.revision + 1
         next_document.updated_at = datetime.now(UTC)
-        undo_stack = [
-            *stored.undo_stack,
-            stored.document.model_dump(mode="json"),
-        ][-self.history_limit :]
+        undo_stack = [*stored.undo_stack, stored.document.model_dump(mode="json")][
+            -self.history_limit :
+        ]
         try:
             self.store.save(
                 StoredDocument(
@@ -279,13 +271,15 @@ class DocumentService:
         if isinstance(operation, AddElementOperation):
             if any(item.id == operation.element.id for item in document.elements):
                 raise InvalidOperationError(f"element already exists: {operation.element.id}")
-            prepared = self._prepare_element(document, operation.element)
-            document.elements.append(prepared)
+            document.elements.append(self._prepare_element(document, operation.element))
             return
 
         if isinstance(operation, UpdateElementOperation):
             index = self._element_index(document, operation.element_id)
             current = document.elements[index]
+            current_layer = next(item for item in document.layers if item.id == current.layer_id)
+            if current_layer.locked:
+                raise InvalidOperationError(f"layer is locked: {current_layer.id}")
             forbidden = {"id", "type"} & operation.patch.keys()
             if forbidden:
                 raise InvalidOperationError(f"cannot update immutable fields: {sorted(forbidden)}")
@@ -303,6 +297,10 @@ class DocumentService:
 
         if isinstance(operation, DeleteElementOperation):
             index = self._element_index(document, operation.element_id)
+            current = document.elements[index]
+            current_layer = next(item for item in document.layers if item.id == current.layer_id)
+            if current_layer.locked:
+                raise InvalidOperationError(f"layer is locked: {current_layer.id}")
             removed = document.elements.pop(index)
             if removed.type in {"symbol", "junction"}:
                 self._detach_connectable_connectors(document, removed.id)
@@ -330,7 +328,9 @@ class DocumentService:
         if isinstance(operation, DeleteLayerOperation):
             if operation.layer_id == "layer_default":
                 raise InvalidOperationError("default layer cannot be deleted")
-            self._layer_index(document, operation.layer_id)
+            layer_index = self._layer_index(document, operation.layer_id)
+            if document.layers[layer_index].locked:
+                raise InvalidOperationError(f"layer is locked: {operation.layer_id}")
             self._layer_index(document, operation.move_elements_to)
             for element in document.elements:
                 if element.layer_id == operation.layer_id:
@@ -365,12 +365,13 @@ class DocumentService:
             for element in document.elements:
                 if element.system_id == operation.system_id:
                     element.system_id = operation.move_elements_to
-            document.systems = [
-                system for system in document.systems if system.id != operation.system_id
-            ]
+            document.systems = [system for system in document.systems if system.id != operation.system_id]
             return
 
         if isinstance(operation, ClearDocumentOperation):
+            locked = {layer.id for layer in document.layers if layer.locked}
+            if any(element.layer_id in locked for element in document.elements):
+                raise InvalidOperationError("cannot clear document while a non-empty layer is locked")
             document.elements.clear()
             return
 
@@ -393,20 +394,16 @@ class DocumentService:
             return self._normalize_connector(document, element)
         return element
 
-    def _normalize_connector(
-        self, document: Document, connector: ConnectorElement
-    ) -> ConnectorElement:
+    def _normalize_connector(self, document: Document, connector: ConnectorElement) -> ConnectorElement:
         normalized = ConnectorElement.model_validate(connector.model_dump(mode="python"))
         start = normalized.points[0]
         end = normalized.points[-1]
-
         if normalized.source is not None:
             normalized.source = self._normalize_endpoint(document, normalized.source, "source")
             start = normalized.source.point
         if normalized.target is not None:
             normalized.target = self._normalize_endpoint(document, normalized.target, "target")
             end = normalized.target.point
-
         if normalized.routing == "orthogonal":
             normalized.points = self._orthogonal_route(start, end)
         elif normalized.routing == "direct":
@@ -416,19 +413,13 @@ class DocumentService:
             normalized.points = self._bind_manual_endpoints(points, start, end)
         return normalized
 
-    def _normalize_endpoint(
-        self,
-        document: Document,
-        endpoint: ConnectorEndpoint,
-        endpoint_name: str,
-    ) -> ConnectorEndpoint:
+    def _normalize_endpoint(self, document: Document, endpoint: ConnectorEndpoint, endpoint_name: str) -> ConnectorEndpoint:
         if endpoint.element_id is None:
             if endpoint.port_id is not None:
                 raise InvalidOperationError(f"{endpoint_name} port_id requires element_id")
             return endpoint
         if endpoint.port_id is None:
             raise InvalidOperationError(f"{endpoint_name} element_id requires port_id")
-
         connectable = self._connectable_by_id(document, endpoint.element_id)
         if connectable.type == "symbol":
             point = self._symbol_port_point(connectable, endpoint.port_id)
@@ -438,11 +429,7 @@ class DocumentService:
                     f"junction {connectable.id} only exposes port 'node', not '{endpoint.port_id}'"
                 )
             point = Point.model_validate(connectable.position.model_dump())
-        return ConnectorEndpoint(
-            element_id=connectable.id,
-            port_id=endpoint.port_id,
-            point=point,
-        )
+        return ConnectorEndpoint(element_id=connectable.id, port_id=endpoint.port_id, point=point)
 
     def _symbol_port_point(self, symbol: SymbolElement, port_id: str) -> Point:
         definition = self.symbols.get(symbol.symbol_key)
@@ -451,7 +438,6 @@ class DocumentService:
             raise InvalidOperationError(
                 f"unknown port '{port_id}' for symbol {symbol.id} ({symbol.symbol_key})"
             )
-
         local_x = port.x * symbol.width / definition.width
         local_y = port.y * symbol.height / definition.height
         center_x = symbol.width / 2
@@ -488,20 +474,10 @@ class DocumentService:
             return DocumentService._dedupe_points([start, end])
         if abs(end.x - start.x) >= abs(end.y - start.y):
             middle = (start.x + end.x) / 2
-            points = [
-                start,
-                Point(x=middle, y=start.y),
-                Point(x=middle, y=end.y),
-                end,
-            ]
+            points = [start, Point(x=middle, y=start.y), Point(x=middle, y=end.y), end]
         else:
             middle = (start.y + end.y) / 2
-            points = [
-                start,
-                Point(x=start.x, y=middle),
-                Point(x=end.x, y=middle),
-                end,
-            ]
+            points = [start, Point(x=start.x, y=middle), Point(x=end.x, y=middle), end]
         return DocumentService._dedupe_points(points)
 
     @staticmethod
@@ -573,9 +549,7 @@ class DocumentService:
         raise InvalidOperationError(f"system not found: {system_id}")
 
     @staticmethod
-    def _connectable_by_id(
-        document: Document, element_id: str
-    ) -> SymbolElement | JunctionElement:
+    def _connectable_by_id(document: Document, element_id: str) -> SymbolElement | JunctionElement:
         for element in document.elements:
             if element.id == element_id:
                 if element.type not in {"symbol", "junction"}:
