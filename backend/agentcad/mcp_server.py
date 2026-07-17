@@ -95,7 +95,7 @@ def main() -> None:
     ) -> dict:
         """Create a new editable P&ID document."""
         document = service.create_document(
-            CreateDocumentRequest(name=name, width=width, height=height)
+            CreateDocumentRequest(name=name, width=width, height=height), source="mcp"
         )
         return document.model_dump(mode="json")
 
@@ -108,6 +108,11 @@ def main() -> None:
     def get_document(document_id: str) -> dict:
         """Read the complete current P&ID-Agent document JSON."""
         return service.get_document(document_id).model_dump(mode="json")
+
+    @mcp.tool()
+    def get_document_history(document_id: str, limit: int = 100) -> list[dict]:
+        """Read recent revision history including source, label, and operation count."""
+        return [item.model_dump(mode="json") for item in service.get_history(document_id, limit)]
 
     @mcp.tool()
     def get_transaction_schema() -> dict[str, Any]:
@@ -128,13 +133,13 @@ def main() -> None:
         transaction: TransactionRequest,
     ) -> dict:
         """Apply a structured atomic P&ID-Agent transaction."""
-        return service.apply_transaction(document_id, transaction).model_dump(mode="json")
+        return service.apply_transaction(document_id, transaction, source="mcp").model_dump(mode="json")
 
     @mcp.tool()
     def apply_transaction(document_id: str, transaction_json: str) -> dict:
         """Legacy string-based transaction tool. Prefer apply_transaction_v2."""
         transaction = TransactionRequest.model_validate(json.loads(transaction_json))
-        return service.apply_transaction(document_id, transaction).model_dump(mode="json")
+        return service.apply_transaction(document_id, transaction, source="mcp").model_dump(mode="json")
 
     @mcp.tool()
     def list_symbols() -> list[dict]:
