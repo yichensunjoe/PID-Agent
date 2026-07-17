@@ -11,7 +11,6 @@ from .models import (
     AddSystemOperation,
     AgentPlan,
     ClearDocumentOperation,
-    ConnectorElement,
     DeleteLayerOperation,
     DeleteSystemOperation,
     Point,
@@ -154,10 +153,13 @@ class SemanticAgentReplanRequest(StrictModel):
     attempt: int = Field(default=1, ge=1, le=5)
 
 
+class SemanticAgentApplyRequest(StrictModel):
+    plan_id: str
+    parent_plan_id: str | None = None
+    attempt: int = Field(default=0, ge=0, le=5)
+    transaction: TransactionRequest
+
+
 class CompiledSemanticTransaction(StrictModel):
     transaction: TransactionRequest | None = None
     assessment: AgentTransactionAssessment
-
-
-class SemanticConnectorPreview(StrictModel):
-    connector: ConnectorElement
