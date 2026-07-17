@@ -14,6 +14,7 @@ class Settings:
     database_path: Path
     cors_origins: list[str]
     frontend_dist: Path
+    diagnostics_path: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -37,8 +38,17 @@ class Settings:
                 str(root / "frontend" / "dist"),
             )
         )
+        default_diagnostics = database_path.with_suffix(".diagnostics.jsonl")
+        diagnostics_path = Path(
+            _env(
+                "PID_AGENT_DIAGNOSTICS_PATH",
+                "AGENTCAD_DIAGNOSTICS_PATH",
+                str(default_diagnostics),
+            )
+        )
         return cls(
             database_path=database_path,
             cors_origins=[item.strip() for item in origins.split(",") if item.strip()],
             frontend_dist=frontend_dist,
+            diagnostics_path=diagnostics_path,
         )
