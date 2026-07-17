@@ -201,7 +201,13 @@ export default function App() {
     setApplyingAgent(true);
     setAgentError("");
     try {
-      const result = await api.applyAgentPlan(document.id, compiled.transaction);
+      const result = await api.applySemanticAgentPlan(
+        document.id,
+        pendingPlan.plan.plan_id,
+        pendingPlan.parent_plan_id,
+        pendingPlan.attempt,
+        compiled.transaction,
+      );
       const documents = await api.listDocuments();
       const existing = new Set(result.document.elements.map((element) => element.id));
       useWorkspace.setState({
@@ -341,7 +347,7 @@ export default function App() {
               </section> : null}
               <div className="agent-preview-actions">
                 <button type="button" className="confirm" disabled={busyAgent || !pendingPlan.assessment.valid || !pendingPlan.compiled_plan} onClick={() => void applyAgentPlan()}>{applyingAgent ? "正在应用…" : "确认应用"}</button>
-                <button type="button" className="repair" disabled={busyAgent || pendingPlan.attempt >= 5} onClick={() => void replanAgent()}>{repairingAgent ? "局部重规划中…" : `按失败原因重规划${pendingPlan.attempt ? `（${pendingPlan.attempt + 1}/5）` : ""}`}</button>
+                <button type="button" className="repair" disabled={busyAgent || pendingPlan.attempt >= 5 || pendingPlan.assessment.valid} onClick={() => void replanAgent()}>{repairingAgent ? "局部重规划中…" : `按失败原因重规划${pendingPlan.attempt ? `（${pendingPlan.attempt + 1}/5）` : ""}`}</button>
                 <button type="button" disabled={busyAgent} onClick={discardAgentPlan}>放弃预览</button>
               </div>
             </div> : null}
