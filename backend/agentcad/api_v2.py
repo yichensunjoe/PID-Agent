@@ -10,6 +10,7 @@ from .models import (
     AgentGenerateResult,
     CreateDocumentRequest,
     Document,
+    HistoryEntry,
     ProviderConfig,
     TransactionRequest,
     TransactionResult,
@@ -36,7 +37,7 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
 
     @router.post("/documents", response_model=Document, status_code=status.HTTP_201_CREATED)
     def create_document(request: CreateDocumentRequest):
-        return service.create_document(request)
+        return service.create_document(request, source="web")
 
     @router.get("/documents/{document_id}", response_model=Document)
     def get_document(document_id: str):
@@ -51,6 +52,10 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
             "updated_at": document.updated_at,
         }
 
+    @router.get("/documents/{document_id}/history", response_model=list[HistoryEntry])
+    def document_history(document_id: str, limit: int = 100):
+        return _call(service.get_history, document_id, limit)
+
     @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_document(document_id: str):
         _call(service.delete_document, document_id)
@@ -58,15 +63,15 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
 
     @router.post("/documents/{document_id}/transactions", response_model=TransactionResult)
     def apply_transaction(document_id: str, request: TransactionRequest):
-        return _call(service.apply_transaction, document_id, request)
+        return _call(service.apply_transaction, document_id, request, source="web")
 
     @router.post("/documents/{document_id}/undo", response_model=Document)
     def undo(document_id: str):
-        return _call(service.undo, document_id)
+        return _call(service.undo, document_id, source="web")
 
     @router.post("/documents/{document_id}/redo", response_model=Document)
     def redo(document_id: str):
-        return _call(service.redo, document_id)
+        return _call(service.redo, document_id, source="web")
 
     @router.get("/documents/{document_id}/scene-summary")
     def scene_summary(document_id: str):
@@ -147,7 +152,7 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
             plan = planner.plan(document_id, request)
             if request.dry_run:
                 return AgentGenerateResult(plan=plan)
-            result = service.apply_transaction(document_id, plan.transaction)
+            result = service.apply_transaction(document_id, plan.transaction, source="llm")
             return AgentGenerateResult(plan=plan, document=result.document)
         except PlannerError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail()) from exc
@@ -157,9 +162,9 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
     return router
 
 
-def _call(function, *args):
+def _call(function, *args, **kwargs):
     try:
-        return function(*args)
+        return function(*args, **kwargs)
     except (DocumentNotFoundError, InvalidOperationError, RevisionConflictError) as exc:
         return _raise_service_error(exc)
 
