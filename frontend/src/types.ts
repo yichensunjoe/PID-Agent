@@ -176,6 +176,61 @@ export type AgentPlan = {
   transaction: AgentTransaction;
 };
 
+export type SemanticOperation =
+  | Exclude<Operation, { op: "delete_element" }>
+  | { op: "delete_element"; element_id: string; connection_policy?: "reject_if_connected" | "detach" | "delete_connectors" }
+  | { op: "replace_symbol"; element_id: string; symbol_key: string; port_mapping?: Record<string, string>; preserve_size?: boolean; label?: string | null; properties_patch?: Record<string, unknown> }
+  | { op: "reconnect_connector"; connector_id: string; endpoint: "source" | "target"; element_id?: string | null; port_id?: string | null; point?: Point | null; routing?: "orthogonal" | "direct" | "manual" | null }
+  | { op: "connect_ports"; connector_id: string; source_element_id: string; source_port_id: string; target_element_id: string; target_port_id: string; routing?: "orthogonal" | "direct"; process_tag?: string; medium?: string; nominal_diameter?: string; layer_id?: string | null; system_id?: string | null; style?: Partial<Style> | null; name?: string; metadata?: Record<string, unknown> };
+
+export type SemanticTransaction = {
+  operations: SemanticOperation[];
+  expected_revision?: number | null;
+  label: string;
+};
+
+export type SemanticAgentPlan = {
+  plan_id: string;
+  explanation: string;
+  transaction: SemanticTransaction;
+};
+
+export type AgentOperationIssue = {
+  operation_index: number | null;
+  operation: string;
+  code: string;
+  message: string;
+  field_path: string;
+  element_id?: string | null;
+  connector_id?: string | null;
+  available_values: Record<string, string[]>;
+  suggestions: string[];
+};
+
+export type AgentTransactionAssessment = {
+  valid: boolean;
+  stage: "compile" | "validate";
+  document_id: string;
+  current_revision: number;
+  next_revision: number;
+  semantic_operation_count: number;
+  compiled_operation_count: number;
+  resulting_element_count?: number | null;
+  affected_element_ids: string[];
+  added_element_ids: string[];
+  updated_element_ids: string[];
+  deleted_element_ids: string[];
+  issues: AgentOperationIssue[];
+};
+
+export type SemanticAgentPlanResult = {
+  plan: SemanticAgentPlan;
+  compiled_plan?: AgentPlan | null;
+  assessment: AgentTransactionAssessment;
+  attempt: number;
+  parent_plan_id?: string | null;
+};
+
 export type TransactionValidation = {
   valid: boolean;
   document_id: string;
