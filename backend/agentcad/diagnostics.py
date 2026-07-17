@@ -83,14 +83,18 @@ class DiagnosticLogger:
             "timestamp": datetime.now(UTC).isoformat(),
             "service": "P&ID-Agent",
             "version": self.service_version,
+            "process_id": os.getpid(),
             "event": event,
             **redacted_fields,
         }
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":"), default=str) + "\n"
-        with self._lock:
-            self._rotate_if_needed(len(line.encode("utf-8")))
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(line)
+        try:
+            with self._lock:
+                self._rotate_if_needed(len(line.encode("utf-8")))
+                with self.path.open("a", encoding="utf-8") as handle:
+                    handle.write(line)
+        except OSError as exc:
+            record["diagnostic_write_error"] = type(exc).__name__
         return record
 
     def recent(self, limit: int = 500) -> list[dict[str, Any]]:
@@ -117,12 +121,18 @@ class DiagnosticLogger:
         return records[:safe_limit]
 
     def info(self) -> dict[str, Any]:
+        try:
+            exists = self.path.exists()
+            size_bytes = self.path.stat().st_size if exists else 0
+        except OSError:
+            exists = False
+            size_bytes = 0
         return {
             "path": str(self.path),
             "max_bytes": self.max_bytes,
             "backup_count": self.backup_count,
-            "exists": self.path.exists(),
-            "size_bytes": self.path.stat().st_size if self.path.exists() else 0,
+            "exists": exists,
+            "size_bytes": size_bytes,
         }
 
     def _rotate_if_needed(self, incoming_bytes: int) -> None:
