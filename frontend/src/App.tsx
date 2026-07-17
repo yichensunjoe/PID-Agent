@@ -62,7 +62,11 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (
+        event.target instanceof HTMLInputElement
+        || event.target instanceof HTMLTextAreaElement
+        || event.target instanceof HTMLSelectElement
+      ) return;
       const command = event.ctrlKey || event.metaKey;
       if (command && event.key.toLowerCase() === "z") {
         event.preventDefault();
