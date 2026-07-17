@@ -1,10 +1,13 @@
 import type {
   AgentPlan,
   AgentTransaction,
+  AgentTransactionAssessment,
   Document,
   DocumentSummary,
   HistoryEntry,
   Operation,
+  SemanticAgentPlan,
+  SemanticAgentPlanResult,
   SymbolDefinition,
   TransactionValidation,
 } from "./types";
@@ -132,6 +135,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(transaction),
     }),
+  analyzeTransaction: (id: string, transaction: AgentTransaction) =>
+    request<AgentTransactionAssessment>(`/documents/${id}/transactions/analyze`, {
+      method: "POST",
+      body: JSON.stringify(transaction),
+    }),
   applyAgentPlan: (id: string, transaction: AgentTransaction) =>
     request<{ document: Document; applied_operations: number; label: string }>(`/documents/${id}/agent/apply`, {
       method: "POST",
@@ -141,6 +149,41 @@ export const api = {
   redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
   testProvider: (provider: ProviderConfig) => request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider) }),
+  planSemanticAgent: (
+    id: string,
+    revision: number,
+    prompt: string,
+    context: string,
+    provider?: ProviderConfig,
+  ) => request<SemanticAgentPlanResult>(`/documents/${id}/agent/plan-v2`, {
+    method: "POST",
+    body: JSON.stringify({
+      prompt,
+      context,
+      dry_run: true,
+      expected_revision: revision,
+      provider: providerPayload(provider),
+    }),
+  }),
+  replanSemanticAgent: (
+    id: string,
+    revision: number,
+    prompt: string,
+    context: string,
+    failedPlan: SemanticAgentPlan,
+    attempt: number,
+    provider?: ProviderConfig,
+  ) => request<SemanticAgentPlanResult>(`/documents/${id}/agent/replan`, {
+    method: "POST",
+    body: JSON.stringify({
+      prompt,
+      context,
+      expected_revision: revision,
+      failed_plan: failedPlan,
+      attempt,
+      provider: providerPayload(provider),
+    }),
+  }),
   planAgent: (
     id: string,
     revision: number,
