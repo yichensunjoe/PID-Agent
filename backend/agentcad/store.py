@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -27,6 +28,11 @@ class SQLiteDocumentStore:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
         self._initialize()
+
+    @property
+    def database_instance_id(self) -> str:
+        resolved = str(self.database_path.expanduser().resolve())
+        return hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:16]
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=30)
@@ -65,10 +71,20 @@ class SQLiteDocumentStore:
                     action TEXT NOT NULL,
                     label TEXT NOT NULL,
                     operation_count INTEGER NOT NULL,
+                    details_json TEXT NOT NULL DEFAULT '{}',
                     FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
                 )
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(document_history)").fetchall()
+            }
+            if "details_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE document_history "
+                    "ADD COLUMN details_json TEXT NOT NULL DEFAULT '{}'"
+                )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_history_document_revision "
                 "ON document_history(document_id, revision DESC, id DESC)"
@@ -134,8 +150,9 @@ class SQLiteDocumentStore:
                 connection.execute(
                     """
                     INSERT INTO document_history (
-                        document_id, revision, timestamp, source, action, label, operation_count
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        document_id, revision, timestamp, source, action, label,
+                        operation_count, details_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         history.document_id,
@@ -145,8 +162,30 @@ class SQLiteDocumentStore:
                         history.action,
                         history.label,
                         history.operation_count,
+                        "{}",
                     ),
                 )
+
+    def update_history_details(
+        self,
+        document_id: str,
+        revision: int,
+        details: dict[str, Any],
+    ) -> bool:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE document_history
+                SET details_json = ?
+                WHERE id = (
+                    SELECT id FROM document_history
+                    WHERE document_id = ? AND revision = ?
+                    ORDER BY id DESC LIMIT 1
+                )
+                """,
+                (self._encode(details), document_id, revision),
+            )
+            return cursor.rowcount == 1
 
     def get(self, document_id: str) -> StoredDocument | None:
         with self._lock, self._connect() as connection:
@@ -187,11 +226,24 @@ class SQLiteDocumentStore:
         return summaries
 
     def list_history(self, document_id: str, limit: int = 100) -> list[HistoryEntry]:
+        return [
+            HistoryEntry.model_validate(
+                {
+                    key: value
+                    for key, value in item.items()
+                    if key != "details"
+                }
+            )
+            for item in self.list_history_detailed(document_id, limit)
+        ]
+
+    def list_history_detailed(self, document_id: str, limit: int = 100) -> list[dict[str, Any]]:
         safe_limit = max(1, min(limit, 500))
         with self._lock, self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, document_id, revision, timestamp, source, action, label, operation_count
+                SELECT id, document_id, revision, timestamp, source, action, label,
+                       operation_count, details_json
                 FROM document_history
                 WHERE document_id = ?
                 ORDER BY revision DESC, id DESC
@@ -199,4 +251,14 @@ class SQLiteDocumentStore:
                 """,
                 (document_id, safe_limit),
             ).fetchall()
-        return [HistoryEntry.model_validate(dict(row)) for row in rows]
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            raw_details = item.pop("details_json", "{}")
+            try:
+                details = json.loads(raw_details) if raw_details else {}
+            except json.JSONDecodeError:
+                details = {"decode_error": True}
+            item["details"] = details if isinstance(details, dict) else {}
+            result.append(item)
+        return result
