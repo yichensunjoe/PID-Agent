@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response, status
+from pydantic import ValidationError
 
 from .llm import OpenAICompatiblePlanner, PlannerError
 from .models import (
@@ -52,7 +53,10 @@ def _validate_transaction(
         if element is not None:
             affected_element_ids.append(element.id)
 
-    working = Document.model_validate(working.model_dump(mode="python"))
+    try:
+        working = Document.model_validate(working.model_dump(mode="python"))
+    except ValidationError as exc:
+        raise InvalidOperationError(f"resulting document is invalid: {exc}") from exc
     return {
         "valid": True,
         "document_id": document_id,
