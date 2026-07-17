@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from typing import Any
 
 from . import __version__
 from .config import Settings
+from .diagnostics import DiagnosticLogger
+from .history_diff import build_history_details
 from .models import CreateDocumentRequest, Document, TransactionRequest
 from .service import DocumentService, InvalidOperationError, RevisionConflictError
 from .store import SQLiteDocumentStore
@@ -41,7 +42,14 @@ def _validate_transaction(
             raise InvalidOperationError(
                 f"operations[{index}] ({operation.op}): {exc}"
             ) from exc
+    working.revision = current.revision + 1
     working = Document.model_validate(working.model_dump(mode="python"))
+    details = build_history_details(
+        current,
+        working,
+        transaction.operations,
+        action="preview",
+    )
     return {
         "valid": True,
         "document_id": document_id,
@@ -49,23 +57,69 @@ def _validate_transaction(
         "next_revision": current.revision + 1,
         "operation_count": len(transaction.operations),
         "resulting_element_count": len(working.elements),
+        "affected_element_ids": details["affected_element_ids"],
+        "added_element_ids": details["added_element_ids"],
+        "updated_element_ids": details["updated_element_ids"],
+        "deleted_element_ids": details["deleted_element_ids"],
     }
 
 
-def _server_info(settings: Settings, service: DocumentService, transport: str) -> dict[str, Any]:
+def _server_info(
+    settings: Settings,
+    service: DocumentService,
+    transport: str,
+    diagnostics: DiagnosticLogger,
+) -> dict[str, Any]:
     database_path = settings.database_path.expanduser().resolve()
-    database_instance_id = hashlib.sha256(str(database_path).encode("utf-8")).hexdigest()[:16]
     symbol_paths = [str(path.expanduser().resolve()) for path in service.symbols._search_paths]
     return {
         "service": "P&ID-Agent",
         "version": __version__,
         "transport": transport,
         "database_path": str(database_path),
-        "database_instance_id": database_instance_id,
+        "database_instance_id": service.store.database_instance_id,
+        "diagnostics": diagnostics.info(),
         "document_count": len(service.list_documents()),
         "symbol_count": len(service.symbols.list()),
         "symbol_paths": symbol_paths,
     }
+
+
+def _apply_with_history(
+    service: DocumentService,
+    diagnostics: DiagnosticLogger,
+    document_id: str,
+    transaction: TransactionRequest,
+) -> dict[str, Any]:
+    before = service.get_document(document_id)
+    result = service.apply_transaction(document_id, transaction, source="mcp")
+    details = build_history_details(
+        before,
+        result.document,
+        transaction.operations,
+        action="transaction",
+    )
+    persisted = service.store.update_history_details(
+        document_id,
+        result.document.revision,
+        details,
+    )
+    diagnostics.emit(
+        "document.revision.created",
+        document_id=document_id,
+        base_revision=before.revision,
+        revision=result.document.revision,
+        source="mcp",
+        action="transaction",
+        label=transaction.label,
+        operation_count=len(transaction.operations),
+        affected_element_ids=details["affected_element_ids"],
+        added_element_ids=details["added_element_ids"],
+        updated_element_ids=details["updated_element_ids"],
+        deleted_element_ids=details["deleted_element_ids"],
+        history_details_persisted=persisted,
+    )
+    return result.model_dump(mode="json")
 
 
 def main() -> None:
@@ -76,13 +130,32 @@ def main() -> None:
 
     settings = Settings.from_env()
     service = build_service(settings)
+    diagnostics_path = settings.diagnostics_path or settings.database_path.with_suffix(
+        ".diagnostics.jsonl"
+    )
+    diagnostics = DiagnosticLogger(diagnostics_path, service_version=__version__)
     transport = os.getenv("PID_AGENT_MCP_TRANSPORT", os.getenv("AGENTCAD_MCP_TRANSPORT", "stdio"))
     mcp = FastMCP("P&ID-Agent")
+    diagnostics.emit(
+        "mcp.runtime.created",
+        transport=transport,
+        database_path=settings.database_path,
+        database_instance_id=service.store.database_instance_id,
+        diagnostics_path=diagnostics_path,
+    )
 
     @mcp.tool()
     def get_server_info() -> dict[str, Any]:
-        """Return version, transport, database identity, and symbol source diagnostics."""
-        return _server_info(settings, service, transport)
+        """Return version, transport, database identity, and diagnostic log information."""
+        return _server_info(settings, service, transport, diagnostics)
+
+    @mcp.tool()
+    def get_diagnostics(limit: int = 200) -> dict[str, Any]:
+        """Read recent redacted diagnostic events without exposing API keys or full prompts."""
+        return {
+            "log": diagnostics.info(),
+            "events": diagnostics.recent(limit),
+        }
 
     @mcp.tool()
     def list_documents() -> list[dict]:
@@ -96,6 +169,15 @@ def main() -> None:
         """Create a new editable P&ID document."""
         document = service.create_document(
             CreateDocumentRequest(name=name, width=width, height=height), source="mcp"
+        )
+        diagnostics.emit(
+            "document.created",
+            document_id=document.id,
+            revision=document.revision,
+            name=document.name,
+            width=document.canvas.width,
+            height=document.canvas.height,
+            source="mcp",
         )
         return document.model_dump(mode="json")
 
@@ -111,8 +193,9 @@ def main() -> None:
 
     @mcp.tool()
     def get_document_history(document_id: str, limit: int = 100) -> list[dict]:
-        """Read recent revision history including source, label, and operation count."""
-        return [item.model_dump(mode="json") for item in service.get_history(document_id, limit)]
+        """Read revision history with operation summaries and element-level before/after diffs."""
+        service.get_document(document_id)
+        return service.store.list_history_detailed(document_id, limit)
 
     @mcp.tool()
     def get_transaction_schema() -> dict[str, Any]:
@@ -133,13 +216,13 @@ def main() -> None:
         transaction: TransactionRequest,
     ) -> dict:
         """Apply a structured atomic P&ID-Agent transaction."""
-        return service.apply_transaction(document_id, transaction, source="mcp").model_dump(mode="json")
+        return _apply_with_history(service, diagnostics, document_id, transaction)
 
     @mcp.tool()
     def apply_transaction(document_id: str, transaction_json: str) -> dict:
         """Legacy string-based transaction tool. Prefer apply_transaction_v2."""
         transaction = TransactionRequest.model_validate(json.loads(transaction_json))
-        return service.apply_transaction(document_id, transaction, source="mcp").model_dump(mode="json")
+        return _apply_with_history(service, diagnostics, document_id, transaction)
 
     @mcp.tool()
     def list_symbols() -> list[dict]:
