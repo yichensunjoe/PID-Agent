@@ -1,4 +1,13 @@
-import type { Document, DocumentSummary, HistoryEntry, Operation, SymbolDefinition } from "./types";
+import type {
+  AgentPlan,
+  AgentTransaction,
+  Document,
+  DocumentSummary,
+  HistoryEntry,
+  Operation,
+  SymbolDefinition,
+  TransactionValidation,
+} from "./types";
 
 const API_ROOT = import.meta.env.VITE_API_ROOT ?? "/api/v2";
 
@@ -21,6 +30,7 @@ export type ProviderTestResult = {
 };
 
 export type DocumentStatus = { id: string; revision: number; updated_at: string };
+export type AgentPlanResponse = { plan: AgentPlan; document?: Document | null };
 
 export class ApiError extends Error {
   status: number;
@@ -82,6 +92,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function providerPayload(provider?: ProviderConfig): ProviderConfig | undefined {
+  if (!provider?.base_url && !provider?.model && !provider?.api_key && !provider?.timeout_seconds) return undefined;
+  return {
+    base_url: provider.base_url || undefined,
+    model: provider.model || undefined,
+    api_key: provider.api_key || undefined,
+    timeout_seconds: provider.timeout_seconds,
+  };
+}
+
 export const api = {
   listDocuments: () => request<DocumentSummary[]>("/documents"),
   createDocument: (name: string) => request<Document>("/documents", { method: "POST", body: JSON.stringify({ name }) }),
@@ -94,25 +114,49 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ expected_revision: revision, operations, label }),
     }),
+  validateTransaction: (id: string, transaction: AgentTransaction) =>
+    request<TransactionValidation>(`/documents/${id}/transactions/validate`, {
+      method: "POST",
+      body: JSON.stringify(transaction),
+    }),
+  applyAgentPlan: (id: string, transaction: AgentTransaction) =>
+    request<{ document: Document; applied_operations: number; label: string }>(`/documents/${id}/agent/apply`, {
+      method: "POST",
+      body: JSON.stringify(transaction),
+    }),
   undo: (id: string) => request<Document>(`/documents/${id}/undo`, { method: "POST" }),
   redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
   testProvider: (provider: ProviderConfig) => request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider) }),
-  generate: (id: string, revision: number, prompt: string, context: string, provider?: ProviderConfig) =>
-    request<{ document: Document; plan: { explanation: string } }>(`/documents/${id}/agent/generate`, {
-      method: "POST",
-      body: JSON.stringify({
-        prompt,
-        context,
-        expected_revision: revision,
-        provider: provider?.base_url || provider?.model || provider?.api_key || provider?.timeout_seconds
-          ? {
-              base_url: provider.base_url || undefined,
-              model: provider.model || undefined,
-              api_key: provider.api_key || undefined,
-              timeout_seconds: provider.timeout_seconds,
-            }
-          : undefined,
-      }),
+  planAgent: (
+    id: string,
+    revision: number,
+    prompt: string,
+    context: string,
+    provider?: ProviderConfig,
+  ) => request<AgentPlanResponse>(`/documents/${id}/agent/generate`, {
+    method: "POST",
+    body: JSON.stringify({
+      prompt,
+      context,
+      dry_run: true,
+      expected_revision: revision,
+      provider: providerPayload(provider),
     }),
+  }),
+  generate: (
+    id: string,
+    revision: number,
+    prompt: string,
+    context: string,
+    provider?: ProviderConfig,
+  ) => request<{ document: Document; plan: { explanation: string } }>(`/documents/${id}/agent/generate`, {
+    method: "POST",
+    body: JSON.stringify({
+      prompt,
+      context,
+      expected_revision: revision,
+      provider: providerPayload(provider),
+    }),
+  }),
 };
