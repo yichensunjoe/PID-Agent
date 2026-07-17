@@ -1,10 +1,23 @@
-import { useRef, type FormEvent, type RefObject } from "react";
+import { useRef, useState, type FormEvent, type RefObject } from "react";
 import { useWorkspace } from "../store";
 import type { Element, Operation, Point, Style } from "../types";
+
+type StyleDraft = {
+  stroke?: string;
+  fill?: string;
+  stroke_width?: number | "";
+  opacity?: number | "";
+  dash?: number[] | "";
+};
 
 function formString(data: FormData, name: string): string {
   const value = data.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function formRawString(data: FormData, name: string): string {
+  const value = data.get(name);
+  return typeof value === "string" ? value : "";
 }
 
 function formNumber(data: FormData, name: string): number {
@@ -50,36 +63,84 @@ function pointFromForm(data: FormData, prefix: string): Point {
 function endpointText(element: Element, endpoint: "source" | "target"): string {
   if (element.type !== "connector") return "";
   const value = element[endpoint];
-  if (!value?.element_id) return `自由端点 (${value?.point.x ?? element.points[endpoint === "source" ? 0 : element.points.length - 1].x}, ${value?.point.y ?? element.points[endpoint === "source" ? 0 : element.points.length - 1].y})`;
-  return `${value.element_id}.${value.port_id}`;
+  if (value?.element_id) return `${value.element_id}.${value.port_id}`;
+  const index = endpoint === "source" ? 0 : element.points.length - 1;
+  const point = value?.point ?? element.points[index];
+  return point ? `自由端点 (${point.x}, ${point.y})` : "自由端点";
 }
 
-function StyleFields({ style, mixed = false }: { style?: Style; mixed?: boolean }) {
+function StyleFields({
+  style,
+  mixed = false,
+  allowClearDash = false,
+}: {
+  style?: StyleDraft;
+  mixed?: boolean;
+  allowClearDash?: boolean;
+}) {
+  const dashValue = Array.isArray(style?.dash) ? style.dash.join(" ") : "";
   return (
     <fieldset className="inspector-section">
       <legend>样式</legend>
       <label>
         线条颜色
-        <input name="stroke" defaultValue={style?.stroke ?? ""} placeholder={mixed ? "混合；留空不修改" : "#111827"} />
+        <input
+          name="stroke"
+          defaultValue={style?.stroke ?? ""}
+          placeholder={mixed ? "混合；留空不修改" : "#111827"}
+          required={!mixed}
+        />
       </label>
       <label>
         填充颜色
-        <input name="fill" defaultValue={style?.fill ?? ""} placeholder={mixed ? "混合；留空不修改" : "none"} />
+        <input
+          name="fill"
+          defaultValue={style?.fill ?? ""}
+          placeholder={mixed ? "混合；留空不修改" : "none"}
+          required={!mixed}
+        />
       </label>
       <div className="inspector-grid two-columns">
         <label>
           线宽
-          <input name="stroke_width" type="number" min="0.1" max="100" step="0.1" defaultValue={style?.stroke_width ?? ""} placeholder={mixed ? "混合" : undefined} />
+          <input
+            name="stroke_width"
+            type="number"
+            min="0.1"
+            max="100"
+            step="0.1"
+            defaultValue={style?.stroke_width ?? ""}
+            placeholder={mixed ? "混合" : undefined}
+            required={!mixed}
+          />
         </label>
         <label>
           透明度
-          <input name="opacity" type="number" min="0" max="1" step="0.05" defaultValue={style?.opacity ?? ""} placeholder={mixed ? "混合" : undefined} />
+          <input
+            name="opacity"
+            type="number"
+            min="0"
+            max="1"
+            step="0.05"
+            defaultValue={style?.opacity ?? ""}
+            placeholder={mixed ? "混合" : undefined}
+            required={!mixed}
+          />
         </label>
       </div>
       <label>
         虚线
-        <input name="dash" defaultValue={style ? style.dash.join(" ") : ""} placeholder={mixed ? "混合；留空不修改" : "例如 8 4；实线留空"} />
+        <input
+          name="dash"
+          defaultValue={dashValue}
+          placeholder={mixed ? "混合；留空不修改" : "例如 8 4；实线留空"}
+        />
       </label>
+      {allowClearDash ? (
+        <label className="checkbox-field">
+          <input name="clear_dash" type="checkbox" />设为实线
+        </label>
+      ) : null}
     </fieldset>
   );
 }
@@ -107,7 +168,6 @@ function adjustRotation(formRef: RefObject<HTMLFormElement | null>, delta: numbe
   if (!(input instanceof HTMLInputElement)) return;
   const current = Number(input.value);
   input.value = String((Number.isFinite(current) ? current : 0) + delta);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function typeSpecificPatch(element: Element, data: FormData): Record<string, unknown> {
@@ -128,7 +188,7 @@ function typeSpecificPatch(element: Element, data: FormData): Record<string, unk
       };
     case "text":
       return {
-        text: formString(data, "text"),
+        text: formRawString(data, "text"),
         position: pointFromForm(data, "position"),
         font_size: formNumber(data, "font_size"),
         anchor: formString(data, "anchor"),
@@ -242,61 +302,66 @@ function ElementFields({ element, formRef }: { element: Element; formRef: RefObj
   }
 }
 
-function commonStyle(elements: Element[]): Style | undefined {
-  if (!elements.length) return undefined;
-  const first = elements[0].style;
+function commonStyle(elements: Element[]): StyleDraft | undefined {
+  const first = elements[0];
+  if (!first) return undefined;
   return {
-    stroke: elements.every((item) => item.style.stroke === first.stroke) ? first.stroke : "",
-    fill: elements.every((item) => item.style.fill === first.fill) ? first.fill : "",
-    stroke_width: elements.every((item) => item.style.stroke_width === first.stroke_width) ? first.stroke_width : Number.NaN,
-    opacity: elements.every((item) => item.style.opacity === first.opacity) ? first.opacity : Number.NaN,
-    dash: elements.every((item) => JSON.stringify(item.style.dash) === JSON.stringify(first.dash)) ? first.dash : [],
+    stroke: elements.every((item) => item.style.stroke === first.style.stroke) ? first.style.stroke : "",
+    fill: elements.every((item) => item.style.fill === first.style.fill) ? first.style.fill : "",
+    stroke_width: elements.every((item) => item.style.stroke_width === first.style.stroke_width) ? first.style.stroke_width : "",
+    opacity: elements.every((item) => item.style.opacity === first.style.opacity) ? first.style.opacity : "",
+    dash: elements.every((item) => JSON.stringify(item.style.dash) === JSON.stringify(first.style.dash)) ? first.style.dash : "",
   };
 }
 
 function MultiSelectionInspector({ elements }: { elements: Element[] }) {
   const transact = useWorkspace((state) => state.transact);
   const isMutating = useWorkspace((state) => state.isMutating);
+  const [localError, setLocalError] = useState("");
   const style = commonStyle(elements);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const stroke = formString(data, "stroke");
-    const fill = formString(data, "fill");
-    const strokeWidthRaw = formString(data, "stroke_width");
-    const opacityRaw = formString(data, "opacity");
-    const dashRaw = formString(data, "dash");
-    if (!stroke && !fill && !strokeWidthRaw && !opacityRaw && !dashRaw) return;
+    setLocalError("");
+    try {
+      const data = new FormData(event.currentTarget);
+      const stroke = formString(data, "stroke");
+      const fill = formString(data, "fill");
+      const strokeWidthRaw = formString(data, "stroke_width");
+      const opacityRaw = formString(data, "opacity");
+      const dashRaw = formString(data, "dash");
+      const clearDash = data.get("clear_dash") === "on";
+      if (!stroke && !fill && !strokeWidthRaw && !opacityRaw && !dashRaw && !clearDash) return;
 
-    const operations: Operation[] = elements.map((element) => {
-      const next = { ...element.style };
-      if (stroke) next.stroke = stroke;
-      if (fill) next.fill = fill;
-      if (strokeWidthRaw) {
-        const value = Number(strokeWidthRaw);
-        if (!Number.isFinite(value) || value <= 0) throw new Error("线宽必须大于 0");
-        next.stroke_width = value;
-      }
-      if (opacityRaw) {
-        const value = Number(opacityRaw);
-        if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error("透明度必须在 0 到 1 之间");
-        next.opacity = value;
-      }
-      if (dashRaw) next.dash = parseDash(dashRaw);
-      return { op: "update_element", element_id: element.id, patch: { style: next } };
-    });
-    await transact(operations, `Update style for ${elements.length} elements`);
+      const operations: Operation[] = elements.map((element) => {
+        const next = { ...element.style };
+        if (stroke) next.stroke = stroke;
+        if (fill) next.fill = fill;
+        if (strokeWidthRaw) {
+          const value = Number(strokeWidthRaw);
+          if (!Number.isFinite(value) || value <= 0) throw new Error("线宽必须大于 0");
+          next.stroke_width = value;
+        }
+        if (opacityRaw) {
+          const value = Number(opacityRaw);
+          if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error("透明度必须在 0 到 1 之间");
+          next.opacity = value;
+        }
+        if (dashRaw) next.dash = parseDash(dashRaw);
+        if (clearDash) next.dash = [];
+        return { op: "update_element", element_id: element.id, patch: { style: next } };
+      });
+      await transact(operations, `Update style for ${elements.length} elements`);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
     <form className="inspector-form" onSubmit={(event) => void submit(event)}>
       <div className="inspector-summary"><strong>{elements.length} 个元素</strong><span>批量修改公共样式</span></div>
-      <StyleFields style={style && {
-        ...style,
-        stroke_width: Number.isNaN(style.stroke_width) ? ("" as unknown as number) : style.stroke_width,
-        opacity: Number.isNaN(style.opacity) ? ("" as unknown as number) : style.opacity,
-      }} mixed />
+      <StyleFields style={style} mixed allowClearDash />
+      {localError ? <div className="inspector-error">{localError}</div> : null}
       <button className="inspector-apply" type="submit" disabled={isMutating}>应用批量样式</button>
     </form>
   );
@@ -305,20 +370,26 @@ function MultiSelectionInspector({ elements }: { elements: Element[] }) {
 function SingleSelectionInspector({ element, revision }: { element: Element; revision: number }) {
   const transact = useWorkspace((state) => state.transact);
   const isMutating = useWorkspace((state) => state.isMutating);
+  const [localError, setLocalError] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const patch: Record<string, unknown> = {
-      name: formString(data, "name"),
-      style: styleFromForm(data),
-      ...typeSpecificPatch(element, data),
-    };
-    await transact(
-      [{ op: "update_element", element_id: element.id, patch }],
-      `Update ${element.type} ${element.id}`,
-    );
+    setLocalError("");
+    try {
+      const data = new FormData(event.currentTarget);
+      const patch: Record<string, unknown> = {
+        name: formString(data, "name"),
+        style: styleFromForm(data),
+        ...typeSpecificPatch(element, data),
+      };
+      await transact(
+        [{ op: "update_element", element_id: element.id, patch }],
+        `Update ${element.type} ${element.id}`,
+      );
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
@@ -328,6 +399,7 @@ function SingleSelectionInspector({ element, revision }: { element: Element; rev
       <label>内部名称<input name="name" defaultValue={element.name} /></label>
       <ElementFields element={element} formRef={formRef} />
       <StyleFields style={element.style} />
+      {localError ? <div className="inspector-error">{localError}</div> : null}
       <button className="inspector-apply" type="submit" disabled={isMutating}>{isMutating ? "正在提交…" : "应用属性"}</button>
     </form>
   );
@@ -336,17 +408,29 @@ function SingleSelectionInspector({ element, revision }: { element: Element; rev
 export function PropertyInspector() {
   const document = useWorkspace((state) => state.document);
   const selectedIds = useWorkspace((state) => state.selectedElementIds);
+  const storeError = useWorkspace((state) => state.error);
   const selected = document?.elements.filter((element) => selectedIds.includes(element.id)) ?? [];
 
-  if (!document) return <div className="inspector-empty">没有打开的文档</div>;
-  if (!selected.length) {
-    return (
+  let content;
+  if (!document) {
+    content = <div className="inspector-empty">没有打开的文档</div>;
+  } else if (!selected.length) {
+    content = (
       <div className="inspector-empty">
         <strong>未选择元素</strong>
         <span>在画布中选择设备、管线、文字或图形后，可精确修改属性。</span>
       </div>
     );
+  } else if (selected.length > 1) {
+    content = <MultiSelectionInspector elements={selected} />;
+  } else {
+    content = <SingleSelectionInspector element={selected[0]!} revision={document.revision} />;
   }
-  if (selected.length > 1) return <MultiSelectionInspector elements={selected} />;
-  return <SingleSelectionInspector element={selected[0]} revision={document.revision} />;
+
+  return (
+    <div className="property-inspector">
+      {content}
+      {storeError ? <div className="inspector-error">{storeError}</div> : null}
+    </div>
+  );
 }
