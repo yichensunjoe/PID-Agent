@@ -5,11 +5,13 @@ import os
 from typing import Any
 
 from . import __version__
+from .agent_semantic import SemanticTransactionCompiler, analyze_transaction as analyze_low_level
+from .agent_semantic_models import SemanticTransaction
 from .config import Settings
 from .diagnostics import DiagnosticLogger
 from .history_diff import build_history_details
-from .models import CreateDocumentRequest, Document, TransactionRequest
-from .service import DocumentService, InvalidOperationError, RevisionConflictError
+from .models import CreateDocumentRequest, TransactionRequest
+from .service import DocumentService, InvalidOperationError
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
 
@@ -25,43 +27,14 @@ def _validate_transaction(
     document_id: str,
     transaction: TransactionRequest,
 ) -> dict[str, Any]:
-    current = service.get_document(document_id)
-    if (
-        transaction.expected_revision is not None
-        and transaction.expected_revision != current.revision
-    ):
-        raise RevisionConflictError(
-            f"expected revision {transaction.expected_revision}, current revision is {current.revision}"
+    assessment = analyze_low_level(service, document_id, transaction)
+    if not assessment.valid:
+        issue = assessment.issues[0]
+        raise InvalidOperationError(
+            f"{issue.field_path} ({issue.code}): {issue.message}; "
+            f"suggestions={issue.suggestions}"
         )
-
-    working = Document.model_validate(current.model_dump(mode="python"))
-    for index, operation in enumerate(transaction.operations):
-        try:
-            service._apply_operation(working, operation)
-        except InvalidOperationError as exc:
-            raise InvalidOperationError(
-                f"operations[{index}] ({operation.op}): {exc}"
-            ) from exc
-    working.revision = current.revision + 1
-    working = Document.model_validate(working.model_dump(mode="python"))
-    details = build_history_details(
-        current,
-        working,
-        transaction.operations,
-        action="preview",
-    )
-    return {
-        "valid": True,
-        "document_id": document_id,
-        "current_revision": current.revision,
-        "next_revision": current.revision + 1,
-        "operation_count": len(transaction.operations),
-        "resulting_element_count": len(working.elements),
-        "affected_element_ids": details["affected_element_ids"],
-        "added_element_ids": details["added_element_ids"],
-        "updated_element_ids": details["updated_element_ids"],
-        "deleted_element_ids": details["deleted_element_ids"],
-    }
+    return assessment.model_dump(mode="json")
 
 
 def _server_info(
@@ -130,6 +103,7 @@ def main() -> None:
 
     settings = Settings.from_env()
     service = build_service(settings)
+    semantic_compiler = SemanticTransactionCompiler(service)
     diagnostics_path = settings.diagnostics_path or settings.database_path.with_suffix(
         ".diagnostics.jsonl"
     )
@@ -199,28 +173,67 @@ def main() -> None:
 
     @mcp.tool()
     def get_transaction_schema() -> dict[str, Any]:
-        """Return the current structured transaction JSON Schema."""
+        """Return the low-level atomic transaction JSON Schema."""
         return TransactionRequest.model_json_schema()
+
+    @mcp.tool()
+    def get_agent_transaction_schema() -> dict[str, Any]:
+        """Return the safer semantic schema for replace, reconnect, connect and delete actions."""
+        return SemanticTransaction.model_json_schema()
+
+    @mcp.tool()
+    def analyze_transaction(
+        document_id: str,
+        transaction: TransactionRequest,
+    ) -> dict[str, Any]:
+        """Return structured validation issues and repair suggestions without writing."""
+        return analyze_low_level(service, document_id, transaction).model_dump(mode="json")
 
     @mcp.tool()
     def validate_transaction(
         document_id: str,
         transaction: TransactionRequest,
     ) -> dict[str, Any]:
-        """Validate a structured transaction against the latest document without writing it."""
+        """Validate a low-level transaction and raise on the first structured issue."""
         return _validate_transaction(service, document_id, transaction)
+
+    @mcp.tool()
+    def compile_agent_transaction(
+        document_id: str,
+        transaction: SemanticTransaction,
+    ) -> dict[str, Any]:
+        """Compile a safe semantic transaction to low-level operations without writing."""
+        return semantic_compiler.compile(document_id, transaction).model_dump(mode="json")
+
+    @mcp.tool()
+    def apply_agent_transaction(
+        document_id: str,
+        transaction: SemanticTransaction,
+    ) -> dict[str, Any]:
+        """Compile, validate and atomically apply a semantic transaction."""
+        compiled = semantic_compiler.compile(document_id, transaction)
+        if compiled.transaction is None:
+            return {
+                "applied": False,
+                "assessment": compiled.assessment.model_dump(mode="json"),
+            }
+        return {
+            "applied": True,
+            "assessment": compiled.assessment.model_dump(mode="json"),
+            "result": _apply_with_history(service, diagnostics, document_id, compiled.transaction),
+        }
 
     @mcp.tool()
     def apply_transaction_v2(
         document_id: str,
         transaction: TransactionRequest,
     ) -> dict:
-        """Apply a structured atomic P&ID-Agent transaction."""
+        """Apply a structured low-level atomic P&ID-Agent transaction."""
         return _apply_with_history(service, diagnostics, document_id, transaction)
 
     @mcp.tool()
     def apply_transaction(document_id: str, transaction_json: str) -> dict:
-        """Legacy string-based transaction tool. Prefer apply_transaction_v2."""
+        """Legacy string-based transaction tool. Prefer apply_agent_transaction or apply_transaction_v2."""
         transaction = TransactionRequest.model_validate(json.loads(transaction_json))
         return _apply_with_history(service, diagnostics, document_id, transaction)
 
