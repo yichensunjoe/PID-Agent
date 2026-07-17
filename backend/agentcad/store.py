@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from .models import Document, DocumentSummary
+from .models import Document, DocumentSummary, HistoryEntry
 
 
 class StoreRevisionConflictError(RuntimeError):
@@ -54,6 +54,25 @@ class SQLiteDocumentStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)"
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS document_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    operation_count INTEGER NOT NULL,
+                    FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_history_document_revision "
+                "ON document_history(document_id, revision DESC, id DESC)"
+            )
 
     @staticmethod
     def _encode(value: Any) -> str:
@@ -64,6 +83,7 @@ class SQLiteDocumentStore:
         stored: StoredDocument,
         *,
         expected_revision: int | None = None,
+        history: HistoryEntry | None = None,
     ) -> None:
         document = stored.document
         values = (
@@ -79,11 +99,7 @@ class SQLiteDocumentStore:
                 cursor = connection.execute(
                     """
                     UPDATE documents SET
-                        name = ?,
-                        revision = ?,
-                        data_json = ?,
-                        undo_json = ?,
-                        redo_json = ?,
+                        name = ?, revision = ?, data_json = ?, undo_json = ?, redo_json = ?,
                         updated_at = ?
                     WHERE id = ? AND revision = ?
                     """,
@@ -93,28 +109,44 @@ class SQLiteDocumentStore:
                     raise StoreRevisionConflictError(
                         f"document {document.id} no longer has revision {expected_revision}"
                     )
-                return
-
-            connection.execute(
-                """
-                INSERT INTO documents (
-                    id, name, revision, data_json, undo_json, redo_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    name=excluded.name,
-                    revision=excluded.revision,
-                    data_json=excluded.data_json,
-                    undo_json=excluded.undo_json,
-                    redo_json=excluded.redo_json,
-                    updated_at=excluded.updated_at
-                """,
-                (
-                    document.id,
-                    *values[:5],
-                    document.created_at.isoformat(),
-                    values[5],
-                ),
-            )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO documents (
+                        id, name, revision, data_json, undo_json, redo_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name=excluded.name,
+                        revision=excluded.revision,
+                        data_json=excluded.data_json,
+                        undo_json=excluded.undo_json,
+                        redo_json=excluded.redo_json,
+                        updated_at=excluded.updated_at
+                    """,
+                    (
+                        document.id,
+                        *values[:5],
+                        document.created_at.isoformat(),
+                        values[5],
+                    ),
+                )
+            if history is not None:
+                connection.execute(
+                    """
+                    INSERT INTO document_history (
+                        document_id, revision, timestamp, source, action, label, operation_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        history.document_id,
+                        history.revision,
+                        history.timestamp.isoformat(),
+                        history.source,
+                        history.action,
+                        history.label,
+                        history.operation_count,
+                    ),
+                )
 
     def get(self, document_id: str) -> StoredDocument | None:
         with self._lock, self._connect() as connection:
@@ -153,3 +185,18 @@ class SQLiteDocumentStore:
                 )
             )
         return summaries
+
+    def list_history(self, document_id: str, limit: int = 100) -> list[HistoryEntry]:
+        safe_limit = max(1, min(limit, 500))
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, document_id, revision, timestamp, source, action, label, operation_count
+                FROM document_history
+                WHERE document_id = ?
+                ORDER BY revision DESC, id DESC
+                LIMIT ?
+                """,
+                (document_id, safe_limit),
+            ).fetchall()
+        return [HistoryEntry.model_validate(dict(row)) for row in rows]
