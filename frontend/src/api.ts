@@ -145,6 +145,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(transaction),
     }),
+  applySemanticAgentPlan: (
+    id: string,
+    planId: string,
+    parentPlanId: string | null | undefined,
+    attempt: number,
+    transaction: AgentTransaction,
+  ) => request<{ document: Document; applied_operations: number; label: string }>(`/documents/${id}/agent/apply-v2`, {
+    method: "POST",
+    body: JSON.stringify({
+      plan_id: planId,
+      parent_plan_id: parentPlanId ?? null,
+      attempt,
+      transaction,
+    }),
+  }),
   undo: (id: string) => request<Document>(`/documents/${id}/undo`, { method: "POST" }),
   redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
