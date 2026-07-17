@@ -10,22 +10,28 @@ from pydantic import ValidationError
 from .models import (
     AddElementOperation,
     AddLayerOperation,
+    AddSystemOperation,
     ClearDocumentOperation,
     ConnectorElement,
     ConnectorEndpoint,
     CreateDocumentRequest,
     DeleteElementOperation,
     DeleteLayerOperation,
+    DeleteSystemOperation,
     Document,
     Element,
+    HistoryEntry,
+    HistorySource,
     JunctionElement,
     Layer,
     Point,
     SymbolElement,
+    SystemGroup,
     TransactionRequest,
     TransactionResult,
     UpdateElementOperation,
     UpdateLayerOperation,
+    UpdateSystemOperation,
 )
 from .store import SQLiteDocumentStore, StoredDocument, StoreRevisionConflictError
 from .symbols import SymbolRegistry
@@ -54,13 +60,23 @@ class DocumentService:
         self.symbols = symbols
         self.history_limit = history_limit
 
-    def create_document(self, request: CreateDocumentRequest) -> Document:
+    def create_document(self, request: CreateDocumentRequest, *, source: HistorySource = "web") -> Document:
         document = Document(
             name=request.name,
             canvas={"width": request.width, "height": request.height},
             metadata=request.metadata,
         )
-        self.store.save(StoredDocument(document=document, undo_stack=[], redo_stack=[]))
+        self.store.save(
+            StoredDocument(document=document, undo_stack=[], redo_stack=[]),
+            history=HistoryEntry(
+                document_id=document.id,
+                revision=document.revision,
+                source=source,
+                action="create",
+                label="Create document",
+                operation_count=0,
+            ),
+        )
         return document
 
     def list_documents(self):
@@ -69,12 +85,20 @@ class DocumentService:
     def get_document(self, document_id: str) -> Document:
         return self._get_stored(document_id).document
 
+    def get_history(self, document_id: str, limit: int = 100) -> list[HistoryEntry]:
+        self._get_stored(document_id)
+        return self.store.list_history(document_id, limit)
+
     def delete_document(self, document_id: str) -> None:
         if not self.store.delete(document_id):
             raise DocumentNotFoundError(document_id)
 
     def apply_transaction(
-        self, document_id: str, transaction: TransactionRequest
+        self,
+        document_id: str,
+        transaction: TransactionRequest,
+        *,
+        source: HistorySource | None = None,
     ) -> TransactionResult:
         stored = self._get_stored(document_id)
         current = stored.document
@@ -95,10 +119,19 @@ class DocumentService:
         working = Document.model_validate(working.model_dump(mode="python"))
 
         undo_stack = [*stored.undo_stack, current.model_dump(mode="json")][-self.history_limit :]
+        history_source = source or transaction.source or "web"
         try:
             self.store.save(
                 StoredDocument(document=working, undo_stack=undo_stack, redo_stack=[]),
                 expected_revision=current.revision,
+                history=HistoryEntry(
+                    document_id=document_id,
+                    revision=working.revision,
+                    source=history_source,
+                    action="transaction",
+                    label=transaction.label or "Apply transaction",
+                    operation_count=len(transaction.operations),
+                ),
             )
         except StoreRevisionConflictError as exc:
             raise RevisionConflictError(str(exc)) from exc
@@ -108,7 +141,7 @@ class DocumentService:
             label=transaction.label,
         )
 
-    def undo(self, document_id: str) -> Document:
+    def undo(self, document_id: str, *, source: HistorySource = "web") -> Document:
         stored = self._get_stored(document_id)
         if not stored.undo_stack:
             return stored.document
@@ -128,12 +161,20 @@ class DocumentService:
                     redo_stack=redo_stack,
                 ),
                 expected_revision=stored.document.revision,
+                history=HistoryEntry(
+                    document_id=document_id,
+                    revision=previous.revision,
+                    source=source,
+                    action="undo",
+                    label="Undo",
+                    operation_count=1,
+                ),
             )
         except StoreRevisionConflictError as exc:
             raise RevisionConflictError(str(exc)) from exc
         return previous
 
-    def redo(self, document_id: str) -> Document:
+    def redo(self, document_id: str, *, source: HistorySource = "web") -> Document:
         stored = self._get_stored(document_id)
         if not stored.redo_stack:
             return stored.document
@@ -153,6 +194,14 @@ class DocumentService:
                     redo_stack=stored.redo_stack[:-1],
                 ),
                 expected_revision=stored.document.revision,
+                history=HistoryEntry(
+                    document_id=document_id,
+                    revision=next_document.revision,
+                    source=source,
+                    action="redo",
+                    label="Redo",
+                    operation_count=1,
+                ),
             )
         except StoreRevisionConflictError as exc:
             raise RevisionConflictError(str(exc)) from exc
@@ -166,6 +215,7 @@ class DocumentService:
         connectors: list[dict[str, Any]] = []
         for element in document.elements:
             by_type[element.type] = by_type.get(element.type, 0) + 1
+            base = {"layer_id": element.layer_id, "system_id": element.system_id}
             if element.type == "symbol":
                 definition = self.symbols.get(element.symbol_key)
                 symbols.append(
@@ -176,6 +226,7 @@ class DocumentService:
                         "position": element.position.model_dump(),
                         "properties": element.properties,
                         "ports": [port.model_dump() for port in definition.ports],
+                        **base,
                     }
                 )
             elif element.type == "junction":
@@ -184,6 +235,7 @@ class DocumentService:
                         "id": element.id,
                         "position": element.position.model_dump(),
                         "label": element.label,
+                        **base,
                     }
                 )
             elif element.type == "connector":
@@ -191,10 +243,16 @@ class DocumentService:
                     {
                         "id": element.id,
                         "process_tag": element.process_tag,
+                        "medium": element.medium,
+                        "nominal_diameter": element.nominal_diameter,
+                        "flow_direction": element.flow_direction,
+                        "arrow_position": element.arrow_position,
+                        "crossing_style": element.crossing_style,
                         "routing": element.routing,
                         "points": [point.model_dump() for point in element.points],
                         "source": element.source.model_dump() if element.source else None,
                         "target": element.target.model_dump() if element.target else None,
+                        **base,
                     }
                 )
         return {
@@ -202,6 +260,8 @@ class DocumentService:
             "name": document.name,
             "revision": document.revision,
             "canvas": document.canvas.model_dump(),
+            "layers": [layer.model_dump() for layer in document.layers],
+            "systems": [system.model_dump() for system in document.systems],
             "element_count": len(document.elements),
             "elements_by_type": by_type,
             "symbols": symbols,
@@ -278,6 +338,38 @@ class DocumentService:
             document.layers = [layer for layer in document.layers if layer.id != operation.layer_id]
             return
 
+        if isinstance(operation, AddSystemOperation):
+            if any(system.id == operation.system.id for system in document.systems):
+                raise InvalidOperationError(f"system already exists: {operation.system.id}")
+            document.systems.append(operation.system)
+            return
+
+        if isinstance(operation, UpdateSystemOperation):
+            index = self._system_index(document, operation.system_id)
+            current = document.systems[index]
+            if "id" in operation.patch:
+                raise InvalidOperationError("system id is immutable")
+            try:
+                document.systems[index] = SystemGroup.model_validate(
+                    {**current.model_dump(mode="python"), **deepcopy(operation.patch)}
+                )
+            except ValidationError as exc:
+                raise InvalidOperationError(str(exc)) from exc
+            return
+
+        if isinstance(operation, DeleteSystemOperation):
+            if operation.system_id == "system_default":
+                raise InvalidOperationError("default system cannot be deleted")
+            self._system_index(document, operation.system_id)
+            self._system_index(document, operation.move_elements_to)
+            for element in document.elements:
+                if element.system_id == operation.system_id:
+                    element.system_id = operation.move_elements_to
+            document.systems = [
+                system for system in document.systems if system.id != operation.system_id
+            ]
+            return
+
         if isinstance(operation, ClearDocumentOperation):
             document.elements.clear()
             return
@@ -290,6 +382,8 @@ class DocumentService:
             raise InvalidOperationError(f"unknown layer: {element.layer_id}")
         if layer.locked:
             raise InvalidOperationError(f"layer is locked: {layer.id}")
+        if not any(item.id == element.system_id for item in document.systems):
+            raise InvalidOperationError(f"unknown system: {element.system_id}")
         if element.type == "symbol":
             try:
                 self.symbols.get(element.symbol_key)
@@ -470,6 +564,13 @@ class DocumentService:
             if layer.id == layer_id:
                 return index
         raise InvalidOperationError(f"layer not found: {layer_id}")
+
+    @staticmethod
+    def _system_index(document: Document, system_id: str) -> int:
+        for index, system in enumerate(document.systems):
+            if system.id == system_id:
+                return index
+        raise InvalidOperationError(f"system not found: {system_id}")
 
     @staticmethod
     def _connectable_by_id(
