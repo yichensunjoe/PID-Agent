@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from agentcad.config import Settings
-from agentcad.llm import OpenAICompatiblePlanner
+from agentcad.llm import LLMPlanValidationError, OpenAICompatiblePlanner
 from agentcad.main import create_app
 from agentcad.store import SQLiteDocumentStore
 
@@ -44,6 +44,7 @@ def test_history_contains_element_level_before_after_diff(tmp_path: Path):
         },
     )
     assert added.status_code == 200
+    assert added.headers["X-PID-Agent-Request-ID"]
 
     updated = client.post(
         f"/api/v2/documents/{document['id']}/transactions",
@@ -128,7 +129,7 @@ def test_diagnostic_export_redacts_api_key_and_prompt(tmp_path: Path, monkeypatc
         }
 
     def fake_plan(self, document_id, request):
-        raise RuntimeError(prompt)
+        raise LLMPlanValidationError(prompt)
 
     monkeypatch.setattr(OpenAICompatiblePlanner, "test_provider", fake_test_provider)
     client = make_client(tmp_path)
@@ -146,21 +147,20 @@ def test_diagnostic_export_redacts_api_key_and_prompt(tmp_path: Path, monkeypatc
     assert tested.status_code == 200
 
     monkeypatch.setattr(OpenAICompatiblePlanner, "plan", fake_plan)
-    try:
-        client.post(
-            f"/api/v2/documents/{document['id']}/agent/generate",
-            json={
-                "prompt": prompt,
-                "expected_revision": 0,
-                "provider": {
-                    "base_url": "https://provider.example/v1",
-                    "model": "example-model",
-                    "api_key": secret,
-                },
+    failed = client.post(
+        f"/api/v2/documents/{document['id']}/agent/generate",
+        json={
+            "prompt": prompt,
+            "expected_revision": 0,
+            "provider": {
+                "base_url": "https://provider.example/v1",
+                "model": "example-model",
+                "api_key": secret,
             },
-        )
-    except RuntimeError:
-        pass
+        },
+    )
+    assert failed.status_code == 422
+    assert failed.headers["X-PID-Agent-Request-ID"]
 
     exported = client.get(
         f"/api/v2/diagnostics/export?document_id={document['id']}&limit=1000"
