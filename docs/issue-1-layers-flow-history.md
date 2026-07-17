@@ -39,29 +39,15 @@ connector 新增：
 }
 ```
 
-属性检查器中可修改：
-
-- 介质；
-- 公称管径；
-- Source → Target、Target → Source 或无流向箭头；
-- 箭头位于起点附近、中部或终点附近；
-- 普通交叉或跨线桥；
-- 跨线桥半径。
-
-流向箭头沿实际折线路径计算方向。调整折线后，箭头仍附着在管线上。
+属性检查器中可修改介质、公称管径、流向与箭头位置，以及普通交叉或跨线桥。流向箭头沿实际折线路径计算方向，调整折线后仍附着在管线上。
 
 跨线桥只表示视觉上的“不连接”。真实分支和汇合仍必须使用 junction。共享同一 junction 或端口的管线依靠语义绑定表示连接，不依靠视觉交叉。
 
 ## Revision 历史
 
-SQLite 新增 `document_history` 表，文档写入与历史记录位于同一数据库事务中。历史字段包括：
+SQLite 新增 `document_history` 表，文档写入与历史记录位于同一数据库事务中。历史字段包括 revision、时间、来源、动作、transaction label 和 operation 数量。
 
-- revision；
-- 时间；
-- 来源：`web`、`llm`、`mcp` 或 `system`；
-- 动作：创建、事务、撤销或重做；
-- transaction label；
-- operation 数量。
+来源包括 `web`、`llm`、`mcp` 和 `system`；动作包括创建、事务、撤销和重做。
 
 REST：
 
