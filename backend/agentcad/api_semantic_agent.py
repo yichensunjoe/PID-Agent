@@ -8,15 +8,22 @@ from fastapi import APIRouter, HTTPException
 from .agent_semantic import SemanticTransactionCompiler, analyze_transaction
 from .agent_semantic_models import (
     AgentTransactionAssessment,
+    SemanticAgentApplyRequest,
     SemanticAgentPlanResult,
     SemanticAgentReplanRequest,
     SemanticTransaction,
 )
+from .api_v2 import _apply_transaction_with_details
 from .diagnostics import DiagnosticLogger
 from .llm import PlannerError
-from .models import AgentGenerateRequest, AgentPlan, TransactionRequest
+from .models import AgentGenerateRequest, AgentPlan, TransactionRequest, TransactionResult
 from .semantic_planner import SemanticAgentPlanner
-from .service import DocumentNotFoundError, DocumentService
+from .service import (
+    DocumentNotFoundError,
+    DocumentService,
+    InvalidOperationError,
+    RevisionConflictError,
+)
 
 
 def _provider_fields(request: AgentGenerateRequest | SemanticAgentReplanRequest) -> dict[str, Any]:
@@ -59,6 +66,14 @@ def _result(
         attempt=attempt,
         parent_plan_id=parent_plan_id,
     )
+
+
+def _raise_service_error(exc: Exception):
+    if isinstance(exc, DocumentNotFoundError):
+        raise HTTPException(status_code=404, detail=f"document not found: {exc.args[0]}") from exc
+    if isinstance(exc, RevisionConflictError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def create_semantic_agent_router(
@@ -202,5 +217,56 @@ def create_semantic_agent_router(
             attempt=request.attempt,
             parent_plan_id=request.failed_plan.plan_id,
         )
+
+    @router.post(
+        "/documents/{document_id}/agent/apply-v2",
+        response_model=TransactionResult,
+    )
+    def apply_semantic_plan(document_id: str, request: SemanticAgentApplyRequest):
+        started = perf_counter()
+        if diagnostics is not None:
+            diagnostics.emit(
+                "llm.semantic_apply.started",
+                document_id=document_id,
+                plan_id=request.plan_id,
+                parent_plan_id=request.parent_plan_id,
+                attempt=request.attempt,
+                expected_revision=request.transaction.expected_revision,
+                transaction_label=request.transaction.label,
+                compiled_operation_types=[item.op for item in request.transaction.operations],
+            )
+        try:
+            result = _apply_transaction_with_details(
+                service,
+                document_id,
+                request.transaction,
+                source="llm",
+                diagnostics=diagnostics,
+            )
+        except (DocumentNotFoundError, InvalidOperationError, RevisionConflictError) as exc:
+            if diagnostics is not None:
+                diagnostics.emit(
+                    "llm.semantic_apply.rejected",
+                    document_id=document_id,
+                    plan_id=request.plan_id,
+                    parent_plan_id=request.parent_plan_id,
+                    attempt=request.attempt,
+                    duration_ms=round((perf_counter() - started) * 1000, 2),
+                    error=exc,
+                )
+            return _raise_service_error(exc)
+        if diagnostics is not None:
+            diagnostics.emit(
+                "llm.semantic_apply.completed",
+                document_id=document_id,
+                plan_id=request.plan_id,
+                parent_plan_id=request.parent_plan_id,
+                attempt=request.attempt,
+                revision=result.document.revision,
+                duration_ms=round((perf_counter() - started) * 1000, 2),
+                transaction_label=request.transaction.label,
+                applied_operation_count=result.applied_operations,
+            )
+        return result
 
     return router
