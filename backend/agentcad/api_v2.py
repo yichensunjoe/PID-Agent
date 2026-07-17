@@ -24,6 +24,46 @@ from .service import (
 from .svg import render_svg
 
 
+def _validate_transaction(
+    service: DocumentService,
+    document_id: str,
+    request: TransactionRequest,
+) -> dict[str, Any]:
+    current = service.get_document(document_id)
+    if request.expected_revision is not None and request.expected_revision != current.revision:
+        raise RevisionConflictError(
+            f"expected revision {request.expected_revision}, current revision is {current.revision}"
+        )
+
+    working = Document.model_validate(current.model_dump(mode="python"))
+    affected_element_ids: list[str] = []
+    for index, operation in enumerate(request.operations):
+        try:
+            service._apply_operation(working, operation)
+        except InvalidOperationError as exc:
+            raise InvalidOperationError(
+                f"operations[{index}] ({operation.op}): {exc}"
+            ) from exc
+
+        element_id = getattr(operation, "element_id", None)
+        if element_id:
+            affected_element_ids.append(element_id)
+        element = getattr(operation, "element", None)
+        if element is not None:
+            affected_element_ids.append(element.id)
+
+    working = Document.model_validate(working.model_dump(mode="python"))
+    return {
+        "valid": True,
+        "document_id": document_id,
+        "current_revision": current.revision,
+        "next_revision": current.revision + 1,
+        "operation_count": len(request.operations),
+        "resulting_element_count": len(working.elements),
+        "affected_element_ids": list(dict.fromkeys(affected_element_ids)),
+    }
+
+
 def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner) -> APIRouter:
     router = APIRouter(prefix="/api/v2", tags=["P&ID-Agent v2"])
 
@@ -64,6 +104,10 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
     @router.post("/documents/{document_id}/transactions", response_model=TransactionResult)
     def apply_transaction(document_id: str, request: TransactionRequest):
         return _call(service.apply_transaction, document_id, request, source="web")
+
+    @router.post("/documents/{document_id}/transactions/validate")
+    def validate_transaction(document_id: str, request: TransactionRequest):
+        return _call(_validate_transaction, service, document_id, request)
 
     @router.post("/documents/{document_id}/undo", response_model=Document)
     def undo(document_id: str):
@@ -151,6 +195,7 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
         try:
             plan = planner.plan(document_id, request)
             if request.dry_run:
+                _validate_transaction(service, document_id, plan.transaction)
                 return AgentGenerateResult(plan=plan)
             result = service.apply_transaction(document_id, plan.transaction, source="llm")
             return AgentGenerateResult(plan=plan, document=result.document)
@@ -158,6 +203,13 @@ def create_v2_router(service: DocumentService, planner: OpenAICompatiblePlanner)
             raise HTTPException(status_code=exc.status_code, detail=exc.detail()) from exc
         except (DocumentNotFoundError, InvalidOperationError, RevisionConflictError) as exc:
             return _raise_service_error(exc)
+
+    @router.post(
+        "/documents/{document_id}/agent/apply",
+        response_model=TransactionResult,
+    )
+    def apply_agent_plan(document_id: str, request: TransactionRequest):
+        return _call(service.apply_transaction, document_id, request, source="llm")
 
     return router
 
