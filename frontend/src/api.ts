@@ -1,4 +1,4 @@
-import type { Document, DocumentSummary, Operation, SymbolDefinition } from "./types";
+import type { Document, DocumentSummary, HistoryEntry, Operation, SymbolDefinition } from "./types";
 
 const API_ROOT = import.meta.env.VITE_API_ROOT ?? "/api/v2";
 
@@ -20,11 +20,7 @@ export type ProviderTestResult = {
   message: string;
 };
 
-export type DocumentStatus = {
-  id: string;
-  revision: number;
-  updated_at: string;
-};
+export type DocumentStatus = { id: string; revision: number; updated_at: string };
 
 export class ApiError extends Error {
   status: number;
@@ -32,10 +28,7 @@ export class ApiError extends Error {
   retryable?: boolean;
   detail?: unknown;
 
-  constructor(
-    message: string,
-    options: { status: number; code?: string; retryable?: boolean; detail?: unknown },
-  ) {
+  constructor(message: string, options: { status: number; code?: string; retryable?: boolean; detail?: unknown }) {
     super(message);
     this.name = "ApiError";
     this.status = options.status;
@@ -66,10 +59,7 @@ function errorMessage(detail: unknown, fallback: string): string {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   if (!response.ok) {
     const fallback = `${response.status} ${response.statusText}`;
@@ -94,13 +84,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   listDocuments: () => request<DocumentSummary[]>("/documents"),
-  createDocument: (name: string) =>
-    request<Document>("/documents", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
+  createDocument: (name: string) => request<Document>("/documents", { method: "POST", body: JSON.stringify({ name }) }),
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getDocumentStatus: (id: string) => request<DocumentStatus>(`/documents/${id}/status`),
+  getHistory: (id: string, limit = 100) => request<HistoryEntry[]>(`/documents/${id}/history?limit=${limit}`),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
   transact: (id: string, revision: number, operations: Operation[], label: string) =>
     request<{ document: Document }>(`/documents/${id}/transactions`, {
@@ -110,36 +97,22 @@ export const api = {
   undo: (id: string) => request<Document>(`/documents/${id}/undo`, { method: "POST" }),
   redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
-  testProvider: (provider: ProviderConfig) =>
-    request<ProviderTestResult>("/agent/provider/test", {
+  testProvider: (provider: ProviderConfig) => request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider) }),
+  generate: (id: string, revision: number, prompt: string, context: string, provider?: ProviderConfig) =>
+    request<{ document: Document; plan: { explanation: string } }>(`/documents/${id}/agent/generate`, {
       method: "POST",
-      body: JSON.stringify(provider),
+      body: JSON.stringify({
+        prompt,
+        context,
+        expected_revision: revision,
+        provider: provider?.base_url || provider?.model || provider?.api_key || provider?.timeout_seconds
+          ? {
+              base_url: provider.base_url || undefined,
+              model: provider.model || undefined,
+              api_key: provider.api_key || undefined,
+              timeout_seconds: provider.timeout_seconds,
+            }
+          : undefined,
+      }),
     }),
-  generate: (
-    id: string,
-    revision: number,
-    prompt: string,
-    context: string,
-    provider?: ProviderConfig,
-  ) =>
-    request<{ document: Document; plan: { explanation: string } }>(
-      `/documents/${id}/agent/generate`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          prompt,
-          context,
-          expected_revision: revision,
-          provider:
-            provider?.base_url || provider?.model || provider?.api_key || provider?.timeout_seconds
-              ? {
-                  base_url: provider.base_url || undefined,
-                  model: provider.model || undefined,
-                  api_key: provider.api_key || undefined,
-                  timeout_seconds: provider.timeout_seconds,
-                }
-              : undefined,
-        }),
-      },
-    ),
 };
