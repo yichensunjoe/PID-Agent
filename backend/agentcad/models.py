@@ -35,6 +35,7 @@ class Style(StrictModel):
 class ElementBase(StrictModel):
     id: str = Field(default_factory=lambda: new_id("el"))
     layer_id: str = "layer_default"
+    system_id: str = "system_default"
     style: Style = Field(default_factory=Style)
     name: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -119,6 +120,12 @@ class ConnectorElement(ElementBase):
     target: ConnectorEndpoint | None = None
     routing: Literal["orthogonal", "direct", "manual"] = "orthogonal"
     process_tag: str = ""
+    medium: str = ""
+    nominal_diameter: str = ""
+    flow_direction: Literal["forward", "reverse", "none"] = "none"
+    arrow_position: Literal["start", "middle", "end"] = "middle"
+    crossing_style: Literal["none", "jump"] = "none"
+    jump_radius: float = Field(default=7, gt=1, le=50)
 
     @field_validator("points")
     @classmethod
@@ -148,6 +155,12 @@ class Layer(StrictModel):
     locked: bool = False
 
 
+class SystemGroup(StrictModel):
+    id: str = Field(default_factory=lambda: new_id("system"))
+    name: str
+    visible: bool = True
+
+
 class CanvasSettings(StrictModel):
     width: float = Field(default=1600, gt=0)
     height: float = Field(default=900, gt=0)
@@ -161,6 +174,9 @@ class Document(StrictModel):
     revision: int = Field(default=0, ge=0)
     canvas: CanvasSettings = Field(default_factory=CanvasSettings)
     layers: list[Layer] = Field(default_factory=lambda: [Layer(id="layer_default", name="Default")])
+    systems: list[SystemGroup] = Field(
+        default_factory=lambda: [SystemGroup(id="system_default", name="Default")]
+    )
     elements: list[Element] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
@@ -171,12 +187,18 @@ class Document(StrictModel):
         layer_ids = [layer.id for layer in self.layers]
         if len(layer_ids) != len(set(layer_ids)):
             raise ValueError("layer ids must be unique")
+        system_ids = [system.id for system in self.systems]
+        if len(system_ids) != len(set(system_ids)):
+            raise ValueError("system ids must be unique")
         element_ids = [element.id for element in self.elements]
         if len(element_ids) != len(set(element_ids)):
             raise ValueError("element ids must be unique")
-        missing = sorted({element.layer_id for element in self.elements} - set(layer_ids))
-        if missing:
-            raise ValueError(f"elements reference missing layers: {missing}")
+        missing_layers = sorted({element.layer_id for element in self.elements} - set(layer_ids))
+        if missing_layers:
+            raise ValueError(f"elements reference missing layers: {missing_layers}")
+        missing_systems = sorted({element.system_id for element in self.elements} - set(system_ids))
+        if missing_systems:
+            raise ValueError(f"elements reference missing systems: {missing_systems}")
 
         element_map = {element.id: element for element in self.elements}
         for element in self.elements:
@@ -243,6 +265,23 @@ class DeleteLayerOperation(StrictModel):
     move_elements_to: str = "layer_default"
 
 
+class AddSystemOperation(StrictModel):
+    op: Literal["add_system"] = "add_system"
+    system: SystemGroup
+
+
+class UpdateSystemOperation(StrictModel):
+    op: Literal["update_system"] = "update_system"
+    system_id: str
+    patch: dict[str, Any]
+
+
+class DeleteSystemOperation(StrictModel):
+    op: Literal["delete_system"] = "delete_system"
+    system_id: str
+    move_elements_to: str = "system_default"
+
+
 class ClearDocumentOperation(StrictModel):
     op: Literal["clear_document"] = "clear_document"
 
@@ -254,21 +293,39 @@ Operation = Annotated[
     | AddLayerOperation
     | UpdateLayerOperation
     | DeleteLayerOperation
+    | AddSystemOperation
+    | UpdateSystemOperation
+    | DeleteSystemOperation
     | ClearDocumentOperation,
     Field(discriminator="op"),
 ]
+
+
+HistorySource = Literal["web", "llm", "mcp", "system"]
 
 
 class TransactionRequest(StrictModel):
     operations: list[Operation] = Field(min_length=1, max_length=500)
     expected_revision: int | None = Field(default=None, ge=0)
     label: str = ""
+    source: HistorySource | None = None
 
 
 class TransactionResult(StrictModel):
     document: Document
     applied_operations: int
     label: str = ""
+
+
+class HistoryEntry(StrictModel):
+    id: int | None = None
+    document_id: str
+    revision: int = Field(ge=0)
+    timestamp: datetime = Field(default_factory=utc_now)
+    source: HistorySource = "system"
+    action: Literal["create", "transaction", "undo", "redo"] = "transaction"
+    label: str = ""
+    operation_count: int = Field(default=0, ge=0)
 
 
 class DocumentSummary(StrictModel):
