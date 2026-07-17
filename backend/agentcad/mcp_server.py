@@ -34,7 +34,19 @@ def _validate_transaction(
             f"{issue.field_path} ({issue.code}): {issue.message}; "
             f"suggestions={issue.suggestions}"
         )
-    return assessment.model_dump(mode="json")
+    return {
+        "valid": True,
+        "document_id": assessment.document_id,
+        "current_revision": assessment.current_revision,
+        "next_revision": assessment.next_revision,
+        "operation_count": assessment.compiled_operation_count,
+        "resulting_element_count": assessment.resulting_element_count,
+        "affected_element_ids": assessment.affected_element_ids,
+        "added_element_ids": assessment.added_element_ids,
+        "updated_element_ids": assessment.updated_element_ids,
+        "deleted_element_ids": assessment.deleted_element_ids,
+        "issues": [],
+    }
 
 
 def _server_info(
