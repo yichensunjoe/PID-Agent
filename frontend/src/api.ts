@@ -37,14 +37,25 @@ export class ApiError extends Error {
   code?: string;
   retryable?: boolean;
   detail?: unknown;
+  requestId?: string;
 
-  constructor(message: string, options: { status: number; code?: string; retryable?: boolean; detail?: unknown }) {
-    super(message);
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      code?: string;
+      retryable?: boolean;
+      detail?: unknown;
+      requestId?: string;
+    },
+  ) {
+    super(options.requestId ? `${message}（request ${options.requestId}）` : message);
     this.name = "ApiError";
     this.status = options.status;
     this.code = options.code;
     this.retryable = options.retryable;
     this.detail = options.detail;
+    this.requestId = options.requestId;
   }
 }
 
@@ -71,6 +82,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
+  const requestId = response.headers.get("X-PID-Agent-Request-ID") || undefined;
   if (!response.ok) {
     const fallback = `${response.status} ${response.statusText}`;
     try {
@@ -82,10 +94,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         code: typeof structured?.error === "string" ? structured.error : undefined,
         retryable: typeof structured?.retryable === "boolean" ? structured.retryable : undefined,
         detail,
+        requestId,
       });
     } catch (error) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(fallback, { status: response.status });
+      throw new ApiError(fallback, { status: response.status, requestId });
     }
   }
   if (response.status === 204) return undefined as T;
