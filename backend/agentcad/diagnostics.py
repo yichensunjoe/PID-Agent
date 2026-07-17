@@ -11,7 +11,14 @@ from uuid import uuid4
 
 
 _SECRET_KEY_PARTS = ("api_key", "apikey", "authorization", "secret", "token", "password")
-_TEXT_KEY_PARTS = ("prompt", "context")
+_TEXT_KEYS = {"prompt", "context", "user_prompt", "system_prompt", "messages"}
+_SAFE_METADATA_KEYS = {
+    "api_key_present",
+    "credential_present",
+    "prompt_chars",
+    "context_chars",
+    "message_chars",
+}
 _SECRET_PATTERNS = (
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
@@ -31,9 +38,11 @@ def _redact_string(value: str) -> str:
 
 def _redact(value: Any, key: str = "") -> Any:
     lowered = key.lower()
+    if lowered in _SAFE_METADATA_KEYS:
+        return value
     if any(part in lowered for part in _SECRET_KEY_PARTS):
         return "<redacted>"
-    if any(part in lowered for part in _TEXT_KEY_PARTS):
+    if lowered in _TEXT_KEYS or lowered.endswith("_prompt") or lowered.endswith("_context"):
         if value is None:
             return None
         return f"<redacted:{len(str(value))} chars>"
