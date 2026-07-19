@@ -3,33 +3,28 @@
   "assessment": {
     "valid": false,
     "stage": "compile",
-    "document_id": "doc_bab8115698f8",
+    "document_id": "doc_31749a8ad24f",
     "current_revision": 0,
     "next_revision": 1,
     "semantic_operation_count": 22,
-    "compiled_operation_count": 7,
-    "resulting_element_count": 7,
+    "compiled_operation_count": 43,
+    "resulting_element_count": 35,
     "affected_element_ids": [],
     "added_element_ids": [],
     "updated_element_ids": [],
     "deleted_element_ids": [],
     "issues": [
       {
-        "operation_index": 7,
+        "operation_index": 15,
         "operation": "connect_ports",
-        "code": "unknown_port",
-        "message": "unknown port 'out' for symbol waste_in",
-        "field_path": "operations[7].source_port_id",
-        "element_id": "waste_in",
-        "connector_id": "pipe_inlet",
-        "available_values": {
-          "port_ids": [
-            "left",
-            "right"
-          ]
-        },
+        "code": "non_orthogonal_route",
+        "message": "manual connector segments must remain orthogonal",
+        "field_path": "operations[15]",
+        "element_id": null,
+        "connector_id": "air_inlet_pipe",
+        "available_values": {},
         "suggestions": [
-          "调用 list_symbols 或读取 scene summary 后选择真实端口。"
+          "使用 routing='orthogonal'，或提供只含水平/垂直段的 manual points。"
         ]
       }
     ]

@@ -51,7 +51,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ConnectPortsOperation(
             connector_id="pipe_inlet",
             source_element_id="waste_in",
-            source_port_id="out",
+            source_port_id="right",
             target_element_id="v101",
             target_port_id="in",
             medium="waste_gas",
@@ -79,7 +79,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_element_id="v102",
             source_port_id="out",
             target_element_id="waste_out",
-            target_port_id="in",
+            target_port_id="left",
             medium="waste_gas",
         ),
         InstrumentTapOperation(
@@ -133,7 +133,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ConnectPortsOperation(
             connector_id="air_inlet_pipe",
             source_element_id="air_in",
-            source_port_id="out",
+            source_port_id="left",
             target_element_id="e101",
             target_port_id="shell_out",
             waypoints=[Point(x=1080, y=540), Point(x=760, y=540)],
@@ -144,7 +144,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_element_id="e101",
             source_port_id="shell_in",
             target_element_id="air_out",
-            target_port_id="in",
+            target_port_id="right",
             waypoints=[
                 Point(x=680, y=340),
                 Point(x=680, y=540),

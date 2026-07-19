@@ -200,8 +200,8 @@ def _complex_diagram_check(document, symbols: SymbolRegistry) -> bool:
         and connector.target.element_id
     }
     utility_pairs = {
-        ("air_in", "out", "e101", "shell_out"),
-        ("e101", "shell_in", "air_out", "in"),
+        ("air_in", "left", "e101", "shell_out"),
+        ("e101", "shell_in", "air_out", "right"),
     }
     if not utility_pairs.issubset(actual_pairs):
         return False
