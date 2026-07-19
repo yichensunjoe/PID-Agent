@@ -27,10 +27,12 @@ from .service import DocumentService
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
 
+MINIMUM_ACCEPTANCE_REPETITIONS = 3
+
 
 class ModelMatrixRequest(StrictModel):
     provider: ProviderConfig
-    repetitions: int = Field(default=1, ge=1, le=5)
+    repetitions: int = Field(default=3, ge=1, le=5)
     max_replans: int = Field(default=3, ge=0, le=5)
 
 
@@ -48,6 +50,7 @@ class ModelMatrixReport(StrictModel):
     provider_base_url: str
     provider_model: str
     repetitions: int
+    minimum_acceptance_repetitions: int = MINIMUM_ACCEPTANCE_REPETITIONS
     max_replans: int
     total_cases: int
     passed_cases: int
@@ -101,7 +104,7 @@ def _seed(service: DocumentService, symbols: SymbolRegistry):
     target_point = _port_point(target, primary, "in")
     connector = ConnectorElement(
         id="pipe_main",
-        points=[source_point, Point(x=300, y=source_point.y), Point(x=300, y=target_point.y), target_point],
+        points=[source_point, target_point],
         source=ConnectorEndpoint(element_id="source", port_id="out", point=source_point),
         target=ConnectorEndpoint(element_id="target", port_id="in", point=target_point),
         routing="manual",
@@ -131,31 +134,67 @@ def _scenario(name: str, primary, replacement) -> tuple[str, Any]:
             f"新增一个 {primary.key}，element id 必须为 added_valve，放在 (850,120)，"
             "并新增 connector id added_pipe，从 target.out 连接到 added_valve.in。不要修改其他元素。"
         )
+
         def check(document):
             added = next((item for item in document.elements if item.id == "added_valve"), None)
             pipe = next((item for item in document.elements if item.id == "added_pipe"), None)
-            return bool(added and added.type == "symbol" and pipe and pipe.type == "connector" and pipe.source and pipe.target and pipe.source.element_id == "target" and pipe.source.port_id == "out" and pipe.target.element_id == "added_valve" and pipe.target.port_id == "in")
+            return bool(
+                added
+                and added.type == "symbol"
+                and pipe
+                and pipe.type == "connector"
+                and pipe.source
+                and pipe.target
+                and pipe.source.element_id == "target"
+                and pipe.source.port_id == "out"
+                and pipe.target.element_id == "added_valve"
+                and pipe.target.port_id == "in"
+            )
+
         return prompt, check
     if name == "move":
         prompt = "把 target 设备向右移动 40 个单位，只修改 target 以及保持其相连管线端口绑定所需的内容。"
-        return prompt, lambda document: (next(item for item in document.elements if item.id == "target").position.x >= 399)
+        return prompt, lambda document: (
+            next(item for item in document.elements if item.id == "target").position.x >= 399
+        )
     if name == "replace":
-        prompt = f"把 target 替换为 {replacement.key}，保持 element id、位号和 pipe_main 的 connector id 与端口连接。"
-        return prompt, lambda document: (next(item for item in document.elements if item.id == "target").symbol_key == replacement.key)
+        prompt = (
+            f"把 target 替换为 {replacement.key}，保持 element id、位号和 pipe_main 的 "
+            "connector id 与端口连接。"
+        )
+        return prompt, lambda document: (
+            next(item for item in document.elements if item.id == "target").symbol_key
+            == replacement.key
+        )
     if name == "reconnect":
         prompt = "把 pipe_main 的 target 端从 target.in 重新连接到 spare.in，保持 connector id 不变。"
+
         def check(document):
             pipe = next(item for item in document.elements if item.id == "pipe_main")
-            return bool(pipe.type == "connector" and pipe.target and pipe.target.element_id == "spare" and pipe.target.port_id == "in")
+            return bool(
+                pipe.type == "connector"
+                and pipe.target
+                and pipe.target.element_id == "spare"
+                and pipe.target.port_id == "in"
+            )
+
         return prompt, check
     prompt = "删除 target，并级联删除与 target 连接的管线。不要删除 source 或 spare。"
+
     def check_delete(document):
         ids = {item.id for item in document.elements}
         return "target" not in ids and "pipe_main" not in ids and {"source", "spare"}.issubset(ids)
+
     return prompt, check_delete
 
 
-def _run_case(provider: ProviderConfig, scenario: str, repetition: int, max_replans: int, symbols: SymbolRegistry) -> ModelMatrixCaseResult:
+def _run_case(
+    provider: ProviderConfig,
+    scenario: str,
+    repetition: int,
+    max_replans: int,
+    symbols: SymbolRegistry,
+) -> ModelMatrixCaseResult:
     started = perf_counter()
     try:
         with TemporaryDirectory(prefix="pid-agent-matrix-") as directory:
@@ -164,7 +203,12 @@ def _run_case(provider: ProviderConfig, scenario: str, repetition: int, max_repl
             planner = SemanticAgentPlanner(service, symbols)
             compiler = SemanticTransactionCompiler(service)
             prompt, check = _scenario(scenario, primary, replacement)
-            request = AgentGenerateRequest(prompt=prompt, context="Model acceptance matrix. Preserve unrelated elements.", provider=provider, expected_revision=document.revision)
+            request = AgentGenerateRequest(
+                prompt=prompt,
+                context="Model acceptance matrix. Preserve unrelated elements.",
+                provider=provider,
+                expected_revision=document.revision,
+            )
             plan = planner.plan(document.id, request)
             compiled = compiler.compile(document.id, plan.transaction)
             attempts = 0
@@ -202,7 +246,11 @@ def _run_case(provider: ProviderConfig, scenario: str, repetition: int, max_repl
                 attempts=attempts,
                 duration_ms=round((perf_counter() - started) * 1000, 2),
                 issue_codes=issue_codes,
-                message="topology assertion passed" if passed else "transaction applied but final topology assertion failed",
+                message=(
+                    "topology assertion passed"
+                    if passed
+                    else "transaction applied but final topology assertion failed"
+                ),
             )
     except PlannerError as exc:
         return ModelMatrixCaseResult(
@@ -238,6 +286,12 @@ def run_model_matrix(request: ModelMatrixRequest, symbols: SymbolRegistry) -> Mo
     repair_candidates = sum(case.attempts > 0 for case in cases)
     pass_rate = passed / completed if completed else 0.0
     convergence_rate = repaired_passes / repair_candidates if repair_candidates else 1.0
+    accepted = (
+        request.repetitions >= MINIMUM_ACCEPTANCE_REPETITIONS
+        and blocked == 0
+        and failed == 0
+        and passed == len(cases)
+    )
     return ModelMatrixReport(
         provider_base_url=provider.base_url or "",
         provider_model=provider.model or "",
@@ -249,6 +303,6 @@ def run_model_matrix(request: ModelMatrixRequest, symbols: SymbolRegistry) -> Mo
         blocked_cases=blocked,
         pass_rate=round(pass_rate, 4),
         convergence_rate=round(convergence_rate, 4),
-        accepted=blocked == 0 and failed == 0 and passed == len(cases),
+        accepted=accepted,
         cases=cases,
     )
