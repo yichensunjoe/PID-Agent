@@ -7,7 +7,7 @@ from typing import Any
 from . import __version__
 from .agent_semantic import SemanticTransactionCompiler, analyze_transaction as analyze_low_level
 from .agent_semantic_models import SemanticTransaction
-from .auto_layout import AutoLayoutEngine
+from .auto_layout_engine import AutoLayoutEngine
 from .config import Settings
 from .diagnostics import DiagnosticLogger
 from .history_diff import build_history_details
@@ -113,7 +113,7 @@ def main() -> None:
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
-        raise SystemExit("Install MCP support with: pip install 'pid-agent[mcp]'") from exc
+        raise SystemExit("Install MCP support with: pip install 'pid-agent[mcp]'" ) from exc
 
     settings = Settings.from_env()
     service = build_service(settings)
@@ -141,10 +141,7 @@ def main() -> None:
     @mcp.tool()
     def get_diagnostics(limit: int = 200) -> dict[str, Any]:
         """Read recent redacted diagnostic events without exposing API keys or full prompts."""
-        return {
-            "log": diagnostics.info(),
-            "events": diagnostics.recent(limit),
-        }
+        return {"log": diagnostics.info(), "events": diagnostics.recent(limit)}
 
     @mcp.tool()
     def list_documents() -> list[dict]:
@@ -228,10 +225,7 @@ def main() -> None:
         """Compile, validate and atomically apply a semantic transaction."""
         compiled = semantic_compiler.compile(document_id, transaction)
         if compiled.transaction is None:
-            return {
-                "applied": False,
-                "assessment": compiled.assessment.model_dump(mode="json"),
-            }
+            return {"applied": False, "assessment": compiled.assessment.model_dump(mode="json")}
         return {
             "applied": True,
             "assessment": compiled.assessment.model_dump(mode="json"),
@@ -239,10 +233,7 @@ def main() -> None:
         }
 
     @mcp.tool()
-    def preview_auto_layout(
-        document_id: str,
-        options: AutoLayoutRequest,
-    ) -> dict[str, Any]:
+    def preview_auto_layout(document_id: str, options: AutoLayoutRequest) -> dict[str, Any]:
         """Preview topology-aware equipment layout and obstacle-avoiding pipe routing without writing."""
         preview = layout_engine.preview(document_id, options)
         diagnostics.emit(
@@ -255,27 +246,17 @@ def main() -> None:
             rerouted_connector_ids=preview.rerouted_connector_ids,
             overlaps_before=preview.metrics.overlaps_before,
             overlaps_after=preview.metrics.overlaps_after,
-            pipe_obstacle_intersections_before=(
-                preview.metrics.pipe_obstacle_intersections_before
-            ),
-            pipe_obstacle_intersections_after=(
-                preview.metrics.pipe_obstacle_intersections_after
-            ),
+            pipe_obstacle_intersections_before=preview.metrics.pipe_obstacle_intersections_before,
+            pipe_obstacle_intersections_after=preview.metrics.pipe_obstacle_intersections_after,
         )
         return preview.model_dump(mode="json")
 
     @mcp.tool()
-    def apply_auto_layout(
-        document_id: str,
-        options: AutoLayoutRequest,
-    ) -> dict[str, Any]:
+    def apply_auto_layout(document_id: str, options: AutoLayoutRequest) -> dict[str, Any]:
         """Preview and atomically apply topology-aware layout when the generated transaction is non-empty."""
         preview = layout_engine.preview(document_id, options)
         if preview.transaction is None:
-            return {
-                "applied": False,
-                "preview": preview.model_dump(mode="json"),
-            }
+            return {"applied": False, "preview": preview.model_dump(mode="json")}
         return {
             "applied": True,
             "preview": preview.model_dump(mode="json"),
