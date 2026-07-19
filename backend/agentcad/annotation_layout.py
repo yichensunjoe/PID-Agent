@@ -150,6 +150,21 @@ def _annotations(document: Document, registry: SymbolRegistry) -> list[TextEleme
     return result
 
 
+def _annotation_parent_id(text: TextElement) -> str | None:
+    parent_id = text.metadata.get("parent_element_id")
+    return parent_id if isinstance(parent_id, str) and parent_id else None
+
+
+def _annotations_are_duplicates(left: TextElement, right: TextElement) -> bool:
+    if left.metadata.get("keep_duplicate") is True or right.metadata.get("keep_duplicate") is True:
+        return False
+    if normalize_annotation_text(left.text) != normalize_annotation_text(right.text):
+        return False
+    left_parent = _annotation_parent_id(left)
+    right_parent = _annotation_parent_id(right)
+    return not (left_parent and right_parent and left_parent != right_parent)
+
+
 def measure_annotation_quality(document: Document, registry: SymbolRegistry) -> AnnotationQuality:
     annotations = _annotations(document, registry)
     text_rects = [(text, text_bounds(text)) for text in annotations if text.text.strip()]
@@ -160,11 +175,8 @@ def measure_annotation_quality(document: Document, registry: SymbolRegistry) -> 
 
     duplicates = 0
     for index, (left, left_rect) in enumerate(text_rects):
-        left_value = normalize_annotation_text(left.text)
-        if not left_value:
-            continue
         for right, right_rect in text_rects[index + 1 :]:
-            if left_value != normalize_annotation_text(right.text):
+            if not _annotations_are_duplicates(left, right):
                 continue
             if hypot(
                 left_rect.center.x - right_rect.center.x,
@@ -180,10 +192,9 @@ def measure_annotation_quality(document: Document, registry: SymbolRegistry) -> 
     )
     text_symbol = sum(
         1
-        for text, text_rect in text_rects
+        for _, text_rect in text_rects
         for symbol_rect in symbol_rects
-        if text.metadata.get("parent_element_id") != symbol_rect.element_id
-        and _rects_overlap(text_rect.expanded(2), symbol_rect.expanded(2))
+        if _rects_overlap(text_rect.expanded(2), symbol_rect.expanded(2))
     )
     text_connector = sum(
         1
@@ -367,7 +378,7 @@ def polish_full_diagram_transaction(
         operations.extend([update, add])
         generated_text_ids.append(text.id)
 
-    # Keep one nearby instance of the same normalized annotation text.
+    # Keep one nearby instance of the same annotation for the same subject.
     kept: list[TextElement] = []
     texts = sorted(
         (element for element in list(working.elements) if element.type == "text" and element.text.strip()),
@@ -377,16 +388,12 @@ def polish_full_diagram_transaction(
         ),
     )
     for text in texts:
-        if text.metadata.get("keep_duplicate") is True:
-            kept.append(text)
-            continue
-        value = normalize_annotation_text(text.text)
         rect = text_bounds(text)
         duplicate = next(
             (
                 other
                 for other in kept
-                if normalize_annotation_text(other.text) == value
+                if _annotations_are_duplicates(other, text)
                 and hypot(
                     text_bounds(other).center.x - rect.center.x,
                     text_bounds(other).center.y - rect.center.y,
