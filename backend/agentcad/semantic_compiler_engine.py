@@ -41,7 +41,9 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
                 polished,
                 semantic_operation_count=len(transaction.operations),
             )
-        except (KeyError, TypeError, ValueError):
+        except Exception:
+            # Annotation layout is best-effort. The already validated semantic
+            # transaction remains the source of truth if polishing cannot finish.
             return compiled
         if not assessment.valid:
             return compiled
