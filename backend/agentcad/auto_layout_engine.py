@@ -59,11 +59,12 @@ class AutoLayoutEngine(BaseAutoLayoutEngine):
                     indegree[target] += 1
                     has_directed_edge = True
 
-        coordinate = lambda element_id: (
-            nodes[element_id].x if direction == "horizontal" else nodes[element_id].y,
-            nodes[element_id].y if direction == "horizontal" else nodes[element_id].x,
-            element_id,
-        )
+        def coordinate(element_id):
+            return (
+                nodes[element_id].x if direction == "horizontal" else nodes[element_id].y,
+                nodes[element_id].y if direction == "horizontal" else nodes[element_id].x,
+                element_id,
+            )
         if not has_directed_edge:
             ordered = sorted(component, key=coordinate)
             return {element_id: index for index, element_id in enumerate(ordered)}

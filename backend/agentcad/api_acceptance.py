@@ -10,7 +10,6 @@ from .llm import PlannerError
 from .model_acceptance import ModelMatrixReport, ModelMatrixRequest, run_model_matrix
 from .symbols import SymbolRegistry
 
-
 ACCEPTANCE_UI = """<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>P&ID-Agent 模型矩阵</title><style>
