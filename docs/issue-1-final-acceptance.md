@@ -83,22 +83,26 @@ API Key 只存在页面内存和当前请求中，不使用 localStorage、sessi
 Agnes 示例：
 
 ```bash
-read -s AGNES_API_KEY
-export AGNES_API_KEY
+read -s PID_AGENT_MATRIX_API_KEY
+export PID_AGENT_MATRIX_API_KEY
+echo
 
 pid-agent model-matrix \
   --base-url https://apihub.agnes-ai.com/v1 \
   --model agnes-2.0-flash \
-  --api-key "$AGNES_API_KEY" \
   --timeout 180 \
   --repetitions 3 \
   --max-replans 3 \
   --output reports/agnes-2.0-flash.json
 ```
 
+`pid-agent model-matrix` 默认从 `PID_AGENT_MATRIX_API_KEY` 读取 Key。也可使用 `--api-key-env OTHER_ENV_NAME` 指定其他环境变量。`--api-key` 仅用于兼容，不建议用于正式验收，因为命令参数可能进入 shell 历史或进程列表。
+
 Ollama 示例：
 
 ```bash
+unset PID_AGENT_MATRIX_API_KEY
+
 pid-agent model-matrix \
   --base-url http://127.0.0.1:11434/v1 \
   --model qwen3.6:35b \
