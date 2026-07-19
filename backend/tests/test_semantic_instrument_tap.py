@@ -18,7 +18,7 @@ from agentcad.models import (
     SymbolElement,
     TransactionRequest,
 )
-from agentcad.semantic_compiler import SemanticTransactionCompiler
+from agentcad.semantic_compiler_engine import SemanticTransactionCompiler
 from agentcad.service import DocumentService
 from agentcad.store import SQLiteDocumentStore
 from agentcad.symbols import SymbolRegistry

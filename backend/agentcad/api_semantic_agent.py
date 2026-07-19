@@ -17,7 +17,7 @@ from .api_v2 import _apply_transaction_with_details
 from .diagnostics import DiagnosticLogger
 from .llm import PlannerError
 from .models import AgentGenerateRequest, AgentPlan, TransactionRequest, TransactionResult
-from .semantic_compiler import SemanticTransactionCompiler
+from .semantic_compiler_engine import SemanticTransactionCompiler
 from .semantic_planner import SemanticAgentPlanner
 from .service import (
     DocumentNotFoundError,

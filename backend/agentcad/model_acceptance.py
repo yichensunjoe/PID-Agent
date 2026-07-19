@@ -21,7 +21,7 @@ from .models import (
     SymbolElement,
     TransactionRequest,
 )
-from .semantic_compiler import SemanticTransactionCompiler
+from .semantic_compiler_engine import SemanticTransactionCompiler
 from .semantic_planner import SemanticAgentPlanner
 from .service import DocumentService
 from .store import SQLiteDocumentStore
