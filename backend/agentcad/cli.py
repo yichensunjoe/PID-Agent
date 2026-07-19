@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .models import TransactionRequest
+from .models import ProviderConfig, TransactionRequest
 
 
 def main() -> None:
@@ -18,6 +18,18 @@ def main() -> None:
     subparsers.add_parser("mcp", help="Run the MCP server over stdio")
     subparsers.add_parser("transaction-schema", help="Print the transaction JSON schema")
 
+    matrix_parser = subparsers.add_parser(
+        "model-matrix",
+        help="Run the semantic acceptance matrix against an OpenAI-compatible provider",
+    )
+    matrix_parser.add_argument("--base-url", required=True)
+    matrix_parser.add_argument("--model", required=True)
+    matrix_parser.add_argument("--api-key", default="")
+    matrix_parser.add_argument("--timeout", type=float, default=120)
+    matrix_parser.add_argument("--repetitions", type=int, default=1)
+    matrix_parser.add_argument("--max-replans", type=int, default=3)
+    matrix_parser.add_argument("--output", default="", help="Optional JSON report path")
+
     args = parser.parse_args()
     if args.command == "serve":
         import uvicorn
@@ -27,6 +39,28 @@ def main() -> None:
         from .mcp_server import main as mcp_main
 
         mcp_main()
+    elif args.command == "model-matrix":
+        from .model_acceptance import ModelMatrixRequest, run_model_matrix
+        from .symbols import SymbolRegistry
+
+        request = ModelMatrixRequest(
+            provider=ProviderConfig(
+                base_url=args.base_url,
+                model=args.model,
+                api_key=args.api_key or None,
+                timeout_seconds=args.timeout,
+            ),
+            repetitions=args.repetitions,
+            max_replans=args.max_replans,
+        )
+        report = run_model_matrix(request, SymbolRegistry())
+        payload = json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2)
+        if args.output:
+            from pathlib import Path
+
+            Path(args.output).write_text(payload + "\n", encoding="utf-8")
+        print(payload)
+        raise SystemExit(0 if report.accepted else 2)
     else:
         print(json.dumps(TransactionRequest.model_json_schema(), ensure_ascii=False, indent=2))
 
