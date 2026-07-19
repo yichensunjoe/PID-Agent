@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import defaultdict, deque
 
 from .auto_layout import AutoLayoutEngine as BaseAutoLayoutEngine
-from .layout_models import AutoLayoutRequest
 from .models import Document, Operation, Point, UpdateElementOperation
 
 
