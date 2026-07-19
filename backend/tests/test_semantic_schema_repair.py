@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from agentcad.models import Document, ProviderConfig
+from agentcad.models import Document, Point, ProviderConfig, TextElement
 from agentcad.semantic_planner import (
     SemanticAgentPlanner,
     SemanticPlanValidationError,
@@ -17,6 +17,19 @@ class _Symbols:
 
 def _planner() -> SemanticAgentPlanner:
     return SemanticAgentPlanner(service=object(), symbols=_Symbols())  # type: ignore[arg-type]
+
+
+def _local_document() -> Document:
+    return Document(
+        id="doc_test",
+        elements=[
+            TextElement(
+                id="existing_note",
+                position=Point(x=20, y=20),
+                text="Existing drawing",
+            )
+        ],
+    )
 
 
 def _connector_operation(index: int, junction_id: str, *, port_id: str | None = None):
@@ -38,6 +51,20 @@ def _connector_operation(index: int, junction_id: str, *, port_id: str | None = 
             "source": source,
             "target": {"point": {"x": 100 + index * 20, "y": 300}},
             "routing": "orthogonal",
+        },
+    }
+
+
+def _free_connector_operation():
+    return {
+        "op": "add_element",
+        "element": {
+            "id": "raw_pipe",
+            "type": "connector",
+            "points": [{"x": 0, "y": 0}, {"x": 100, "y": 0}],
+            "source": {"point": {"x": 0, "y": 0}},
+            "target": {"point": {"x": 100, "y": 0}},
+            "routing": "manual",
         },
     }
 
@@ -82,7 +109,7 @@ def test_complex_multi_junction_plan_is_normalized_without_model_repair(monkeypa
         "prompt",
         repair=False,
         document_id="doc_test",
-        document=Document(id="doc_test"),
+        document=_local_document(),
     )
 
     assert len(calls) == 1
@@ -126,7 +153,7 @@ def test_schema_validation_failure_is_repaired_inside_planner(monkeypatch):
         "prompt",
         repair=False,
         document_id="doc_test",
-        document=Document(id="doc_test"),
+        document=_local_document(),
     )
 
     assert len(calls) == 2
@@ -134,6 +161,56 @@ def test_schema_validation_failure_is_repaired_inside_planner(monkeypatch):
     connector = plan.transaction.operations[0].element
     assert connector.type == "connector"
     assert connector.source and connector.source.port_id == "out"
+
+
+def test_empty_document_raw_connector_is_repaired_to_full_diagram_operation(monkeypatch):
+    planner = _planner()
+    invalid = {
+        "explanation": "Draw directly",
+        "transaction": {
+            "expected_revision": 0,
+            "label": "Raw connector",
+            "operations": [_free_connector_operation()],
+        },
+    }
+    repaired = {
+        "explanation": "Use a supported full-diagram element",
+        "transaction": {
+            "expected_revision": 0,
+            "label": "Add note",
+            "operations": [
+                {
+                    "op": "add_element",
+                    "element": {
+                        "id": "note",
+                        "type": "text",
+                        "position": {"x": 20, "y": 20},
+                        "text": "Full diagram",
+                    },
+                }
+            ],
+        },
+    }
+    responses = [invalid, repaired]
+    calls = []
+
+    def fake_request(provider, **kwargs):
+        calls.append(kwargs)
+        return responses.pop(0)
+
+    monkeypatch.setattr(planner, "_request_model_json", fake_request)
+    plan = planner._request_plan(
+        ProviderConfig(base_url="http://provider.test/v1", model="test-model"),
+        "prompt",
+        repair=False,
+        document_id="doc_empty",
+        document=Document(id="doc_empty"),
+    )
+
+    assert len(calls) == 2
+    assert "full-diagram" in calls[0]["system_prompt"]
+    assert plan.transaction.operations[0].op == "add_element"
+    assert plan.transaction.operations[0].element.type == "text"
 
 
 def test_exhausted_schema_repairs_return_compact_structured_errors(monkeypatch):
@@ -158,7 +235,7 @@ def test_exhausted_schema_repairs_return_compact_structured_errors(monkeypatch):
             "prompt",
             repair=False,
             document_id="doc_test",
-            document=Document(id="doc_test"),
+            document=_local_document(),
         )
 
     detail = caught.value.detail()
