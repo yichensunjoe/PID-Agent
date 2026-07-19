@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SpatialIndex, type SpatialBounds } from "../spatialIndex";
 import { useWorkspace } from "../store";
 import type {
   ConnectorElement,
@@ -35,7 +36,7 @@ type SegmentDrag = {
 } | null;
 type BoxSelection = { start: Point; current: Point; additive: boolean } | null;
 type ViewBox = { x: number; y: number; width: number; height: number };
-type Bounds = { x1: number; y1: number; x2: number; y2: number };
+type Bounds = SpatialBounds;
 
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
@@ -215,7 +216,6 @@ function boundsFor(element: Element): Bounds {
 }
 
 function normalizeBounds(a: Point, b: Point): Bounds { return { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) }; }
-function intersects(a: Bounds, b: Bounds): boolean { return a.x1 <= b.x2 && a.x2 >= b.x1 && a.y1 <= b.y2 && a.y2 >= b.y1; }
 
 function closestPointOnSegment(point: Point, start: Point, end: Point): { point: Point; distance: number } {
   if (start.x === end.x) {
@@ -364,9 +364,23 @@ export function EditorCanvas() {
   const lockedLayerIds = useMemo(() => new Set(document?.layers.filter((layer) => layer.locked).map((layer) => layer.id) ?? []), [document?.layers]);
   const visibleSystemIds = useMemo(() => new Set(document?.systems.filter((system) => system.visible).map((system) => system.id) ?? []), [document?.systems]);
   const visibleElements = useMemo(() => document?.elements.filter((element) => visibleLayerIds.has(element.layer_id) && visibleSystemIds.has(element.system_id)) ?? [], [document?.elements, visibleLayerIds, visibleSystemIds]);
+  const visibleElementMap = useMemo(() => new Map(visibleElements.map((element) => [element.id, element])), [visibleElements]);
+  const spatialIndex = useMemo(() => new SpatialIndex(
+    visibleElements,
+    boundsFor,
+    Math.max(160, (document?.canvas.grid_size ?? 20) * 12),
+  ), [visibleElements, document?.canvas.grid_size]);
 
   if (!document) return <div className="empty-canvas">正在加载文档…</div>;
   const view = viewBox ?? { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height };
+  const cullMargin = Math.max(40, Math.min(view.width, view.height) * 0.08);
+  const viewportBounds: Bounds = {
+    x1: view.x - cullMargin,
+    y1: view.y - cullMargin,
+    x2: view.x + view.width + cullMargin,
+    y2: view.y + view.height + cullMargin,
+  };
+  const viewportElements = spatialIndex.query(viewportBounds);
 
   const rawPointFromEvent = (event: React.PointerEvent | React.WheelEvent): Point => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -376,18 +390,22 @@ export function EditorCanvas() {
   const snapToGrid = (point: Point): Point => { const grid = document.canvas.grid_size; return { x: Math.round(point.x / grid) * grid, y: Math.round(point.y / grid) * grid }; };
   const pointFromEvent = (event: React.PointerEvent | React.WheelEvent): Point => snapToGrid(rawPointFromEvent(event));
   const snapTolerance = () => (14 * view.width) / (svgRef.current?.clientWidth || 1000);
+  const nearbyElements = (point: Point, tolerance: number) => spatialIndex.queryPoint(point.x, point.y, tolerance * 2);
   const connectorPointFromEvent = (event: React.PointerEvent, excluded?: ConnectorEndpoint) => {
     const raw = rawPointFromEvent(event);
-    const hit = findNearestConnection(raw, visibleElements, symbolMap, snapTolerance(), excluded);
+    const tolerance = snapTolerance();
+    const hit = findNearestConnection(raw, nearbyElements(raw, tolerance), symbolMap, tolerance, excluded);
     return hit ? { point: hit.point, hit } : { point: snapToGrid(raw), hit: undefined };
   };
   const addElement = async (element: Record<string, unknown>, label: string) => transact([{ op: "add_element", element } as Operation], label);
 
   const addJunction = async (event: React.PointerEvent<SVGSVGElement>) => {
     const raw = rawPointFromEvent(event);
-    const nearby = visibleElements.find((element) => element.type === "junction" && Math.hypot(element.position.x - raw.x, element.position.y - raw.y) <= snapTolerance());
+    const tolerance = snapTolerance();
+    const candidates = nearbyElements(raw, tolerance);
+    const nearby = candidates.find((element) => element.type === "junction" && Math.hypot(element.position.x - raw.x, element.position.y - raw.y) <= tolerance);
     if (nearby) { setSelection([nearby.id]); return; }
-    const hit = nearestConnectorSegment(raw, visibleElements, snapTolerance(), lockedLayerIds);
+    const hit = nearestConnectorSegment(raw, candidates, tolerance, lockedLayerIds);
     const junction: JunctionElement = {
       id: newElementId(), type: "junction", position: hit?.point ?? snapToGrid(raw), radius: 4, label: "",
       layer_id: hit?.connector.layer_id ?? "layer_default", system_id: hit?.connector.system_id ?? "system_default",
@@ -446,7 +464,7 @@ export function EditorCanvas() {
     }
     if (boxSelection) {
       const bounds = normalizeBounds(boxSelection.start, boxSelection.current); const width = bounds.x2 - bounds.x1; const height = bounds.y2 - bounds.y1;
-      const hits = width < 3 && height < 3 ? [] : visibleElements.filter((element) => intersects(bounds, boundsFor(element))).map((element) => element.id);
+      const hits = width < 3 && height < 3 ? [] : spatialIndex.query(bounds).map((element) => element.id);
       setSelection(boxSelection.additive ? [...selectedElementIds, ...hits] : hits); setBoxSelection(null); releaseCapture(event); return;
     }
     if (!draft) return;
@@ -482,18 +500,44 @@ export function EditorCanvas() {
     event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); const pointerX = view.x + ((event.clientX - rect.left) / rect.width) * view.width; const pointerY = view.y + ((event.clientY - rect.top) / rect.height) * view.height; const factor = event.deltaY > 0 ? 1.12 : 0.88; const width = Math.min(document.canvas.width * 5, Math.max(120, view.width * factor)); const height = width * (rect.height / rect.width); const ratioX = (pointerX - view.x) / view.width; const ratioY = (pointerY - view.y) / view.height; setViewBox({ x: pointerX - width * ratioX, y: pointerY - height * ratioY, width, height });
   };
 
+  const candidateIds = new Set(viewportElements.map((element) => element.id));
+  for (const id of selectedElementIds) candidateIds.add(id);
+  if (segmentDrag) candidateIds.add(segmentDrag.connector.id);
+  if (drag) {
+    const draggedIds = new Set(drag.elementIds);
+    for (const id of draggedIds) candidateIds.add(id);
+    for (const element of visibleElements) {
+      if (element.type === "connector" && (
+        (element.source?.element_id && draggedIds.has(element.source.element_id))
+        || (element.target?.element_id && draggedIds.has(element.target.element_id))
+      )) candidateIds.add(element.id);
+    }
+  }
+  const candidateElements = [...candidateIds].map((id) => visibleElementMap.get(id)).filter((element): element is Element => Boolean(element));
   const activeElements = (() => {
-    if (segmentDrag) { const changed = moveInternalSegment(segmentDrag.connector, segmentDrag.segmentIndex, segmentDrag.current); return visibleElements.map((element) => element.id === changed.id ? changed : element); }
-    if (!drag) return visibleElements;
+    if (segmentDrag) { const changed = moveInternalSegment(segmentDrag.connector, segmentDrag.segmentIndex, segmentDrag.current); return candidateElements.map((element) => element.id === changed.id ? changed : element); }
+    if (!drag) return candidateElements;
     const dx = drag.current.x - drag.start.x; const dy = drag.current.y - drag.start.y; const moved = new Map<string, ConnectableElement>(); const direct = new Map<string, Element>();
-    for (const id of drag.elementIds) { const element = visibleElements.find((item) => item.id === id); if (!element || lockedLayerIds.has(element.layer_id)) continue; if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue; const translated = translateElement(element, dx, dy); direct.set(id, translated); if (translated.type === "symbol" || translated.type === "junction") moved.set(id, translated); }
-    return visibleElements.map((element) => direct.get(element.id) ?? (element.type === "connector" && moved.size ? syncConnectorPreview(element, moved, symbolMap) : element));
+    for (const id of drag.elementIds) { const element = visibleElementMap.get(id); if (!element || lockedLayerIds.has(element.layer_id)) continue; if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue; const translated = translateElement(element, dx, dy); direct.set(id, translated); if (translated.type === "symbol" || translated.type === "junction") moved.set(id, translated); }
+    return candidateElements.map((element) => direct.get(element.id) ?? (element.type === "connector" && moved.size ? syncConnectorPreview(element, moved, symbolMap) : element));
   })();
 
   const connectors = activeElements.filter((element): element is ConnectorElement => element.type === "connector");
   const portScale = view.width / (svgRef.current?.clientWidth || 1000); const portRadius = 5 * portScale; const showAllConnections = tool === "connector";
 
-  return <svg ref={svgRef} className={`editor-canvas tool-${tool}`} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`} onPointerDown={onCanvasPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onWheel={onWheel}>
+  return <svg
+    ref={svgRef}
+    className={`editor-canvas tool-${tool}`}
+    viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
+    data-visible-elements={visibleElements.length}
+    data-rendered-elements={activeElements.length}
+    data-spatial-cells={spatialIndex.cellCount}
+    onPointerDown={onCanvasPointerDown}
+    onPointerMove={onPointerMove}
+    onPointerUp={onPointerUp}
+    onWheel={onWheel}
+  >
+    <title>{`视口渲染 ${activeElements.length}/${visibleElements.length} 个元素；空间索引 ${spatialIndex.cellCount} 个网格`}</title>
     <defs><pattern id="smallGrid" width={document.canvas.grid_size} height={document.canvas.grid_size} patternUnits="userSpaceOnUse"><path d={`M ${document.canvas.grid_size} 0 L 0 0 0 ${document.canvas.grid_size}`} fill="none" stroke="#dbe2ea" strokeWidth="0.5" /></pattern></defs>
     <rect width={document.canvas.width} height={document.canvas.height} fill={document.canvas.background} />
     <rect width={document.canvas.width} height={document.canvas.height} fill="url(#smallGrid)" />
