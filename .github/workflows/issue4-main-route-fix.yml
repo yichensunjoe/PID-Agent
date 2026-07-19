@@ -1,0 +1,162 @@
+name: Issue 4 stable main route fix
+
+on:
+  push:
+    branches: [agent/issue-4-instrument-tap]
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-4-instrument-tap
+      - name: Apply main route family resolution
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("backend/agentcad/semantic_compiler.py")
+          content = path.read_text()
+          old = '''        main = _element(document, operation.main_connector_id)
+          if main is None:
+              raise AgentCompileError(
+                  _issue(
+                      index=index,
+                      operation=operation.op,
+                      code="connector_not_found",
+                      message=f"connector not found: {operation.main_connector_id}",
+                      connector_id=operation.main_connector_id,
+                      available_values={
+                          "connector_ids": [item.id for item in document.elements if item.type == "connector"]
+                      },
+                      suggestions=["使用当前事务前面新增或当前文档中真实存在的主管 connector id。"],
+                  )
+              )
+          if main.type != "connector":
+              raise AgentCompileError(
+                  _issue(
+                      index=index,
+                      operation=operation.op,
+                      code="element_type_mismatch",
+                      message=f"instrument_tap requires a connector, got {main.type}",
+                      connector_id=main.id,
+                  )
+              )
+          '''
+          new = '''        main = self._resolve_main_connector(
+              document,
+              operation.main_connector_id,
+              operation.junction_point,
+          )
+          if main is None:
+              raise AgentCompileError(
+                  _issue(
+                      index=index,
+                      operation=operation.op,
+                      code="tap_point_not_on_connector",
+                      message=(
+                          f"no segment in main route {operation.main_connector_id} contains "
+                          f"junction point ({operation.junction_point.x}, {operation.junction_point.y})"
+                      ),
+                      field_path=f"operations[{index}].junction_point",
+                      connector_id=operation.main_connector_id,
+                      available_values={
+                          "connector_ids": [item.id for item in document.elements if item.type == "connector"]
+                      },
+                      suggestions=[
+                          "使用当前事务前面新增或当前文档中真实存在的主管 connector id。",
+                          "选择该主管族某一条水平或垂直线段上的坐标。",
+                      ],
+                  )
+              )
+          main_route_id = str(
+              main.metadata.get("main_route_id") or operation.main_connector_id
+          )
+          '''
+          if old not in content:
+              raise SystemExit("main connector block not found")
+          content = content.replace(old, new)
+          content = content.replace(
+              '''            "assembly": "instrument_tap",
+              "main_connector_id": main.id,
+              "junction_id": operation.junction_id,
+          ''',
+              '''            "assembly": "instrument_tap",
+              "main_connector_id": operation.main_connector_id,
+              "main_route_id": main_route_id,
+              "split_segment_id": main.id,
+              "junction_id": operation.junction_id,
+          ''',
+          )
+          content = content.replace(
+              '''                    **deepcopy(main.metadata),
+                      "split_by_instrument_tap": operation.junction_id,
+          ''',
+              '''                    **deepcopy(main.metadata),
+                      "main_route_id": main_route_id,
+                      "split_by_instrument_tap": operation.junction_id,
+          ''',
+              1,
+          )
+          content = content.replace(
+              '''                    **deepcopy(main.metadata),
+                      "split_from_connector_id": main.id,
+                      "split_by_instrument_tap": operation.junction_id,
+          ''',
+              '''                    **deepcopy(main.metadata),
+                      "main_route_id": main_route_id,
+                      "split_from_connector_id": main.id,
+                      "split_by_instrument_tap": operation.junction_id,
+          ''',
+          )
+          marker = '''    def _symbol_definition(
+          '''
+          helper = '''    def _resolve_main_connector(
+              self,
+              document: Document,
+              requested_id: str,
+              junction_point: Point,
+          ) -> ConnectorElement | None:
+              requested = _element(document, requested_id)
+              route_id = requested_id
+              if requested is not None and requested.type == "connector":
+                  route_id = str(requested.metadata.get("main_route_id") or requested.id)
+              candidates = [
+                  element
+                  for element in document.elements
+                  if element.type == "connector"
+                  and (
+                      element.id == requested_id
+                      or str(element.metadata.get("main_route_id") or "") == route_id
+                  )
+              ]
+              candidates.sort(key=lambda item: (item.id != requested_id, item.id))
+              return next(
+                  (
+                      candidate
+                      for candidate in candidates
+                      if self._split_segment_index(candidate.points, junction_point) is not None
+                  ),
+                  None,
+              )
+
+          '''
+          if helper not in content:
+              if marker not in content:
+                  raise SystemExit("symbol definition marker not found")
+              content = content.replace(marker, helper + marker)
+          path.write_text(content)
+          PY
+      - name: Commit fix
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/agentcad/semantic_compiler.py
+          git commit -m "fix: resolve repeated taps across main route segments"
+          git push
