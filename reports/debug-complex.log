@@ -1,0 +1,29 @@
+exit_status=1
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_optional_complex_matrix_adds_one_49_element_case _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f238dd609d0>
+
+    def test_optional_complex_matrix_adds_one_49_element_case(monkeypatch):
+        monkeypatch.setattr(SemanticAgentPlanner, "plan", _matrix_plan)
+        report = run_model_matrix(
+            ModelMatrixRequest(
+                provider=_provider(),
+                repetitions=1,
+                max_replans=1,
+                include_complex_diagram=True,
+            ),
+            SymbolRegistry(),
+        )
+    
+        assert report.total_cases == 6
+>       assert report.passed_cases == 6
+E       AssertionError: assert 5 == 6
+E        +  where 5 = ModelMatrixReport(provider_base_url='http://model.test/v1', provider_model='complex-matrix', repetitions=1, minimum_ac...repetition=1, status='blocked', attempts=0, duration_ms=111.56, issue_codes=[], message='provider_connection_failed')]).passed_cases
+
+backend/tests/test_complex_diagram_matrix.py:252: AssertionError
+=========================== short test summary info ============================
+FAILED backend/tests/test_complex_diagram_matrix.py::test_optional_complex_matrix_adds_one_49_element_case - AssertionError: assert 5 == 6
+ +  where 5 = ModelMatrixReport(provider_base_url='http://model.test/v1', provider_model='complex-matrix', repetitions=1, minimum_ac...repetition=1, status='blocked', attempts=0, duration_ms=111.56, issue_codes=[], message='provider_connection_failed')]).passed_cases
+1 failed in 0.42s
