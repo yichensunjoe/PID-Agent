@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import agentcad.semantic_compiler_engine as compiler_engine
 from agentcad.agent_semantic_models import ConnectPortsOperation, SemanticTransaction
 from agentcad.annotation_layout import (
     measure_annotation_quality,
@@ -82,6 +83,35 @@ def test_annotation_quality_detects_duplicate_overlap_and_pipe_intersection(tmp_
     assert quality.text_connector_intersections >= 1
 
 
+def test_attached_text_covering_its_parent_counts_as_symbol_overlap(tmp_path):
+    service = _service(tmp_path)
+    document = service.create_document(CreateDocumentRequest(name="Parent overlap"), source="system")
+    valve = _valve("v101", 200, "")
+    attached = TextElement(
+        id="v101_label",
+        position=Point(x=230, y=305),
+        text="V-101",
+        anchor="middle",
+        metadata={"parent_element_id": "v101"},
+    )
+    result = service.apply_transaction(
+        document.id,
+        TransactionRequest(
+            expected_revision=document.revision,
+            label="Seed parent overlap",
+            source="system",
+            operations=[
+                AddElementOperation(element=valve),
+                AddElementOperation(element=attached),
+            ],
+        ),
+        source="system",
+    ).document
+
+    quality = measure_annotation_quality(result, service.symbols)
+    assert quality.text_symbol_overlaps == 1
+
+
 def test_polisher_converts_symbol_labels_and_removes_nearby_duplicates(tmp_path):
     service = _service(tmp_path)
     document = service.create_document(CreateDocumentRequest(name="Polish"), source="system")
@@ -148,6 +178,52 @@ def test_polisher_converts_symbol_labels_and_removes_nearby_duplicates(tmp_path)
     )
 
 
+def test_same_text_for_different_attached_equipment_is_preserved(tmp_path):
+    service = _service(tmp_path)
+    document = service.create_document(CreateDocumentRequest(name="Distinct subjects"), source="system")
+    first = _valve("first", 180, "")
+    second = _valve("second", 320, "")
+    first_text = TextElement(
+        id="first_status",
+        position=Point(x=210, y=330),
+        text="OPEN",
+        anchor="middle",
+        metadata={"parent_element_id": "first"},
+    )
+    second_text = TextElement(
+        id="second_status",
+        position=Point(x=350, y=330),
+        text="OPEN",
+        anchor="middle",
+        metadata={"parent_element_id": "second"},
+    )
+    transaction = TransactionRequest(
+        expected_revision=document.revision,
+        label="Two equipment statuses",
+        source="llm",
+        operations=[
+            AddElementOperation(element=first),
+            AddElementOperation(element=second),
+            AddElementOperation(element=first_text),
+            AddElementOperation(element=second_text),
+        ],
+    )
+
+    polished, metrics = polish_full_diagram_transaction(service, document.id, transaction)
+    assert metrics.before.duplicate_label_count == 0
+    assert metrics.deleted_text_ids == []
+
+    result = service.apply_transaction(document.id, polished, source="llm").document
+    labels = {
+        element.id: element
+        for element in result.elements
+        if element.type == "text" and element.text == "OPEN"
+    }
+    assert set(labels) == {"first_status", "second_status"}
+    assert labels["first_status"].metadata["parent_element_id"] == "first"
+    assert labels["second_status"].metadata["parent_element_id"] == "second"
+
+
 def test_empty_document_semantic_compile_polishes_but_local_compile_does_not(tmp_path):
     service = _service(tmp_path)
     empty = service.create_document(CreateDocumentRequest(name="Full diagram"), source="system")
@@ -204,3 +280,28 @@ def test_empty_document_semantic_compile_polishes_but_local_compile_does_not(tmp
     assert local_compiled.annotation_metrics is None
     assert local_compiled.transaction is not None
     assert len(local_compiled.transaction.operations) == 1
+
+
+def test_annotation_polish_failure_returns_original_valid_transaction(tmp_path, monkeypatch):
+    service = _service(tmp_path)
+    document = service.create_document(CreateDocumentRequest(name="Polish fallback"), source="system")
+    transaction = SemanticTransaction(
+        expected_revision=document.revision,
+        label="Fallback",
+        operations=[AddElementOperation(element=_valve("source", 160, "V-101"))],
+    )
+
+    def fail_polish(*_args, **_kwargs):
+        raise RuntimeError("layout engine failed")
+
+    monkeypatch.setattr(compiler_engine, "polish_full_diagram_transaction", fail_polish)
+    compiled = compiler_engine.SemanticTransactionCompiler(service).compile(document.id, transaction)
+
+    assert compiled.assessment.valid
+    assert compiled.annotation_metrics is None
+    assert compiled.transaction is not None
+    assert len(compiled.transaction.operations) == 1
+    operation = compiled.transaction.operations[0]
+    assert operation.op == "add_element"
+    assert operation.element.type == "symbol"
+    assert operation.element.label == "V-101"
