@@ -13,7 +13,7 @@ from .diagnostics import DiagnosticLogger
 from .history_diff import build_history_details
 from .layout_models import AutoLayoutRequest
 from .models import CreateDocumentRequest, TransactionRequest
-from .semantic_compiler import SemanticTransactionCompiler
+from .semantic_compiler_engine import SemanticTransactionCompiler
 from .service import DocumentService, InvalidOperationError
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
