@@ -1,3 +1,4 @@
+import type { AutoLayoutOptions, AutoLayoutPreview } from "./layoutTypes";
 import type {
   AgentPlan,
   AgentTransaction,
@@ -129,6 +130,11 @@ export const api = {
     request<{ document: Document }>(`/documents/${id}/transactions`, {
       method: "POST",
       body: JSON.stringify({ expected_revision: revision, operations, label }),
+    }),
+  previewAutoLayout: (id: string, options: AutoLayoutOptions) =>
+    request<AutoLayoutPreview>(`/documents/${id}/layout/preview`, {
+      method: "POST",
+      body: JSON.stringify(options),
     }),
   validateTransaction: (id: string, transaction: AgentTransaction) =>
     request<TransactionValidation>(`/documents/${id}/transactions/validate`, {
