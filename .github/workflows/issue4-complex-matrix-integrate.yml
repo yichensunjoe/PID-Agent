@@ -18,7 +18,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python tools/issue4_add_complex_matrix.py
+      - run: |
+          python tools/issue4_add_complex_matrix.py
+          python tools/issue4_fix_complex_check.py
       - run: |
           python -m pip install "ruff>=0.12,<1"
           ruff check --fix backend
@@ -29,5 +31,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/agentcad/model_acceptance.py
-          git commit -m "feat: add optional complex full-diagram matrix case"
+          git commit -m "fix: validate complex main route through split junctions"
           git push
