@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from .agent_semantic import AgentCompileError, _element, _issue
-from .agent_semantic_models import InstrumentTapOperation
+from .agent_semantic import AgentCompileError, _element, _issue, analyze_transaction
+from .agent_semantic_models import (
+    CompiledSemanticTransaction,
+    InstrumentTapOperation,
+    SemanticTransaction,
+)
+from .annotation_layout import polish_full_diagram_transaction
 from .models import AddElementOperation, ConnectorElement, Document, Operation, Point
 from .semantic_compiler import SemanticTransactionCompiler as BaseSemanticTransactionCompiler
 
@@ -12,7 +17,41 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
     Instrument taps keep a stable logical main-route ID after each split. Later
     taps may continue to reference the original main connector ID; the compiler
     selects the current descendant segment containing the requested tap point.
+    Empty-document full diagrams also receive a deterministic annotation polish.
     """
+
+    def compile(
+        self,
+        document_id: str,
+        transaction: SemanticTransaction,
+    ) -> CompiledSemanticTransaction:
+        current = self.service.get_document(document_id)
+        compiled = super().compile(document_id, transaction)
+        if current.elements or not compiled.assessment.valid or compiled.transaction is None:
+            return compiled
+        try:
+            polished, metrics = polish_full_diagram_transaction(
+                self.service,
+                document_id,
+                compiled.transaction,
+            )
+            assessment = analyze_transaction(
+                self.service,
+                document_id,
+                polished,
+                semantic_operation_count=len(transaction.operations),
+            )
+        except Exception:
+            # Annotation layout is best-effort. The already validated semantic
+            # transaction remains the source of truth if polishing cannot finish.
+            return compiled
+        if not assessment.valid:
+            return compiled
+        return CompiledSemanticTransaction(
+            transaction=polished,
+            assessment=assessment,
+            annotation_metrics=metrics,
+        )
 
     def _instrument_tap(
         self,

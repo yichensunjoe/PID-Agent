@@ -224,12 +224,29 @@ export type AgentTransactionAssessment = {
   issues: AgentOperationIssue[];
 };
 
+export type AnnotationQuality = {
+  duplicate_label_count: number;
+  text_text_overlaps: number;
+  text_symbol_overlaps: number;
+  text_connector_intersections: number;
+};
+
+export type AnnotationLayoutMetrics = {
+  before: AnnotationQuality;
+  after: AnnotationQuality;
+  generated_text_ids: string[];
+  moved_text_ids: string[];
+  deleted_text_ids: string[];
+  leader_line_ids: string[];
+};
+
 export type SemanticAgentPlanResult = {
   plan: SemanticAgentPlan;
   compiled_plan?: AgentPlan | null;
   assessment: AgentTransactionAssessment;
   attempt: number;
   parent_plan_id?: string | null;
+  annotation_metrics?: AnnotationLayoutMetrics | null;
 };
 
 export type TransactionValidation = {

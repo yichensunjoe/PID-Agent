@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from .agent_semantic_models import SemanticAgentReplanRequest
+from .annotation_layout import measure_annotation_quality
 from .llm import PlannerError
 from .models import (
     AddElementOperation,
@@ -34,6 +35,7 @@ class ModelMatrixRequest(StrictModel):
     provider: ProviderConfig
     repetitions: int = Field(default=3, ge=1, le=5)
     max_replans: int = Field(default=3, ge=0, le=5)
+    include_complex_diagram: bool = False
 
 
 class ModelMatrixCaseResult(StrictModel):
@@ -128,7 +130,125 @@ def _seed(service: DocumentService, symbols: SymbolRegistry):
     return result.document, primary, replacement
 
 
-def _scenario(name: str, primary, replacement) -> tuple[str, Any]:
+def _complex_diagram_check(document, symbols: SymbolRegistry) -> bool:
+    elements = {element.id: element for element in document.elements}
+    required = {
+        "waste_in",
+        "v101",
+        "e101",
+        "v102",
+        "waste_out",
+        "air_in",
+        "air_out",
+        "j_pt101",
+        "j_te101",
+        "j_pt102",
+        "j_te102",
+        "pt101",
+        "te101",
+        "pt102",
+        "te102",
+    }
+    if not required.issubset(elements):
+        return False
+    if not 30 <= len(document.elements) <= 50:
+        return False
+    for instrument_id, label in {
+        "pt101": "PT-101",
+        "te101": "TE-101",
+        "pt102": "PT-102",
+        "te102": "TE-102",
+    }.items():
+        element = elements[instrument_id]
+        if element.type != "symbol" or element.label:
+            return False
+        labels = [
+            item
+            for item in document.elements
+            if item.type == "text"
+            and item.metadata.get("parent_element_id") == instrument_id
+            and item.text == label
+        ]
+        if len(labels) != 1:
+            return False
+
+    connectors = [element for element in document.elements if element.type == "connector"]
+    junction_ids = {"j_pt101", "j_te101", "j_pt102", "j_te102"}
+    for junction_id in junction_ids:
+        bound = sum(
+            1
+            for connector in connectors
+            for endpoint in (connector.source, connector.target)
+            if endpoint
+            and endpoint.element_id == junction_id
+            and endpoint.port_id == "node"
+        )
+        if bound < 3:
+            return False
+
+    actual_pairs = {
+        (
+            connector.source.element_id,
+            connector.source.port_id,
+            connector.target.element_id,
+            connector.target.port_id,
+        )
+        for connector in connectors
+        if connector.source
+        and connector.target
+        and connector.source.element_id
+        and connector.target.element_id
+    }
+    utility_pairs = {
+        ("air_in", "left", "e101", "shell_out"),
+        ("e101", "shell_in", "air_out", "right"),
+    }
+    if not utility_pairs.issubset(actual_pairs):
+        return False
+
+    directed: dict[str, set[str]] = {}
+    for source_id, _, target_id, _ in actual_pairs:
+        directed.setdefault(source_id, set()).add(target_id)
+    required_order = ["v101", "e101", "v102", "waste_out"]
+    stack = [("waste_in", 0, frozenset())]
+    main_path_valid = False
+    while stack:
+        node, matched, visited = stack.pop()
+        state = (node, matched)
+        if state in visited:
+            continue
+        next_visited = visited | {state}
+        next_matched = matched
+        if matched < len(required_order) and node == required_order[matched]:
+            next_matched += 1
+        if next_matched == len(required_order):
+            main_path_valid = True
+            break
+        for target_id in directed.get(node, set()):
+            stack.append((target_id, next_matched, next_visited))
+    if not main_path_valid:
+        return False
+
+    quality = measure_annotation_quality(document, symbols)
+    return not any(
+        (
+            quality.duplicate_label_count,
+            quality.text_text_overlaps,
+            quality.text_symbol_overlaps,
+            quality.text_connector_intersections,
+        )
+    )
+
+
+def _scenario(name: str, primary, replacement, symbols: SymbolRegistry) -> tuple[str, Any]:
+    if name == "complex_full_diagram":
+        prompt = (
+            "生成复杂冷凝流程图：上游废气接口经 V-101、E-101、V-102 到尾气处理接口；"
+            "E-101 上下游分别建立 PT 和 TE instrument_tap，共四个真实 junction；"
+            "增加使用 E-101 shell_in/shell_out 的冷却空气线路；添加工艺说明文字。"
+            "使用给定固定 element id，保持正交连接并避免重复标签。"
+        )
+        return prompt, lambda document: _complex_diagram_check(document, symbols)
     if name == "add_connect":
         prompt = (
             f"新增一个 {primary.key}，element id 必须为 added_valve，放在 (850,120)，"
@@ -199,10 +319,17 @@ def _run_case(
     try:
         with TemporaryDirectory(prefix="pid-agent-matrix-") as directory:
             service = DocumentService(SQLiteDocumentStore(Path(directory) / "matrix.db"), symbols)
-            document, primary, replacement = _seed(service, symbols)
+            if scenario == "complex_full_diagram":
+                primary, replacement = _symbol_choices(symbols)
+                document = service.create_document(
+                    CreateDocumentRequest(name="Complex full diagram acceptance"),
+                    source="system",
+                )
+            else:
+                document, primary, replacement = _seed(service, symbols)
             planner = SemanticAgentPlanner(service, symbols)
             compiler = SemanticTransactionCompiler(service)
-            prompt, check = _scenario(scenario, primary, replacement)
+            prompt, check = _scenario(scenario, primary, replacement, symbols)
             request = AgentGenerateRequest(
                 prompt=prompt,
                 context="Model acceptance matrix. Preserve unrelated elements.",
@@ -273,6 +400,8 @@ def _run_case(
 def run_model_matrix(request: ModelMatrixRequest, symbols: SymbolRegistry) -> ModelMatrixReport:
     provider = request.provider
     scenarios = ["add_connect", "move", "replace", "reconnect", "delete"]
+    if request.include_complex_diagram:
+        scenarios.append("complex_full_diagram")
     cases = [
         _run_case(provider, scenario, repetition, request.max_replans, symbols)
         for repetition in range(1, request.repetitions + 1)

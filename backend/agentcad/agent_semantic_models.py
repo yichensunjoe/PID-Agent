@@ -230,12 +230,29 @@ class AgentTransactionAssessment(StrictModel):
     issues: list[AgentOperationIssue] = Field(default_factory=list)
 
 
+class AnnotationQuality(StrictModel):
+    duplicate_label_count: int = Field(default=0, ge=0)
+    text_text_overlaps: int = Field(default=0, ge=0)
+    text_symbol_overlaps: int = Field(default=0, ge=0)
+    text_connector_intersections: int = Field(default=0, ge=0)
+
+
+class AnnotationLayoutMetrics(StrictModel):
+    before: AnnotationQuality = Field(default_factory=AnnotationQuality)
+    after: AnnotationQuality = Field(default_factory=AnnotationQuality)
+    generated_text_ids: list[str] = Field(default_factory=list)
+    moved_text_ids: list[str] = Field(default_factory=list)
+    deleted_text_ids: list[str] = Field(default_factory=list)
+    leader_line_ids: list[str] = Field(default_factory=list)
+
+
 class SemanticAgentPlanResult(StrictModel):
     plan: SemanticAgentPlan
     compiled_plan: AgentPlan | None = None
     assessment: AgentTransactionAssessment
     attempt: int = Field(default=0, ge=0, le=5)
     parent_plan_id: str | None = None
+    annotation_metrics: AnnotationLayoutMetrics | None = None
 
 
 class SemanticAgentReplanRequest(StrictModel):
@@ -257,3 +274,4 @@ class SemanticAgentApplyRequest(StrictModel):
 class CompiledSemanticTransaction(StrictModel):
     transaction: TransactionRequest | None = None
     assessment: AgentTransactionAssessment
+    annotation_metrics: AnnotationLayoutMetrics | None = None

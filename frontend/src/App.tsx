@@ -333,6 +333,16 @@ export default function App() {
                 <div><dt>编译操作</dt><dd>{pendingPlan.assessment.compiled_operation_count}</dd></div>
                 <div><dt>结果元素数</dt><dd>{pendingPlan.assessment.resulting_element_count ?? "—"}</dd></div>
               </dl>
+              {pendingPlan.annotation_metrics ? <section className="agent-annotation-metrics">
+                <h3>标签自动润色</h3>
+                <dl>
+                  <div><dt>重复标签</dt><dd>{pendingPlan.annotation_metrics.before.duplicate_label_count} → {pendingPlan.annotation_metrics.after.duplicate_label_count}</dd></div>
+                  <div><dt>文字互相重叠</dt><dd>{pendingPlan.annotation_metrics.before.text_text_overlaps} → {pendingPlan.annotation_metrics.after.text_text_overlaps}</dd></div>
+                  <div><dt>文字覆盖设备</dt><dd>{pendingPlan.annotation_metrics.before.text_symbol_overlaps} → {pendingPlan.annotation_metrics.after.text_symbol_overlaps}</dd></div>
+                  <div><dt>文字压住管线</dt><dd>{pendingPlan.annotation_metrics.before.text_connector_intersections} → {pendingPlan.annotation_metrics.after.text_connector_intersections}</dd></div>
+                </dl>
+                <p>新增标签 {pendingPlan.annotation_metrics.generated_text_ids.length} · 移动 {pendingPlan.annotation_metrics.moved_text_ids.length} · 删除重复 {pendingPlan.annotation_metrics.deleted_text_ids.length} · 引线 {pendingPlan.annotation_metrics.leader_line_ids.length}</p>
+              </section> : null}
               <ol className="agent-operation-list">
                 {pendingPlan.plan.transaction.operations.slice(0, 30).map((operation, index) => <li key={index}><code>{index}</code><span>{operationDescription(operation)}</span></li>)}
               </ol>
