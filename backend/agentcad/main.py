@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from math import ceil
 from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import create_v1_compat_router, create_v2_router
-from .api_export import create_export_router
+from .api_export import _max_export_pixels, create_export_router
 from .api_layout import create_layout_router
 from .api_semantic_agent import create_semantic_agent_router
 from .config import Settings
@@ -48,7 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "If-Match"],
-        expose_headers=["X-PID-Agent-Request-ID"],
+        expose_headers=["X-PID-Agent-Request-ID", "Content-Disposition"],
     )
 
     @app.middleware("http")
@@ -66,18 +68,73 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             query=request.url.query,
             client=request.client.host if request.client else None,
         )
-        try:
-            response = await call_next(request)
-        except Exception as exc:
-            diagnostics.emit(
-                "http.request.failed",
-                request_id=request_id,
-                method=request.method,
-                path=request.url.path,
-                duration_ms=round((perf_counter() - started) * 1000, 2),
-                error=exc,
-            )
-            raise
+        response = None
+        legacy_prefix = "/api/v2/documents/"
+        legacy_suffix = "/export.png"
+        if (
+            request.method == "GET"
+            and request.url.path.startswith(legacy_prefix)
+            and request.url.path.endswith(legacy_suffix)
+        ):
+            document_id = request.url.path[len(legacy_prefix) : -len(legacy_suffix)].strip("/")
+            try:
+                scale = float(request.query_params.get("scale", "1"))
+                document = service.get_document(document_id)
+                output_width = max(1, ceil(document.canvas.width * scale))
+                output_height = max(1, ceil(document.canvas.height * scale))
+                requested_pixels = output_width * output_height
+                max_pixels = _max_export_pixels()
+                if requested_pixels > max_pixels:
+                    diagnostics.emit(
+                        "export.rejected",
+                        request_id=request_id,
+                        document_id=document.id,
+                        revision=document.revision,
+                        format="png",
+                        export_range="canvas",
+                        legacy_route=True,
+                        error_code="export_too_large",
+                        requested_pixels=requested_pixels,
+                        max_pixels=max_pixels,
+                        output_width=output_width,
+                        output_height=output_height,
+                    )
+                    response = JSONResponse(
+                        status_code=413,
+                        content={
+                            "detail": {
+                                "error": "export_too_large",
+                                "message": "PNG export exceeds the configured pixel limit",
+                                "retryable": True,
+                                "requested_pixels": requested_pixels,
+                                "max_pixels": max_pixels,
+                                "output": {
+                                    "width": output_width,
+                                    "height": output_height,
+                                },
+                                "suggestions": [
+                                    "降低 scale",
+                                    "使用 export-v2 的 content 或 viewport 范围",
+                                    "使用 SVG 导出超大图纸",
+                                ],
+                            }
+                        },
+                    )
+            except (TypeError, ValueError, LookupError):
+                response = None
+        if response is None:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                diagnostics.emit(
+                    "http.request.failed",
+                    request_id=request_id,
+                    method=request.method,
+                    path=request.url.path,
+                    duration_ms=round((perf_counter() - started) * 1000, 2),
+                    error=exc,
+                )
+                raise
         response.headers["X-PID-Agent-Request-ID"] = request_id
         diagnostics.emit(
             "http.request.completed",
