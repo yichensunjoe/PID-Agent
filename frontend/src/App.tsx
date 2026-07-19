@@ -28,7 +28,8 @@ function operationDescription(operation: SemanticOperation): string {
     case "delete_element": return `删除 ${operation.element_id} · ${operation.connection_policy ?? "reject_if_connected"}`;
     case "replace_symbol": return `替换设备 ${operation.element_id} → ${operation.symbol_key}`;
     case "reconnect_connector": return `重连 ${operation.connector_id}.${operation.endpoint} → ${operation.element_id ? `${operation.element_id}.${operation.port_id}` : "自由端点"}`;
-    case "connect_ports": return `连接 ${operation.source_element_id}.${operation.source_port_id} → ${operation.target_element_id}.${operation.target_port_id}`;
+    case "connect_ports": return `连接 ${operation.source_element_id}.${operation.source_port_id} → ${operation.target_element_id}.${operation.target_port_id}${operation.waypoints?.length ? ` · ${operation.waypoints.length} 个折点` : ""}`;
+    case "instrument_tap": return `仪表测点 ${operation.instrument_label} · ${operation.main_connector_id} @ (${operation.junction_point.x}, ${operation.junction_point.y})`;
     case "add_layer": return `新增图层 ${operation.layer.name}`;
     case "update_layer": return `修改图层 ${operation.layer_id}`;
     case "delete_layer": return `删除图层 ${operation.layer_id}`;
