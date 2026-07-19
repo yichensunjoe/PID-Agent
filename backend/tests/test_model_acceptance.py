@@ -14,7 +14,13 @@ from agentcad.config import Settings
 from agentcad.llm import ProviderConnectionError
 from agentcad.main import create_app
 from agentcad.model_acceptance import ModelMatrixRequest, run_model_matrix
-from agentcad.models import AddElementOperation, Point, ProviderConfig, SymbolElement, UpdateElementOperation
+from agentcad.models import (
+    AddElementOperation,
+    Point,
+    ProviderConfig,
+    SymbolElement,
+    UpdateElementOperation,
+)
 from agentcad.semantic_planner import SemanticAgentPlanner
 from agentcad.symbols import SymbolRegistry
 
@@ -48,13 +54,30 @@ def valid_plan(self, document_id, request):
             ),
         ]
     elif "向右移动" in prompt:
-        operations = [UpdateElementOperation(element_id="target", patch={"position": {"x": 400, "y": 120}})]
+        operations = [
+            UpdateElementOperation(
+                element_id="target",
+                patch={"position": {"x": 400, "y": 120}},
+            )
+        ]
     elif "替换为" in prompt:
         operations = [ReplaceSymbolOperation(element_id="target", symbol_key="gate_valve")]
     elif "重新连接" in prompt:
-        operations = [ReconnectConnectorOperation(connector_id="pipe_main", endpoint="target", element_id="spare", port_id="in")]
+        operations = [
+            ReconnectConnectorOperation(
+                connector_id="pipe_main",
+                endpoint="target",
+                element_id="spare",
+                port_id="in",
+            )
+        ]
     else:
-        operations = [SafeDeleteElementOperation(element_id="target", connection_policy="delete_connectors")]
+        operations = [
+            SafeDeleteElementOperation(
+                element_id="target",
+                connection_policy="delete_connectors",
+            )
+        ]
     return SemanticAgentPlan(
         explanation="deterministic acceptance plan",
         transaction=SemanticTransaction(
@@ -65,19 +88,31 @@ def valid_plan(self, document_id, request):
     )
 
 
-def test_model_matrix_passes_only_after_topology_assertions(monkeypatch):
+def test_model_matrix_passes_only_after_repeated_topology_assertions(monkeypatch):
     monkeypatch.setattr(SemanticAgentPlanner, "plan", valid_plan)
     report = run_model_matrix(
-        ModelMatrixRequest(provider=provider(), repetitions=2, max_replans=2),
+        ModelMatrixRequest(provider=provider(), repetitions=3, max_replans=2),
         SymbolRegistry(),
     )
 
     assert report.accepted is True
-    assert report.total_cases == 10
-    assert report.passed_cases == 10
+    assert report.total_cases == 15
+    assert report.passed_cases == 15
     assert report.failed_cases == 0
     assert report.blocked_cases == 0
     assert report.pass_rate == 1
+
+
+def test_single_repetition_is_a_trial_not_an_acceptance(monkeypatch):
+    monkeypatch.setattr(SemanticAgentPlanner, "plan", valid_plan)
+    report = run_model_matrix(
+        ModelMatrixRequest(provider=provider(), repetitions=1, max_replans=2),
+        SymbolRegistry(),
+    )
+
+    assert report.passed_cases == 5
+    assert report.accepted is False
+    assert report.minimum_acceptance_repetitions == 3
 
 
 def test_model_matrix_marks_retryable_provider_failure_blocked(monkeypatch):
@@ -116,7 +151,7 @@ def test_acceptance_endpoint_never_echoes_api_key(tmp_path: Path, monkeypatch):
                 "api_key": "secret-provider-key",
                 "timeout_seconds": 30,
             },
-            "repetitions": 1,
+            "repetitions": 3,
             "max_replans": 2,
         },
     )
@@ -124,3 +159,12 @@ def test_acceptance_endpoint_never_echoes_api_key(tmp_path: Path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["accepted"] is True
     assert "secret-provider-key" not in response.text
+
+
+def test_acceptance_browser_ui_is_available(tmp_path: Path):
+    client = TestClient(create_app(settings(tmp_path)))
+    response = client.get("/api/v2/acceptance/model-matrix/ui")
+
+    assert response.status_code == 200
+    assert "真实模型验收矩阵" in response.text
+    assert "localStorage" in response.text
