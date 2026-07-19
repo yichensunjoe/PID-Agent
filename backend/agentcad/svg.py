@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from dataclasses import dataclass
 from html import escape
-from math import atan2, cos, sin
+from math import atan2, cos, floor, sin
 from typing import Any
 
+from .exporting import ExportBounds, elements_in_bounds, visible_elements
 from .models import ConnectorElement, Document, Element, Point, Style
 from .symbols import SymbolRegistry
+
+
+@dataclass(frozen=True)
+class _SegmentRecord:
+    connector: ConnectorElement
+    index: int
+    first: Point
+    second: Point
 
 
 def _attrs(style: Style) -> str:
@@ -193,62 +204,97 @@ def _crossing(first: Point, second: Point, third: Point, fourth: Point) -> Point
     return Point(x=x, y=y)
 
 
-def _render_jumps(connector: ConnectorElement, connectors: list[ConnectorElement], background: str) -> str:
-    if connector.crossing_style != "jump":
-        return ""
+def _shares_endpoint(left: ConnectorElement, right: ConnectorElement) -> bool:
+    left_ids = {
+        endpoint.element_id
+        for endpoint in (left.source, left.target)
+        if endpoint and endpoint.element_id
+    }
+    return any(
+        endpoint and endpoint.element_id in left_ids
+        for endpoint in (right.source, right.target)
+    )
+
+
+def _segment_cells(record: _SegmentRecord, cell_size: float) -> set[tuple[int, int]]:
+    x1 = floor(min(record.first.x, record.second.x) / cell_size)
+    x2 = floor(max(record.first.x, record.second.x) / cell_size)
+    y1 = floor(min(record.first.y, record.second.y) / cell_size)
+    y2 = floor(max(record.first.y, record.second.y) / cell_size)
+    return {(x, y) for x in range(x1, x2 + 1) for y in range(y1, y2 + 1)}
+
+
+def _render_jumps(connectors: list[ConnectorElement], background: str, cell_size: float = 240) -> str:
+    records: list[_SegmentRecord] = []
+    cells: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for connector in connectors:
+        for index, (first, second) in enumerate(
+            zip(connector.points, connector.points[1:], strict=False)
+        ):
+            record = _SegmentRecord(connector, index, first, second)
+            record_index = len(records)
+            records.append(record)
+            for cell in _segment_cells(record, cell_size):
+                cells[cell].append(record_index)
+
     pieces: list[str] = []
-    for index, (first, second) in enumerate(zip(connector.points, connector.points[1:], strict=False)):
-        for other in connectors:
-            if other.id == connector.id:
+    for record_index, record in enumerate(records):
+        connector = record.connector
+        if connector.crossing_style != "jump":
+            continue
+        candidates: set[int] = set()
+        for cell in _segment_cells(record, cell_size):
+            candidates.update(cells.get(cell, []))
+        seen_points: set[tuple[float, float]] = set()
+        for candidate_index in candidates:
+            if candidate_index == record_index:
                 continue
-            shared = {
-                endpoint.element_id
-                for endpoint in (connector.source, connector.target)
-                if endpoint and endpoint.element_id
-            } & {
-                endpoint.element_id
-                for endpoint in (other.source, other.target)
-                if endpoint and endpoint.element_id
-            }
-            for third, fourth in zip(other.points, other.points[1:], strict=False):
-                point = _crossing(first, second, third, fourth)
-                if point is None or shared:
-                    continue
-                radius = connector.jump_radius
-                mask_width = connector.style.stroke_width + 4
-                if first.y == second.y:
-                    mask = f'M {point.x - radius} {point.y} L {point.x + radius} {point.y}'
-                    arc = f'M {point.x - radius} {point.y} Q {point.x} {point.y - radius} {point.x + radius} {point.y}'
-                else:
-                    mask = f'M {point.x} {point.y - radius} L {point.x} {point.y + radius}'
-                    arc = f'M {point.x} {point.y - radius} Q {point.x + radius} {point.y} {point.x} {point.y + radius}'
-                pieces.append(
-                    f'<path data-jump-for="{escape(connector.id, quote=True)}" data-segment="{index}" '
-                    f'd="{mask}" stroke="{escape(background, quote=True)}" stroke-width="{mask_width}" fill="none" />'
-                    f'<path d="{arc}" stroke="{escape(connector.style.stroke, quote=True)}" '
-                    f'stroke-width="{connector.style.stroke_width}" opacity="{connector.style.opacity}" '
-                    f'fill="none" vector-effect="non-scaling-stroke" />'
-                )
+            other = records[candidate_index]
+            if other.connector.id == connector.id or _shares_endpoint(connector, other.connector):
+                continue
+            point = _crossing(record.first, record.second, other.first, other.second)
+            if point is None or (point.x, point.y) in seen_points:
+                continue
+            seen_points.add((point.x, point.y))
+            radius = connector.jump_radius
+            mask_width = connector.style.stroke_width + 4
+            if record.first.y == record.second.y:
+                mask = f'M {point.x - radius} {point.y} L {point.x + radius} {point.y}'
+                arc = f'M {point.x - radius} {point.y} Q {point.x} {point.y - radius} {point.x + radius} {point.y}'
+            else:
+                mask = f'M {point.x} {point.y - radius} L {point.x} {point.y + radius}'
+                arc = f'M {point.x} {point.y - radius} Q {point.x + radius} {point.y} {point.x} {point.y + radius}'
+            pieces.append(
+                f'<path data-jump-for="{escape(connector.id, quote=True)}" data-segment="{record.index}" '
+                f'd="{mask}" stroke="{escape(background, quote=True)}" stroke-width="{mask_width}" fill="none" />'
+                f'<path d="{arc}" stroke="{escape(connector.style.stroke, quote=True)}" '
+                f'stroke-width="{connector.style.stroke_width}" opacity="{connector.style.opacity}" '
+                f'fill="none" vector-effect="non-scaling-stroke" />'
+            )
     return "".join(pieces)
 
 
-def render_svg(document: Document, registry: SymbolRegistry) -> str:
-    visible_layers = {layer.id for layer in document.layers if layer.visible}
-    visible_systems = {system.id for system in document.systems if system.visible}
-    visible_elements = [
-        element
-        for element in document.elements
-        if element.layer_id in visible_layers and element.system_id in visible_systems
-    ]
-    connectors = [element for element in visible_elements if element.type == "connector"]
-    body = "".join(_render_element(element, registry) for element in visible_elements)
-    overlays = "".join(_render_jumps(connector, connectors, document.canvas.background) for connector in connectors)
+def render_svg(
+    document: Document,
+    registry: SymbolRegistry,
+    bounds: ExportBounds | None = None,
+) -> str:
+    export_bounds = bounds or ExportBounds(0, 0, document.canvas.width, document.canvas.height)
+    visible = visible_elements(document)
+    rendered_elements = elements_in_bounds(visible, registry, export_bounds)
+    connectors = [element for element in rendered_elements if element.type == "connector"]
+    body = "".join(_render_element(element, registry) for element in rendered_elements)
+    overlays = _render_jumps(connectors, document.canvas.background)
     arrows = "".join(_render_arrow(connector) for connector in connectors)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{document.canvas.width}" '
-        f'height="{document.canvas.height}" viewBox="0 0 {document.canvas.width} {document.canvas.height}" '
-        f'data-document-id="{escape(document.id, quote=True)}" data-revision="{document.revision}">'
-        f'<rect width="100%" height="100%" fill="{escape(document.canvas.background, quote=True)}" />'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{export_bounds.width}" '
+        f'height="{export_bounds.height}" '
+        f'viewBox="{export_bounds.x} {export_bounds.y} {export_bounds.width} {export_bounds.height}" '
+        f'data-document-id="{escape(document.id, quote=True)}" data-revision="{document.revision}" '
+        f'data-rendered-elements="{len(rendered_elements)}">'
+        f'<rect x="{export_bounds.x}" y="{export_bounds.y}" '
+        f'width="{export_bounds.width}" height="{export_bounds.height}" '
+        f'fill="{escape(document.canvas.background, quote=True)}" />'
         f"{body}{overlays}{arrows}</svg>"
     )
