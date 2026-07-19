@@ -88,7 +88,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ),
         InstrumentTapOperation(
             main_connector_id="pipe_upstream",
-            junction_point=Point(x=420, y=400),
+            junction_point=Point(x=420, y=418),
             measurement="pressure",
             instrument_label="PT-101",
             junction_id="j_pt101",
@@ -100,7 +100,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ),
         InstrumentTapOperation(
             main_connector_id="pipe_upstream",
-            junction_point=Point(x=560, y=400),
+            junction_point=Point(x=560, y=382),
             measurement="temperature",
             instrument_label="TE-101",
             junction_id="j_te101",
@@ -112,7 +112,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ),
         InstrumentTapOperation(
             main_connector_id="pipe_downstream",
-            junction_point=Point(x=930, y=400),
+            junction_point=Point(x=930, y=420),
             measurement="pressure",
             instrument_label="PT-102",
             junction_id="j_pt102",
@@ -124,7 +124,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ),
         InstrumentTapOperation(
             main_connector_id="pipe_downstream",
-            junction_point=Point(x=1050, y=400),
+            junction_point=Point(x=1050, y=382),
             measurement="temperature",
             instrument_label="TE-102",
             junction_id="j_te102",
@@ -270,4 +270,5 @@ def test_optional_complex_matrix_adds_one_49_element_case(monkeypatch):
     assert report.passed_cases == 6
     complex_case = next(case for case in report.cases if case.scenario == "complex_full_diagram")
     assert complex_case.status == "passed"
+    assert complex_case.attempts == 0
     assert complex_case.message == "topology assertion passed"
