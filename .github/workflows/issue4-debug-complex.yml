@@ -21,14 +21,33 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install --yes libcairo2
       - run: python -m pip install -e ".[mcp,dev]"
       - run: |
-          set +e
-          pytest -q backend/tests/test_complex_diagram_matrix.py > /tmp/complex.log 2>&1
-          status=$?
-          set -e
-          {
-            echo "exit_status=$status"
-            cat /tmp/complex.log
-          } > reports/debug-complex.log
+          python - <<'PY' > reports/debug-complex.log 2>&1
+          import runpy
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          from agentcad.agent_semantic_models import SemanticTransaction
+          from agentcad.models import CreateDocumentRequest
+          from agentcad.semantic_compiler_engine import SemanticTransactionCompiler
+          from agentcad.semantic_planner import SemanticAgentPlanner
+          from agentcad.service import DocumentService
+          from agentcad.store import SQLiteDocumentStore
+          from agentcad.symbols import SymbolRegistry
+
+          namespace = runpy.run_path("backend/tests/test_complex_diagram_matrix.py")
+          with TemporaryDirectory() as directory:
+              symbols = SymbolRegistry()
+              service = DocumentService(SQLiteDocumentStore(Path(directory) / "debug.db"), symbols)
+              document = service.create_document(CreateDocumentRequest(name="debug"), source="system")
+              planner = SemanticAgentPlanner(service, symbols)
+              transaction = SemanticTransaction(
+                  expected_revision=document.revision,
+                  label="debug complex",
+                  operations=namespace["_complex_operations"](planner),
+              )
+              compiled = SemanticTransactionCompiler(service).compile(document.id, transaction)
+              print(compiled.model_dump_json(indent=2))
+          PY
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -36,5 +55,5 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "test: capture complex diagram failure"
+          git commit -m "test: capture complex compile assessment"
           git push
