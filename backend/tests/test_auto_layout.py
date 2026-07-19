@@ -187,6 +187,64 @@ def test_auto_layout_respects_locked_layers_and_reduces_obstacle_crossings(tmp_p
     assert fixed.position == obstacle.position
 
 
+def test_auto_layout_pins_nodes_connected_to_locked_connector(tmp_path: Path):
+    service = make_service(tmp_path)
+    document = service.create_document(CreateDocumentRequest(name="Locked pipe"))
+    source = add_symbol("source", "ball_valve", 100, 100, 60, 40)
+    target = add_symbol("target", "ball_valve", 300, 100, 60, 40)
+    locked_pipe = ConnectorElement(
+        id="locked_pipe",
+        layer_id="pipe_layer",
+        points=[Point(x=160, y=120), Point(x=300, y=120)],
+        source=ConnectorEndpoint(
+            element_id="source",
+            port_id="out",
+            point=Point(x=160, y=120),
+        ),
+        target=ConnectorEndpoint(
+            element_id="target",
+            port_id="in",
+            point=Point(x=300, y=120),
+        ),
+        routing="manual",
+    )
+    seeded = service.apply_transaction(
+        document.id,
+        TransactionRequest(
+            expected_revision=0,
+            label="Seed locked pipe",
+            operations=[
+                AddLayerOperation(layer=Layer(id="pipe_layer", name="Locked pipe layer")),
+                AddElementOperation(element=source),
+                AddElementOperation(element=target),
+                AddElementOperation(element=locked_pipe),
+            ],
+        ),
+    ).document
+    locked = service.apply_transaction(
+        seeded.id,
+        TransactionRequest(
+            expected_revision=seeded.revision,
+            label="Lock pipe layer",
+            operations=[
+                UpdateLayerOperation(layer_id="pipe_layer", patch={"locked": True})
+            ],
+        ),
+    ).document
+
+    preview = AutoLayoutEngine(service).preview(
+        locked.id,
+        AutoLayoutRequest(expected_revision=locked.revision),
+    )
+
+    assert {"source", "target", "locked_pipe"}.issubset(
+        preview.skipped_locked_element_ids
+    )
+    assert "source" not in preview.moved_element_ids
+    assert "target" not in preview.moved_element_ids
+    assert "locked_pipe" not in preview.rerouted_connector_ids
+
+
 def test_auto_layout_rejects_stale_revision(tmp_path: Path):
     service = make_service(tmp_path)
     document = service.create_document(CreateDocumentRequest(name="Stale layout"))
