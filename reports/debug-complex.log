@@ -276,7 +276,7 @@
             },
             {
               "x": 650.0,
-              "y": 380.0
+              "y": 360.0
             },
             {
               "x": 700.0,
@@ -1887,10 +1887,6 @@
             {
               "x": 600.0,
               "y": 622.0
-            },
-            {
-              "x": 600.0,
-              "y": 622.0
             }
           ],
           "source": {
@@ -2480,7 +2476,7 @@
   "assessment": {
     "valid": true,
     "stage": "validate",
-    "document_id": "doc_6786b5351658",
+    "document_id": "doc_08aab153e681",
     "current_revision": 0,
     "next_revision": 1,
     "semantic_operation_count": 22,
