@@ -37,13 +37,18 @@ def _provider_fields(request: AgentGenerateRequest | SemanticAgentReplanRequest)
     }
 
 
-def _operation_types(plan, compiled) -> dict[str, list[str]]:
+def _operation_types(plan, compiled) -> dict[str, Any]:
     return {
         "semantic_operation_types": [item.op for item in plan.transaction.operations],
         "compiled_operation_types": (
             [item.op for item in compiled.transaction.operations]
             if compiled.transaction is not None
             else []
+        ),
+        "annotation_metrics": (
+            compiled.annotation_metrics.model_dump(mode="json")
+            if compiled.annotation_metrics is not None
+            else None
         ),
     }
 
@@ -66,6 +71,7 @@ def _result(
         assessment=compiled.assessment,
         attempt=attempt,
         parent_plan_id=parent_plan_id,
+        annotation_metrics=compiled.annotation_metrics,
     )
 
 
