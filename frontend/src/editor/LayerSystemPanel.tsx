@@ -1,5 +1,6 @@
 import { useWorkspace } from "../store";
 import type { Layer, Operation, SystemGroup } from "../types";
+import { LayoutPanel } from "./LayoutPanel";
 
 const newGroupId = (prefix: "layer" | "system") =>
   `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -124,6 +125,11 @@ export function LayerSystemPanel() {
           ))}
         </div>
         <p className="group-hint">系统显隐同时影响网页画布和 SVG/PNG 导出。</p>
+      </section>
+
+      <section className="layout-manager-section">
+        <div className="group-manager-heading"><h3>自动整理</h3></div>
+        <LayoutPanel />
       </section>
     </div>
   );
