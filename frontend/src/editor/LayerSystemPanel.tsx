@@ -1,5 +1,6 @@
 import { useWorkspace } from "../store";
 import type { Layer, Operation, SystemGroup } from "../types";
+import { ExportPanel } from "./ExportPanel";
 import { LayoutPanel } from "./LayoutPanel";
 
 const newGroupId = (prefix: "layer" | "system") =>
@@ -131,6 +132,8 @@ export function LayerSystemPanel() {
         <div className="group-manager-heading"><h3>自动整理</h3></div>
         <LayoutPanel />
       </section>
+
+      <ExportPanel />
     </div>
   );
 }
