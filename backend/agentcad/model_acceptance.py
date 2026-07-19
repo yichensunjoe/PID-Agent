@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from .semantic_compiler import SemanticTransactionCompiler
 from .agent_semantic_models import SemanticAgentReplanRequest
 from .llm import PlannerError
 from .models import (
@@ -22,6 +21,7 @@ from .models import (
     SymbolElement,
     TransactionRequest,
 )
+from .semantic_compiler import SemanticTransactionCompiler
 from .semantic_planner import SemanticAgentPlanner
 from .service import DocumentService
 from .store import SQLiteDocumentStore

@@ -5,7 +5,6 @@ import os
 from typing import Any
 
 from . import __version__
-from .semantic_compiler import SemanticTransactionCompiler
 from .agent_semantic import analyze_transaction as analyze_low_level
 from .agent_semantic_models import SemanticTransaction
 from .auto_layout_engine import AutoLayoutEngine
@@ -14,6 +13,7 @@ from .diagnostics import DiagnosticLogger
 from .history_diff import build_history_details
 from .layout_models import AutoLayoutRequest
 from .models import CreateDocumentRequest, TransactionRequest
+from .semantic_compiler import SemanticTransactionCompiler
 from .service import DocumentService, InvalidOperationError
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
