@@ -10,17 +10,28 @@ from .models import (
     AddLayerOperation,
     AddSystemOperation,
     AgentPlan,
+    CircleElement,
     ClearDocumentOperation,
     DeleteLayerOperation,
     DeleteSystemOperation,
+    JunctionElement,
+    LineElement,
     Point,
+    PolylineElement,
     ProviderConfig,
+    RectangleElement,
     StrictModel,
+    SymbolElement,
+    TextElement,
     TransactionRequest,
     UpdateElementOperation,
     UpdateLayerOperation,
     UpdateSystemOperation,
 )
+
+
+def _semantic_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
 
 
 class SafeDeleteElementOperation(StrictModel):
@@ -62,12 +73,13 @@ class ReconnectConnectorOperation(StrictModel):
 
 class ConnectPortsOperation(StrictModel):
     op: Literal["connect_ports"] = "connect_ports"
-    connector_id: str = Field(default_factory=lambda: f"el_{uuid4().hex[:12]}")
+    connector_id: str = Field(default_factory=lambda: _semantic_id("pipe"))
     source_element_id: str
     source_port_id: str
     target_element_id: str
     target_port_id: str
     routing: Literal["orthogonal", "direct"] = "orthogonal"
+    waypoints: list[Point] = Field(default_factory=list, max_length=50)
     process_tag: str = ""
     medium: str = ""
     nominal_diameter: str = ""
@@ -77,6 +89,71 @@ class ConnectPortsOperation(StrictModel):
     name: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_waypoints(self) -> ConnectPortsOperation:
+        if self.waypoints and self.routing == "direct":
+            raise ValueError("waypoints require orthogonal routing")
+        return self
+
+
+class InstrumentTapOperation(StrictModel):
+    op: Literal["instrument_tap"] = "instrument_tap"
+    main_connector_id: str
+    junction_point: Point
+    direction: Literal["up", "down"] = "up"
+    branch_length: float = Field(default=150, ge=80, le=500)
+    measurement: Literal["pressure", "temperature", "flow"]
+    instrument_label: str
+    instrument_symbol_key: str | None = None
+    instrument_port_id: str = "process"
+    root_valve_symbol_key: str = "ball_valve"
+    root_valve_in_port_id: str = "in"
+    root_valve_out_port_id: str = "out"
+    root_valve_label: str = ""
+    junction_id: str = Field(default_factory=lambda: _semantic_id("junction"))
+    downstream_connector_id: str = Field(default_factory=lambda: _semantic_id("pipe"))
+    root_valve_id: str = Field(default_factory=lambda: _semantic_id("root_valve"))
+    instrument_id: str = Field(default_factory=lambda: _semantic_id("instrument"))
+    junction_to_valve_connector_id: str = Field(default_factory=lambda: _semantic_id("pipe"))
+    valve_to_instrument_connector_id: str = Field(default_factory=lambda: _semantic_id("pipe"))
+    layer_id: str | None = None
+    system_id: str | None = None
+    style: dict[str, Any] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_generated_ids(self) -> InstrumentTapOperation:
+        generated_ids = [
+            self.junction_id,
+            self.downstream_connector_id,
+            self.root_valve_id,
+            self.instrument_id,
+            self.junction_to_valve_connector_id,
+            self.valve_to_instrument_connector_id,
+        ]
+        if len(generated_ids) != len(set(generated_ids)):
+            raise ValueError("instrument_tap generated element ids must be unique")
+        if self.main_connector_id in generated_ids:
+            raise ValueError("instrument_tap generated ids cannot reuse main_connector_id")
+        return self
+
+
+DiagramElement = Annotated[
+    LineElement
+    | PolylineElement
+    | RectangleElement
+    | CircleElement
+    | TextElement
+    | SymbolElement
+    | JunctionElement,
+    Field(discriminator="type"),
+]
+
+
+class AddDiagramElementOperation(StrictModel):
+    op: Literal["add_element"] = "add_element"
+    element: DiagramElement
+
 
 SemanticOperation = Annotated[
     AddElementOperation
@@ -85,6 +162,7 @@ SemanticOperation = Annotated[
     | ReplaceSymbolOperation
     | ReconnectConnectorOperation
     | ConnectPortsOperation
+    | InstrumentTapOperation
     | AddLayerOperation
     | UpdateLayerOperation
     | DeleteLayerOperation
@@ -96,8 +174,24 @@ SemanticOperation = Annotated[
 ]
 
 
+FullDiagramOperation = Annotated[
+    AddDiagramElementOperation
+    | ConnectPortsOperation
+    | InstrumentTapOperation
+    | AddLayerOperation
+    | AddSystemOperation,
+    Field(discriminator="op"),
+]
+
+
 class SemanticTransaction(StrictModel):
     operations: list[SemanticOperation] = Field(min_length=1, max_length=500)
+    expected_revision: int | None = Field(default=None, ge=0)
+    label: str = ""
+
+
+class FullDiagramTransaction(StrictModel):
+    operations: list[FullDiagramOperation] = Field(min_length=1, max_length=500)
     expected_revision: int | None = Field(default=None, ge=0)
     label: str = ""
 
