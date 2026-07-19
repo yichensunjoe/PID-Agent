@@ -26,7 +26,7 @@ def main() -> None:
     matrix_parser.add_argument("--model", required=True)
     matrix_parser.add_argument("--api-key", default="")
     matrix_parser.add_argument("--timeout", type=float, default=120)
-    matrix_parser.add_argument("--repetitions", type=int, default=1)
+    matrix_parser.add_argument("--repetitions", type=int, default=3)
     matrix_parser.add_argument("--max-replans", type=int, default=3)
     matrix_parser.add_argument("--output", default="", help="Optional JSON report path")
 
