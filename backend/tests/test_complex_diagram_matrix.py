@@ -136,7 +136,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_port_id="left",
             target_element_id="e101",
             target_port_id="shell_out",
-            waypoints=[Point(x=1080, y=540), Point(x=760, y=540)],
+            waypoints=[Point(x=1000, y=540), Point(x=765, y=540)],
             medium="cooling_air",
         ),
         ConnectPortsOperation(
@@ -146,9 +146,9 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_element_id="air_out",
             target_port_id="right",
             waypoints=[
-                Point(x=680, y=340),
-                Point(x=680, y=540),
-                Point(x=480, y=540),
+                Point(x=765, y=540),
+                Point(x=600, y=540),
+                Point(x=600, y=622),
             ],
             medium="cooling_air",
         ),
