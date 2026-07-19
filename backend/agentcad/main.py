@@ -31,11 +31,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = SQLiteDocumentStore(settings.database_path)
     service = DocumentService(store=store, symbols=symbols)
     planner = OpenAICompatiblePlanner(service=service, symbols=symbols)
-    semantic_planner = SemanticAgentPlanner(service=service, symbols=symbols)
     diagnostics_path = settings.diagnostics_path or settings.database_path.with_suffix(
         ".diagnostics.jsonl"
     )
     diagnostics = DiagnosticLogger(diagnostics_path, service_version=VERSION)
+    semantic_planner = SemanticAgentPlanner(
+        service=service,
+        symbols=symbols,
+        diagnostics=diagnostics,
+    )
 
     app = FastAPI(
         title="P&ID-Agent",
