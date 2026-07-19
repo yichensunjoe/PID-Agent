@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from math import hypot
 
+from .annotation_layout import measure_annotation_quality
 from .auto_layout import AutoLayoutEngine as BaseAutoLayoutEngine
 from .models import Document, Operation, Point, UpdateElementOperation
 
@@ -15,6 +16,23 @@ class AutoLayoutEngine(BaseAutoLayoutEngine):
     deterministically, applies attached-text movement to the preview copy, and
     caps routing candidates for predictable medium-drawing latency.
     """
+
+    def _metrics(self, before, after, obstacle_margin, lane_gap):
+        metrics = super()._metrics(before, after, obstacle_margin, lane_gap)
+        before_annotations = measure_annotation_quality(before, self.service.symbols)
+        after_annotations = measure_annotation_quality(after, self.service.symbols)
+        return metrics.model_copy(
+            update={
+                "duplicate_label_count_before": before_annotations.duplicate_label_count,
+                "duplicate_label_count_after": after_annotations.duplicate_label_count,
+                "text_text_overlaps_before": before_annotations.text_text_overlaps,
+                "text_text_overlaps_after": after_annotations.text_text_overlaps,
+                "text_symbol_overlaps_before": before_annotations.text_symbol_overlaps,
+                "text_symbol_overlaps_after": after_annotations.text_symbol_overlaps,
+                "text_connector_intersections_before": before_annotations.text_connector_intersections,
+                "text_connector_intersections_after": after_annotations.text_connector_intersections,
+            }
+        )
 
     def _make_nodes(self, document, scope_ids, locked_layer_ids):
         nodes = super()._make_nodes(document, scope_ids, locked_layer_ids)

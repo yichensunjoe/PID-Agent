@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import hypot
-import re
-from typing import Iterable
 
 from .agent_semantic_models import AnnotationLayoutMetrics, AnnotationQuality
 from .models import (
