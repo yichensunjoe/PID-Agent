@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from math import hypot
 
 from .auto_layout import AutoLayoutEngine as BaseAutoLayoutEngine
 from .models import Document, Operation, Point, UpdateElementOperation
@@ -11,7 +12,8 @@ class AutoLayoutEngine(BaseAutoLayoutEngine):
 
     The base module contains geometry and routing primitives. This subclass keeps
     junction coordinates center-based, handles cyclic process graphs
-    deterministically, and applies attached-text movement to the preview copy.
+    deterministically, applies attached-text movement to the preview copy, and
+    caps routing candidates for predictable medium-drawing latency.
     """
 
     def _layout_components(self, document, nodes, components, connectors, request):
@@ -84,6 +86,29 @@ class AutoLayoutEngine(BaseAutoLayoutEngine):
             for element_id in remaining:
                 ranks[element_id] = max(cycle_rank, incoming_rank[element_id])
         return ranks
+
+    @staticmethod
+    def _relevant_obstacles(start, end, obstacles, lane_gap):
+        min_x = min(start.x, end.x) - lane_gap * 8
+        max_x = max(start.x, end.x) + lane_gap * 8
+        min_y = min(start.y, end.y) - lane_gap * 8
+        max_y = max(start.y, end.y) + lane_gap * 8
+        nearby = [
+            rect
+            for rect in obstacles
+            if rect.x2 >= min_x
+            and rect.x1 <= max_x
+            and rect.y2 >= min_y
+            and rect.y1 <= max_y
+        ]
+        midpoint = ((start.x + end.x) / 2, (start.y + end.y) / 2)
+        nearby.sort(
+            key=lambda rect: (
+                hypot(rect.center[0] - midpoint[0], rect.center[1] - midpoint[1]),
+                rect.element_id,
+            )
+        )
+        return nearby[:24]
 
     def _move_attached_annotations(
         self,
