@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from .agent_semantic_models import SemanticAgentReplanRequest
-from .annotation_layout import measure_annotation_quality, normalize_annotation_text
+from .annotation_layout import measure_annotation_quality
 from .llm import PlannerError
 from .models import (
     AddElementOperation,
@@ -230,21 +230,14 @@ def _complex_diagram_check(document, symbols: SymbolRegistry) -> bool:
         return False
 
     quality = measure_annotation_quality(document, symbols)
-    if any(
+    return not any(
         (
             quality.duplicate_label_count,
             quality.text_text_overlaps,
             quality.text_symbol_overlaps,
             quality.text_connector_intersections,
         )
-    ):
-        return False
-    normalized_labels = [
-        normalize_annotation_text(item.text)
-        for item in document.elements
-        if item.type == "text" and item.text.strip()
-    ]
-    return len(normalized_labels) == len(set(normalized_labels))
+    )
 
 
 def _scenario(name: str, primary, replacement, symbols: SymbolRegistry) -> tuple[str, Any]:
