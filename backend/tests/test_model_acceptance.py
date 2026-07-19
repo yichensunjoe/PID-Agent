@@ -115,6 +115,43 @@ def test_single_repetition_is_a_trial_not_an_acceptance(monkeypatch):
     assert report.minimum_acceptance_repetitions == 3
 
 
+def test_model_matrix_uses_structured_replan_until_valid(monkeypatch):
+    def invalid_initial(self, document_id, request):
+        revision = self.service.get_document(document_id).revision
+        return SemanticAgentPlan(
+            explanation="invalid first attempt",
+            transaction=SemanticTransaction(
+                expected_revision=revision,
+                label="Invalid first attempt",
+                operations=[
+                    UpdateElementOperation(
+                        element_id="missing_element",
+                        patch={"position": {"x": 10, "y": 10}},
+                    )
+                ],
+            ),
+        )
+
+    def repaired(self, document_id, request, failure):
+        assert failure.valid is False
+        assert failure.issues[0].code == "element_not_found"
+        generated = type("GenerateRequest", (), {"prompt": request.prompt})()
+        return valid_plan(self, document_id, generated)
+
+    monkeypatch.setattr(SemanticAgentPlanner, "plan", invalid_initial)
+    monkeypatch.setattr(SemanticAgentPlanner, "replan", repaired)
+    report = run_model_matrix(
+        ModelMatrixRequest(provider=provider(), repetitions=1, max_replans=2),
+        SymbolRegistry(),
+    )
+
+    assert report.passed_cases == 5
+    assert all(case.attempts == 1 for case in report.cases)
+    assert all("element_not_found" in case.issue_codes for case in report.cases)
+    assert report.convergence_rate == 1
+    assert report.accepted is False
+
+
 def test_model_matrix_marks_retryable_provider_failure_blocked(monkeypatch):
     def blocked(self, document_id, request):
         raise ProviderConnectionError("offline", provider=request.provider)
