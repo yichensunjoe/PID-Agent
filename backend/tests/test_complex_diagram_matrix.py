@@ -12,13 +12,17 @@ from agentcad.agent_semantic_models import (
 from agentcad.model_acceptance import ModelMatrixRequest, run_model_matrix
 from agentcad.models import (
     AddElementOperation,
+    CreateDocumentRequest,
     Point,
     ProviderConfig,
     SymbolElement,
     TextElement,
     UpdateElementOperation,
 )
+from agentcad.semantic_compiler_engine import SemanticTransactionCompiler
 from agentcad.semantic_planner import SemanticAgentPlanner
+from agentcad.service import DocumentService
+from agentcad.store import SQLiteDocumentStore
 from agentcad.symbols import SymbolRegistry
 
 
@@ -71,7 +75,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_port_id="tube_out",
             target_element_id="v102",
             target_port_id="in",
-            waypoints=[Point(x=870, y=380), Point(x=870, y=400)],
+            waypoints=[Point(x=870, y=390), Point(x=870, y=400)],
             medium="waste_gas",
         ),
         ConnectPortsOperation(
@@ -234,6 +238,24 @@ def _matrix_plan(self, document_id, request):
             operations=operations,
         ),
     )
+
+
+def test_complex_operations_compile_to_polished_transaction(tmp_path):
+    symbols = SymbolRegistry()
+    service = DocumentService(SQLiteDocumentStore(tmp_path / "complex.db"), symbols)
+    document = service.create_document(CreateDocumentRequest(name="Complex"), source="system")
+    planner = SemanticAgentPlanner(service, symbols)
+    transaction = SemanticTransaction(
+        expected_revision=document.revision,
+        label="Complex full diagram",
+        operations=_complex_operations(planner),
+    )
+    compiled = SemanticTransactionCompiler(service).compile(document.id, transaction)
+
+    assert compiled.assessment.valid, compiled.assessment.model_dump_json(indent=2)
+    assert compiled.transaction is not None
+    assert compiled.annotation_metrics is not None
+    assert 30 <= compiled.assessment.resulting_element_count <= 50
 
 
 def test_optional_complex_matrix_adds_one_49_element_case(monkeypatch):
