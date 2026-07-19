@@ -90,9 +90,9 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
             operation.junction_point,
         )
         if resolution is None:
-            available_values: dict[str, object] = {
+            available_values: dict[str, list[str]] = {
                 "connector_ids": [element.id for element in candidates],
-                "snap_tolerance": self._tap_snap_tolerance(document),
+                "snap_tolerance": [f"{self._tap_snap_tolerance(document):.4f}"],
             }
             message = (
                 f"no segment in main route {operation.main_connector_id} is close enough to "
@@ -105,9 +105,9 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
             if nearest is not None:
                 available_values.update(
                     {
-                        "nearest_connector_id": nearest.connector.id,
-                        "nearest_point": nearest.point.model_dump(mode="json"),
-                        "nearest_distance": round(nearest.distance, 4),
+                        "nearest_connector_id": [nearest.connector.id],
+                        "nearest_point": [f"{nearest.point.x:.4f},{nearest.point.y:.4f}"],
+                        "nearest_distance": [f"{nearest.distance:.4f}"],
                     }
                 )
                 message += (
