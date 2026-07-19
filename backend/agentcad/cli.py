@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 
 from .models import ProviderConfig, TransactionRequest
 
@@ -24,7 +25,16 @@ def main() -> None:
     )
     matrix_parser.add_argument("--base-url", required=True)
     matrix_parser.add_argument("--model", required=True)
-    matrix_parser.add_argument("--api-key", default="")
+    matrix_parser.add_argument(
+        "--api-key",
+        default="",
+        help="API key value; prefer --api-key-env to avoid command history exposure",
+    )
+    matrix_parser.add_argument(
+        "--api-key-env",
+        default="PID_AGENT_MATRIX_API_KEY",
+        help="Environment variable containing the API key",
+    )
     matrix_parser.add_argument("--timeout", type=float, default=120)
     matrix_parser.add_argument("--repetitions", type=int, default=3)
     matrix_parser.add_argument("--max-replans", type=int, default=3)
@@ -43,11 +53,12 @@ def main() -> None:
         from .model_acceptance import ModelMatrixRequest, run_model_matrix
         from .symbols import SymbolRegistry
 
+        api_key = args.api_key or os.getenv(args.api_key_env, "")
         request = ModelMatrixRequest(
             provider=ProviderConfig(
                 base_url=args.base_url,
                 model=args.model,
-                api_key=args.api_key or None,
+                api_key=api_key or None,
                 timeout_seconds=args.timeout,
             ),
             repetitions=args.repetitions,
