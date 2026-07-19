@@ -142,6 +142,24 @@ def test_png_export_rejects_excessive_pixel_count(tmp_path: Path, monkeypatch):
     assert "使用 SVG 导出超大图纸" in detail["suggestions"]
 
 
+def test_legacy_png_export_uses_same_pixel_limit(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PID_AGENT_MAX_EXPORT_PIXELS", "1000000")
+    app = create_app(app_settings(tmp_path))
+    document = seed_export_document(app)
+    client = TestClient(app)
+
+    response = client.get(
+        f"/api/v2/documents/{document.id}/export.png",
+        params={"scale": 8},
+    )
+
+    assert response.status_code == 413
+    detail = response.json()["detail"]
+    assert detail["error"] == "export_too_large"
+    assert detail["requested_pixels"] > detail["max_pixels"]
+    assert "使用 export-v2 的 content 或 viewport 范围" in detail["suggestions"]
+
+
 def test_viewport_requires_complete_bounds(tmp_path: Path):
     app = create_app(app_settings(tmp_path))
     document = seed_export_document(app)
