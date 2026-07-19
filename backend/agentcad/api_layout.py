@@ -4,7 +4,7 @@ from time import perf_counter
 
 from fastapi import APIRouter, HTTPException
 
-from .auto_layout import AutoLayoutEngine
+from .auto_layout_engine import AutoLayoutEngine
 from .diagnostics import DiagnosticLogger
 from .layout_models import AutoLayoutPreview, AutoLayoutRequest
 from .service import DocumentNotFoundError, DocumentService, InvalidOperationError, RevisionConflictError
