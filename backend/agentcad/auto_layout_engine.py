@@ -16,6 +16,16 @@ class AutoLayoutEngine(BaseAutoLayoutEngine):
     caps routing candidates for predictable medium-drawing latency.
     """
 
+    def _make_nodes(self, document, scope_ids, locked_layer_ids):
+        nodes = super()._make_nodes(document, scope_ids, locked_layer_ids)
+        for element in document.elements:
+            if element.type != "connector" or element.layer_id not in locked_layer_ids:
+                continue
+            for endpoint in (element.source, element.target):
+                if endpoint and endpoint.element_id in nodes:
+                    nodes[endpoint.element_id].locked = True
+        return nodes
+
     def _layout_components(self, document, nodes, components, connectors, request):
         positions = super()._layout_components(
             document,
