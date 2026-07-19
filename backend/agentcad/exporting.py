@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, radians, sin
+from math import cos, isfinite, radians, sin
 from typing import Literal
 
 from .models import Document, Element
@@ -167,6 +167,8 @@ def resolve_export_bounds(
         raise ValueError(f"unsupported export range: {export_range}")
     if x is None or y is None or width is None or height is None:
         raise ValueError("viewport export requires x, y, width and height")
+    if not all(isfinite(value) for value in (x, y, width, height)):
+        raise ValueError("viewport x, y, width and height must be finite numbers")
     if width <= 0 or height <= 0:
         raise ValueError("viewport width and height must be greater than zero")
     return ExportBounds(x=x, y=y, width=width, height=height)
