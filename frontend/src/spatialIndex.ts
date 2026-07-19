@@ -7,11 +7,13 @@ export class SpatialIndex<T extends { id: string }> {
   private readonly items = new Map<string, T>();
   private readonly bounds = new Map<string, SpatialBounds>();
   private readonly cells = new Map<string, Set<string>>();
+  private readonly largeItems = new Set<string>();
 
   constructor(
     values: T[],
     private readonly boundsFor: (value: T) => SpatialBounds,
     readonly cellSize = 240,
+    private readonly maxCellsPerItem = 256,
   ) {
     for (const value of values) this.insert(value);
   }
@@ -21,6 +23,21 @@ export class SpatialIndex<T extends { id: string }> {
   }
 
   private cellRange(bounds: SpatialBounds) {
+    const x1 = Math.floor(bounds.x1 / this.cellSize);
+    const x2 = Math.floor(bounds.x2 / this.cellSize);
+    const y1 = Math.floor(bounds.y1 / this.cellSize);
+    const y2 = Math.floor(bounds.y2 / this.cellSize);
+    const width = x2 - x1 + 1;
+    const height = y2 - y1 + 1;
+    if (width * height > this.maxCellsPerItem) return null;
+    const keys: string[] = [];
+    for (let x = x1; x <= x2; x += 1) {
+      for (let y = y1; y <= y2; y += 1) keys.push(this.cellKey(x, y));
+    }
+    return keys;
+  }
+
+  private queryCellRange(bounds: SpatialBounds) {
     const x1 = Math.floor(bounds.x1 / this.cellSize);
     const x2 = Math.floor(bounds.x2 / this.cellSize);
     const y1 = Math.floor(bounds.y1 / this.cellSize);
@@ -36,7 +53,12 @@ export class SpatialIndex<T extends { id: string }> {
     const bounds = this.boundsFor(value);
     this.items.set(value.id, value);
     this.bounds.set(value.id, bounds);
-    for (const key of this.cellRange(bounds)) {
+    const keys = this.cellRange(bounds);
+    if (!keys) {
+      this.largeItems.add(value.id);
+      return;
+    }
+    for (const key of keys) {
       const cell = this.cells.get(key) ?? new Set<string>();
       cell.add(value.id);
       this.cells.set(key, cell);
@@ -44,8 +66,8 @@ export class SpatialIndex<T extends { id: string }> {
   }
 
   query(bounds: SpatialBounds): T[] {
-    const ids = new Set<string>();
-    for (const key of this.cellRange(bounds)) {
+    const ids = new Set<string>(this.largeItems);
+    for (const key of this.queryCellRange(bounds)) {
       for (const id of this.cells.get(key) ?? []) ids.add(id);
     }
     const result: T[] = [];
@@ -72,5 +94,9 @@ export class SpatialIndex<T extends { id: string }> {
 
   get cellCount() {
     return this.cells.size;
+  }
+
+  get largeItemCount() {
+    return this.largeItems.size;
   }
 }
