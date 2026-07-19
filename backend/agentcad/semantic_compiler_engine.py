@@ -54,12 +54,15 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         )
         resolved_operation = operation.model_copy(update={"main_connector_id": actual.id})
         compiled = super()._instrument_tap(document, resolved_operation, index)
+        main_segment_ids = {actual.id, operation.downstream_connector_id}
         for compiled_operation in compiled:
             if not isinstance(compiled_operation, AddElementOperation):
                 continue
             element = compiled_operation.element
-            element.metadata["main_route_id"] = main_route_id
+            if element.type == "connector" and element.id in main_segment_ids:
+                element.metadata["main_route_id"] = main_route_id
             if element.metadata.get("assembly") == "instrument_tap":
+                element.metadata["parent_main_route_id"] = main_route_id
                 element.metadata["main_connector_id"] = operation.main_connector_id
                 element.metadata["split_segment_id"] = actual.id
         return compiled
