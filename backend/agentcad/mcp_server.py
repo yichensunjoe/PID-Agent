@@ -7,9 +7,11 @@ from typing import Any
 from . import __version__
 from .agent_semantic import SemanticTransactionCompiler, analyze_transaction as analyze_low_level
 from .agent_semantic_models import SemanticTransaction
+from .auto_layout import AutoLayoutEngine
 from .config import Settings
 from .diagnostics import DiagnosticLogger
 from .history_diff import build_history_details
+from .layout_models import AutoLayoutRequest
 from .models import CreateDocumentRequest, TransactionRequest
 from .service import DocumentService, InvalidOperationError
 from .store import SQLiteDocumentStore
@@ -116,6 +118,7 @@ def main() -> None:
     settings = Settings.from_env()
     service = build_service(settings)
     semantic_compiler = SemanticTransactionCompiler(service)
+    layout_engine = AutoLayoutEngine(service)
     diagnostics_path = settings.diagnostics_path or settings.database_path.with_suffix(
         ".diagnostics.jsonl"
     )
@@ -233,6 +236,50 @@ def main() -> None:
             "applied": True,
             "assessment": compiled.assessment.model_dump(mode="json"),
             "result": _apply_with_history(service, diagnostics, document_id, compiled.transaction),
+        }
+
+    @mcp.tool()
+    def preview_auto_layout(
+        document_id: str,
+        options: AutoLayoutRequest,
+    ) -> dict[str, Any]:
+        """Preview topology-aware equipment layout and obstacle-avoiding pipe routing without writing."""
+        preview = layout_engine.preview(document_id, options)
+        diagnostics.emit(
+            "layout.preview.completed",
+            document_id=document_id,
+            revision=preview.current_revision,
+            source="mcp",
+            operation_count=len(preview.transaction.operations) if preview.transaction else 0,
+            moved_element_ids=preview.moved_element_ids,
+            rerouted_connector_ids=preview.rerouted_connector_ids,
+            overlaps_before=preview.metrics.overlaps_before,
+            overlaps_after=preview.metrics.overlaps_after,
+            pipe_obstacle_intersections_before=(
+                preview.metrics.pipe_obstacle_intersections_before
+            ),
+            pipe_obstacle_intersections_after=(
+                preview.metrics.pipe_obstacle_intersections_after
+            ),
+        )
+        return preview.model_dump(mode="json")
+
+    @mcp.tool()
+    def apply_auto_layout(
+        document_id: str,
+        options: AutoLayoutRequest,
+    ) -> dict[str, Any]:
+        """Preview and atomically apply topology-aware layout when the generated transaction is non-empty."""
+        preview = layout_engine.preview(document_id, options)
+        if preview.transaction is None:
+            return {
+                "applied": False,
+                "preview": preview.model_dump(mode="json"),
+            }
+        return {
+            "applied": True,
+            "preview": preview.model_dump(mode="json"),
+            "result": _apply_with_history(service, diagnostics, document_id, preview.transaction),
         }
 
     @mcp.tool()
