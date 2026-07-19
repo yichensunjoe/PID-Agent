@@ -6,7 +6,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from .agent_semantic import analyze_transaction
-from .semantic_compiler import SemanticTransactionCompiler
 from .agent_semantic_models import (
     AgentTransactionAssessment,
     SemanticAgentApplyRequest,
@@ -18,6 +17,7 @@ from .api_v2 import _apply_transaction_with_details
 from .diagnostics import DiagnosticLogger
 from .llm import PlannerError
 from .models import AgentGenerateRequest, AgentPlan, TransactionRequest, TransactionResult
+from .semantic_compiler import SemanticTransactionCompiler
 from .semantic_planner import SemanticAgentPlanner
 from .service import (
     DocumentNotFoundError,

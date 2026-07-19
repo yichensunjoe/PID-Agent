@@ -5,9 +5,11 @@ from typing import Any
 
 from .agent_semantic import (
     AgentCompileError,
-    SemanticTransactionCompiler as BaseSemanticTransactionCompiler,
     _element,
     _issue,
+)
+from .agent_semantic import (
+    SemanticTransactionCompiler as BaseSemanticTransactionCompiler,
 )
 from .agent_semantic_models import (
     ConnectPortsOperation,

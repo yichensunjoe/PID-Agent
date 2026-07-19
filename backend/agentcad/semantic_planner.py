@@ -432,9 +432,10 @@ class SemanticAgentPlanner:
             else "This is a local-edit task on an existing drawing. "
         )
         return (
-            "You are P&ID-Agent's semantic planning engine. Return JSON only with keys "
+            "You are P&ID-Agent's semantic planning engine. "
             f"{task_mode}"
-            "'explanation' and 'transaction'. Preserve unrelated elements. Use only real element IDs, "
+            "Return JSON only with keys 'explanation' and 'transaction'. Preserve unrelated "
+            "elements. Use only real element IDs, "
             "symbol keys and port IDs from the supplied document and catalog. "
             "When a later operation references an element or connector added earlier in the same transaction, "
             "assign an explicit unique id in the add operation and reuse that exact id. "
