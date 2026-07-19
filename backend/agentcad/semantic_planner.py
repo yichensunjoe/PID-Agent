@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from .agent_semantic_models import (
     AgentTransactionAssessment,
+    FullDiagramTransaction,
     SemanticAgentPlan,
     SemanticAgentReplanRequest,
     SemanticTransaction,
@@ -128,10 +129,14 @@ class SemanticAgentPlanner:
         document_id: str,
         document: Document,
     ) -> SemanticAgentPlan:
-        schema = SemanticTransaction.model_json_schema()
+        full_diagram = not document.elements
+        transaction_model = FullDiagramTransaction if full_diagram else SemanticTransaction
+        schema = transaction_model.model_json_schema()
         raw_plan = self._request_model_json(
             provider,
-            system_prompt=self._system_prompt(schema, repair=repair),
+            system_prompt=self._system_prompt(
+                schema, repair=repair, full_diagram=full_diagram
+            ),
             user_prompt=user_prompt,
             temperature=0.05 if repair else 0.1,
         )
@@ -158,6 +163,10 @@ class SemanticAgentPlanner:
 
             try:
                 plan = SemanticAgentPlan.model_validate(normalized)
+                if full_diagram:
+                    FullDiagramTransaction.model_validate(
+                        plan.transaction.model_dump(mode="python")
+                    )
             except ValidationError as exc:
                 last_errors = self._compact_validation_errors(exc)
                 if schema_attempt >= MAX_SCHEMA_REPAIRS:
@@ -403,7 +412,9 @@ class SemanticAgentPlanner:
             f"Semantic transaction JSON Schema:\n{json.dumps(schema, ensure_ascii=False)}"
         )
 
-    def _system_prompt(self, schema: dict, *, repair: bool) -> str:
+    def _system_prompt(
+        self, schema: dict, *, repair: bool, full_diagram: bool
+    ) -> str:
         mode = (
             "The previous plan failed. Use the structured issue code, available values and suggestions "
             "to produce the smallest complete corrected plan. Do not repeat the same invalid IDs, ports, "
@@ -411,13 +422,25 @@ class SemanticAgentPlanner:
             if repair
             else "Plan the smallest atomic change that satisfies the user request."
         )
+        task_mode = (
+            "This is an empty-document full-diagram task. Only use operations in the supplied "
+            "full-diagram schema. Never create a raw connector through add_element. Use "
+            "connect_ports for equipment-to-equipment pipes, with waypoints for explicit orthogonal "
+            "routing. Use instrument_tap to split a main connector and create a junction, root valve, "
+            "instrument and bound branch pipes. "
+            if full_diagram
+            else "This is a local-edit task on an existing drawing. "
+        )
         return (
             "You are P&ID-Agent's semantic planning engine. Return JSON only with keys "
+            f"{task_mode}"
             "'explanation' and 'transaction'. Preserve unrelated elements. Use only real element IDs, "
             "symbol keys and port IDs from the supplied document and catalog. "
             "When a later operation references an element or connector added earlier in the same transaction, "
             "assign an explicit unique id in the add operation and reuse that exact id. "
-            "Use connect_ports to create a semantic pipe between two real ports. "
+            "Use connect_ports to create a semantic pipe between two real ports; use waypoints "
+            "instead of raw connector JSON when a specific orthogonal route is required. "
+            "Use instrument_tap for pressure, temperature or flow takeoffs from a main connector. "
             "Use reconnect_connector to move one existing connector endpoint; never edit source or target "
             "through update_element. Use replace_symbol to replace equipment while preserving connector IDs; "
             "provide port_mapping whenever old connected port IDs do not exist on the replacement. "

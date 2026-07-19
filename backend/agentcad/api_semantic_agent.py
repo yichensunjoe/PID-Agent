@@ -5,7 +5,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from .agent_semantic import SemanticTransactionCompiler, analyze_transaction
+from .agent_semantic import analyze_transaction
+from .semantic_compiler import SemanticTransactionCompiler
 from .agent_semantic_models import (
     AgentTransactionAssessment,
     SemanticAgentApplyRequest,

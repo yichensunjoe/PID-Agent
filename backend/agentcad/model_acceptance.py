@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from .agent_semantic import SemanticTransactionCompiler
+from .semantic_compiler import SemanticTransactionCompiler
 from .agent_semantic_models import SemanticAgentReplanRequest
 from .llm import PlannerError
 from .models import (
