@@ -22,7 +22,6 @@ from .service import DocumentService
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
 
-
 VERSION = "2.1.0-alpha.1"
 
 

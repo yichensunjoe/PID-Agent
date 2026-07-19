@@ -2,7 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from agentcad import __version__
 from agentcad.config import Settings
+from agentcad.diagnostics import DiagnosticLogger
 from agentcad.mcp_server import _server_info, _validate_transaction, build_service
 from agentcad.models import CreateDocumentRequest, TransactionRequest
 from agentcad.service import InvalidOperationError
@@ -13,11 +15,13 @@ def test_mcp_server_info_and_structured_validation(tmp_path: Path):
         database_path=tmp_path / "shared.db",
         cors_origins=["http://localhost:5173"],
         frontend_dist=tmp_path / "dist",
+        diagnostics_path=tmp_path / "diagnostics.jsonl",
     )
     service = build_service(settings)
     document = service.create_document(CreateDocumentRequest(name="MCP"))
 
-    info = _server_info(settings, service, "stdio")
+    diagnostics = DiagnosticLogger(settings.diagnostics_path, service_version=__version__)
+    info = _server_info(settings, service, "stdio", diagnostics)
     assert info["service"] == "P&ID-Agent"
     assert info["transport"] == "stdio"
     assert info["database_path"] == str((tmp_path / "shared.db").resolve())

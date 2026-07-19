@@ -5,7 +5,8 @@ import os
 from typing import Any
 
 from . import __version__
-from .agent_semantic import SemanticTransactionCompiler, analyze_transaction as analyze_low_level
+from .agent_semantic import SemanticTransactionCompiler
+from .agent_semantic import analyze_transaction as analyze_low_level
 from .agent_semantic_models import SemanticTransaction
 from .auto_layout_engine import AutoLayoutEngine
 from .config import Settings

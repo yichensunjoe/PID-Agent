@@ -61,7 +61,8 @@ def valid_plan(self, document_id, request):
             )
         ]
     elif "替换为" in prompt:
-        operations = [ReplaceSymbolOperation(element_id="target", symbol_key="gate_valve")]
+        symbol_key = prompt.split("替换为", 1)[1].split("，", 1)[0].strip()
+        operations = [ReplaceSymbolOperation(element_id="target", symbol_key=symbol_key)]
     elif "重新连接" in prompt:
         operations = [
             ReconnectConnectorOperation(

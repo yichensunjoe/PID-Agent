@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from math import hypot
-from typing import Iterable, Literal
+from typing import Literal
 
 from .layout_models import AutoLayoutMetrics, AutoLayoutPreview, AutoLayoutRequest, LayoutBounds
 from .models import (
@@ -17,7 +18,6 @@ from .models import (
     UpdateElementOperation,
 )
 from .service import DocumentService, InvalidOperationError, RevisionConflictError
-
 
 EPSILON = 1e-6
 

@@ -1,0 +1,136 @@
+[
+  {
+    "element_count": 500,
+    "canvas": {
+      "width": 4300.0,
+      "height": 1680.0
+    },
+    "content_bounds": {
+      "x": 56.0,
+      "y": 36.0,
+      "width": 4068.0,
+      "height": 1538.0
+    },
+    "content_bounds_time": {
+      "minimum_ms": 11.512,
+      "median_ms": 16.511,
+      "maximum_ms": 16.719
+    },
+    "full_svg_time": {
+      "minimum_ms": 53.875,
+      "median_ms": 55.477,
+      "maximum_ms": 55.62
+    },
+    "viewport_svg_time": {
+      "minimum_ms": 27.562,
+      "median_ms": 27.764,
+      "maximum_ms": 28.071
+    },
+    "full_svg_bytes": 242540,
+    "viewport_svg_bytes": 70755,
+    "viewport_rendered_elements": 152,
+    "viewport_cull_ratio": 0.304,
+    "peak_traced_memory_bytes": 756370
+  },
+  {
+    "element_count": 1000,
+    "canvas": {
+      "width": 5920.0,
+      "height": 2230.0
+    },
+    "content_bounds": {
+      "x": 56.0,
+      "y": 36.0,
+      "width": 5688.0,
+      "height": 2088.0
+    },
+    "content_bounds_time": {
+      "minimum_ms": 23.569,
+      "median_ms": 32.931,
+      "maximum_ms": 33.324
+    },
+    "full_svg_time": {
+      "minimum_ms": 110.846,
+      "median_ms": 115.273,
+      "maximum_ms": 117.907
+    },
+    "viewport_svg_time": {
+      "minimum_ms": 46.186,
+      "median_ms": 47.504,
+      "maximum_ms": 49.896
+    },
+    "full_svg_bytes": 485868,
+    "viewport_svg_bytes": 70951,
+    "viewport_rendered_elements": 152,
+    "viewport_cull_ratio": 0.152,
+    "peak_traced_memory_bytes": 1513126
+  },
+  {
+    "element_count": 2500,
+    "canvas": {
+      "width": 9340.0,
+      "height": 3440.0
+    },
+    "content_bounds": {
+      "x": 56.0,
+      "y": 36.0,
+      "width": 9108.0,
+      "height": 3298.0
+    },
+    "content_bounds_time": {
+      "minimum_ms": 67.258,
+      "median_ms": 92.17,
+      "maximum_ms": 92.612
+    },
+    "full_svg_time": {
+      "minimum_ms": 290.416,
+      "median_ms": 296.402,
+      "maximum_ms": 299.64
+    },
+    "viewport_svg_time": {
+      "minimum_ms": 109.26,
+      "median_ms": 109.885,
+      "maximum_ms": 110.552
+    },
+    "full_svg_bytes": 1217015,
+    "viewport_svg_bytes": 70812,
+    "viewport_rendered_elements": 152,
+    "viewport_cull_ratio": 0.0608,
+    "peak_traced_memory_bytes": 3786599
+  },
+  {
+    "element_count": 5000,
+    "canvas": {
+      "width": 13120.0,
+      "height": 4760.0
+    },
+    "content_bounds": {
+      "x": 56.0,
+      "y": 36.0,
+      "width": 12888.0,
+      "height": 4618.0
+    },
+    "content_bounds_time": {
+      "minimum_ms": 135.645,
+      "median_ms": 184.625,
+      "maximum_ms": 188.542
+    },
+    "full_svg_time": {
+      "minimum_ms": 580.719,
+      "median_ms": 595.775,
+      "maximum_ms": 602.967
+    },
+    "viewport_svg_time": {
+      "minimum_ms": 209.142,
+      "median_ms": 209.545,
+      "maximum_ms": 210.566
+    },
+    "full_svg_bytes": 2440849,
+    "viewport_svg_bytes": 70990,
+    "viewport_rendered_elements": 152,
+    "viewport_cull_ratio": 0.0304,
+    "peak_traced_memory_bytes": 7584167
+  }
+]
+BENCH_EXIT=0
+done 16:10:15

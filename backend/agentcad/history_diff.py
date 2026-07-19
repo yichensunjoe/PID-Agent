@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from .models import Document, Operation
-
 
 _MAX_CHANGE_SNAPSHOTS = 100
 

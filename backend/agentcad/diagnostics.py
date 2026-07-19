@@ -9,7 +9,6 @@ from threading import RLock
 from typing import Any
 from uuid import uuid4
 
-
 _SECRET_KEY_PARTS = ("api_key", "apikey", "authorization", "secret", "token", "password")
 _TEXT_KEYS = {"prompt", "context", "user_prompt", "system_prompt", "messages"}
 _SAFE_METADATA_KEYS = {

@@ -7,7 +7,12 @@ from fastapi import APIRouter, HTTPException
 from .auto_layout_engine import AutoLayoutEngine
 from .diagnostics import DiagnosticLogger
 from .layout_models import AutoLayoutPreview, AutoLayoutRequest
-from .service import DocumentNotFoundError, DocumentService, InvalidOperationError, RevisionConflictError
+from .service import (
+    DocumentNotFoundError,
+    DocumentService,
+    InvalidOperationError,
+    RevisionConflictError,
+)
 
 
 def create_layout_router(
