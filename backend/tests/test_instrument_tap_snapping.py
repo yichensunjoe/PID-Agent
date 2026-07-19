@@ -178,8 +178,8 @@ def test_distant_tap_still_returns_nearest_route_diagnostics(tmp_path):
     assert compiled.assessment.valid is False
     issue = compiled.assessment.issues[0]
     assert issue.code == "tap_point_not_on_connector"
-    assert issue.available_values["snap_tolerance"] == pytest.approx(40)
-    assert issue.available_values["nearest_connector_id"] == "main"
-    assert issue.available_values["nearest_point"] == {"x": 400.0, "y": 400.0}
-    assert issue.available_values["nearest_distance"] == pytest.approx(100)
+    assert issue.available_values["snap_tolerance"] == ["40.0000"]
+    assert issue.available_values["nearest_connector_id"] == ["main"]
+    assert issue.available_values["nearest_point"] == ["400.0000,400.0000"]
+    assert issue.available_values["nearest_distance"] == ["100.0000"]
     assert any("不要通过增加斜向 waypoint" in suggestion for suggestion in issue.suggestions)
