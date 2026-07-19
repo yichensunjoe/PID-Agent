@@ -1,0 +1,254 @@
+name: Issue 4 label integration
+
+on:
+  push:
+    branches: [agent/issue-4-label-layout]
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-4-label-layout
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply integration edits
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path_name: str, old: str, new: str) -> None:
+              path = Path(path_name)
+              content = path.read_text()
+              if new in content:
+                  return
+              if old not in content:
+                  raise SystemExit(f"marker not found in {path_name}: {old[:100]!r}")
+              path.write_text(content.replace(old, new))
+
+          replace(
+              "backend/agentcad/agent_semantic_models.py",
+              "class SemanticAgentPlanResult(StrictModel):\n",
+              '''class AnnotationQuality(StrictModel):
+              duplicate_label_count: int = Field(default=0, ge=0)
+              text_text_overlaps: int = Field(default=0, ge=0)
+              text_symbol_overlaps: int = Field(default=0, ge=0)
+              text_connector_intersections: int = Field(default=0, ge=0)
+
+
+          class AnnotationLayoutMetrics(StrictModel):
+              before: AnnotationQuality = Field(default_factory=AnnotationQuality)
+              after: AnnotationQuality = Field(default_factory=AnnotationQuality)
+              generated_text_ids: list[str] = Field(default_factory=list)
+              moved_text_ids: list[str] = Field(default_factory=list)
+              deleted_text_ids: list[str] = Field(default_factory=list)
+              leader_line_ids: list[str] = Field(default_factory=list)
+
+
+          class SemanticAgentPlanResult(StrictModel):
+          ''',
+          )
+          replace(
+              "backend/agentcad/agent_semantic_models.py",
+              "    parent_plan_id: str | None = None\n\n\nclass SemanticAgentReplanRequest",
+              "    parent_plan_id: str | None = None\n    annotation_metrics: AnnotationLayoutMetrics | None = None\n\n\nclass SemanticAgentReplanRequest",
+          )
+          replace(
+              "backend/agentcad/agent_semantic_models.py",
+              "class CompiledSemanticTransaction(StrictModel):\n    transaction: TransactionRequest | None = None\n    assessment: AgentTransactionAssessment\n",
+              "class CompiledSemanticTransaction(StrictModel):\n    transaction: TransactionRequest | None = None\n    assessment: AgentTransactionAssessment\n    annotation_metrics: AnnotationLayoutMetrics | None = None\n",
+          )
+
+          replace(
+              "backend/agentcad/api_semantic_agent.py",
+              "        parent_plan_id=parent_plan_id,\n    )\n",
+              "        parent_plan_id=parent_plan_id,\n        annotation_metrics=compiled.annotation_metrics,\n    )\n",
+          )
+          replace(
+              "backend/agentcad/api_semantic_agent.py",
+              "def _operation_types(plan, compiled) -> dict[str, list[str]]:\n",
+              "def _operation_types(plan, compiled) -> dict[str, Any]:\n",
+          )
+          replace(
+              "backend/agentcad/api_semantic_agent.py",
+              "        ),\n    }\n\n\ndef _result",
+              '''        ),
+              "annotation_metrics": (
+                  compiled.annotation_metrics.model_dump(mode="json")
+                  if compiled.annotation_metrics is not None
+                  else None
+              ),
+          }
+
+
+          def _result''',
+          )
+
+          engine = Path("backend/agentcad/semantic_compiler_engine.py")
+          content = engine.read_text()
+          content = content.replace(
+              "from .agent_semantic import AgentCompileError, _element, _issue\n",
+              "from .agent_semantic import AgentCompileError, _element, _issue, analyze_transaction\n",
+          )
+          content = content.replace(
+              "from .agent_semantic_models import InstrumentTapOperation\n",
+              "from .agent_semantic_models import (\n"
+              "    CompiledSemanticTransaction,\n"
+              "    InstrumentTapOperation,\n"
+              "    SemanticTransaction,\n"
+              ")\n",
+          )
+          content = content.replace(
+              "from .models import AddElementOperation, ConnectorElement, Document, Operation, Point\n",
+              "from .annotation_layout import polish_full_diagram_transaction\n"
+              "from .models import AddElementOperation, ConnectorElement, Document, Operation, Point\n",
+          )
+          marker = "    def _instrument_tap(\n"
+          compile_method = '''    def compile(
+              self,
+              document_id: str,
+              transaction: SemanticTransaction,
+          ) -> CompiledSemanticTransaction:
+              current = self.service.get_document(document_id)
+              compiled = super().compile(document_id, transaction)
+              if current.elements or not compiled.assessment.valid or compiled.transaction is None:
+                  return compiled
+              try:
+                  polished, metrics = polish_full_diagram_transaction(
+                      self.service,
+                      document_id,
+                      compiled.transaction,
+                  )
+                  assessment = analyze_transaction(
+                      self.service,
+                      document_id,
+                      polished,
+                      semantic_operation_count=len(transaction.operations),
+                  )
+              except (KeyError, TypeError, ValueError):
+                  return compiled
+              if not assessment.valid:
+                  return compiled
+              return CompiledSemanticTransaction(
+                  transaction=polished,
+                  assessment=assessment,
+                  annotation_metrics=metrics,
+              )
+
+          '''
+          if compile_method not in content:
+              if marker not in content:
+                  raise SystemExit("semantic compiler method marker not found")
+              content = content.replace(marker, compile_method + marker, 1)
+          engine.write_text(content)
+
+          replace(
+              "backend/agentcad/layout_models.py",
+              "    total_route_length_after: float = Field(default=0, ge=0)\n",
+              '''    total_route_length_after: float = Field(default=0, ge=0)
+              duplicate_label_count_before: int = Field(default=0, ge=0)
+              duplicate_label_count_after: int = Field(default=0, ge=0)
+              text_text_overlaps_before: int = Field(default=0, ge=0)
+              text_text_overlaps_after: int = Field(default=0, ge=0)
+              text_symbol_overlaps_before: int = Field(default=0, ge=0)
+              text_symbol_overlaps_after: int = Field(default=0, ge=0)
+              text_connector_intersections_before: int = Field(default=0, ge=0)
+              text_connector_intersections_after: int = Field(default=0, ge=0)
+          ''',
+          )
+          replace(
+              "backend/agentcad/auto_layout.py",
+              "from .layout_models import AutoLayoutMetrics, AutoLayoutPreview, AutoLayoutRequest, LayoutBounds\n",
+              "from .annotation_layout import measure_annotation_quality\n"
+              "from .layout_models import AutoLayoutMetrics, AutoLayoutPreview, AutoLayoutRequest, LayoutBounds\n",
+          )
+          replace(
+              "backend/agentcad/auto_layout.py",
+              "        return AutoLayoutMetrics(\n",
+              "        before_annotations = measure_annotation_quality(before, self.service.symbols)\n"
+              "        after_annotations = measure_annotation_quality(after, self.service.symbols)\n"
+              "        return AutoLayoutMetrics(\n",
+          )
+          replace(
+              "backend/agentcad/auto_layout.py",
+              "            total_route_length_after=self._route_length(after_connectors),\n",
+              '''            total_route_length_after=self._route_length(after_connectors),
+              duplicate_label_count_before=before_annotations.duplicate_label_count,
+              duplicate_label_count_after=after_annotations.duplicate_label_count,
+              text_text_overlaps_before=before_annotations.text_text_overlaps,
+              text_text_overlaps_after=after_annotations.text_text_overlaps,
+              text_symbol_overlaps_before=before_annotations.text_symbol_overlaps,
+              text_symbol_overlaps_after=after_annotations.text_symbol_overlaps,
+              text_connector_intersections_before=before_annotations.text_connector_intersections,
+              text_connector_intersections_after=after_annotations.text_connector_intersections,
+          ''',
+          )
+
+          replace(
+              "frontend/src/types.ts",
+              "export type SemanticAgentPlanResult = {\n",
+              '''export type AnnotationQuality = {
+              duplicate_label_count: number;
+              text_text_overlaps: number;
+              text_symbol_overlaps: number;
+              text_connector_intersections: number;
+          };
+
+          export type AnnotationLayoutMetrics = {
+              before: AnnotationQuality;
+              after: AnnotationQuality;
+              generated_text_ids: string[];
+              moved_text_ids: string[];
+              deleted_text_ids: string[];
+              leader_line_ids: string[];
+          };
+
+          export type SemanticAgentPlanResult = {
+          ''',
+          )
+          replace(
+              "frontend/src/types.ts",
+              "  parent_plan_id?: string | null;\n};\n",
+              "  parent_plan_id?: string | null;\n  annotation_metrics?: AnnotationLayoutMetrics | null;\n};\n",
+          )
+
+          app = Path("frontend/src/App.tsx")
+          content = app.read_text()
+          marker = '''              <ol className="agent-operation-list">
+          '''
+          block = '''              {pendingPlan.annotation_metrics ? <section className="agent-annotation-metrics">
+              <h3>标签自动润色</h3>
+              <dl>
+                <div><dt>重复标签</dt><dd>{pendingPlan.annotation_metrics.before.duplicate_label_count} → {pendingPlan.annotation_metrics.after.duplicate_label_count}</dd></div>
+                <div><dt>文字互相重叠</dt><dd>{pendingPlan.annotation_metrics.before.text_text_overlaps} → {pendingPlan.annotation_metrics.after.text_text_overlaps}</dd></div>
+                <div><dt>文字覆盖设备</dt><dd>{pendingPlan.annotation_metrics.before.text_symbol_overlaps} → {pendingPlan.annotation_metrics.after.text_symbol_overlaps}</dd></div>
+                <div><dt>文字压住管线</dt><dd>{pendingPlan.annotation_metrics.before.text_connector_intersections} → {pendingPlan.annotation_metrics.after.text_connector_intersections}</dd></div>
+              </dl>
+              <p>新增标签 {pendingPlan.annotation_metrics.generated_text_ids.length} · 移动 {pendingPlan.annotation_metrics.moved_text_ids.length} · 删除重复 {pendingPlan.annotation_metrics.deleted_text_ids.length} · 引线 {pendingPlan.annotation_metrics.leader_line_ids.length}</p>
+              </section> : null}
+          '''
+          if block not in content:
+              if marker not in content:
+                  raise SystemExit("App annotation insertion marker not found")
+              content = content.replace(marker, block + marker, 1)
+          app.write_text(content)
+          PY
+      - name: Ruff autofix
+        run: |
+          python -m pip install "ruff>=0.12,<1"
+          ruff check --fix backend
+      - name: Commit integration
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend frontend
+          git commit -m "feat: integrate annotation polishing metrics"
+          git push
