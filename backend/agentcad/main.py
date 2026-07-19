@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import create_v1_compat_router, create_v2_router
+from .api_acceptance import create_acceptance_router
 from .api_export import _max_export_pixels, create_export_router
 from .api_layout import create_layout_router
 from .api_semantic_agent import create_semantic_agent_router
@@ -148,6 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     app.include_router(create_v2_router(service, planner, diagnostics, VERSION))
+    app.include_router(create_acceptance_router(symbols, diagnostics))
     app.include_router(create_export_router(service, diagnostics))
     app.include_router(create_layout_router(service, diagnostics))
     app.include_router(create_semantic_agent_router(service, semantic_planner, diagnostics))
