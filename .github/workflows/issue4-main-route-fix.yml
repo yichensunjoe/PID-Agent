@@ -18,35 +18,13 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+
           path = Path("backend/agentcad/semantic_compiler.py")
           content = path.read_text()
-          old = '''        main = _element(document, operation.main_connector_id)
-          if main is None:
-              raise AgentCompileError(
-                  _issue(
-                      index=index,
-                      operation=operation.op,
-                      code="connector_not_found",
-                      message=f"connector not found: {operation.main_connector_id}",
-                      connector_id=operation.main_connector_id,
-                      available_values={
-                          "connector_ids": [item.id for item in document.elements if item.type == "connector"]
-                      },
-                      suggestions=["使用当前事务前面新增或当前文档中真实存在的主管 connector id。"],
-                  )
-              )
-          if main.type != "connector":
-              raise AgentCompileError(
-                  _issue(
-                      index=index,
-                      operation=operation.op,
-                      code="element_type_mismatch",
-                      message=f"instrument_tap requires a connector, got {main.type}",
-                      connector_id=main.id,
-                  )
-              )
-          '''
-          new = '''        main = self._resolve_main_connector(
+          if "def _resolve_main_connector(" not in content:
+              start = content.index("        main = _element(document, operation.main_connector_id)\n")
+              end = content.index("        locked_layers =", start)
+              replacement = '''        main = self._resolve_main_connector(
               document,
               operation.main_connector_id,
               operation.junction_point,
@@ -76,45 +54,48 @@ jobs:
               main.metadata.get("main_route_id") or operation.main_connector_id
           )
           '''
-          if old not in content:
-              raise SystemExit("main connector block not found")
-          content = content.replace(old, new)
-          content = content.replace(
-              '''            "assembly": "instrument_tap",
+              content = content[:start] + replacement + content[end:]
+
+              old = '''            "assembly": "instrument_tap",
               "main_connector_id": main.id,
               "junction_id": operation.junction_id,
-          ''',
-              '''            "assembly": "instrument_tap",
+          '''
+              new = '''            "assembly": "instrument_tap",
               "main_connector_id": operation.main_connector_id,
               "main_route_id": main_route_id,
               "split_segment_id": main.id,
               "junction_id": operation.junction_id,
-          ''',
-          )
-          content = content.replace(
-              '''                    **deepcopy(main.metadata),
-                      "split_by_instrument_tap": operation.junction_id,
-          ''',
-              '''                    **deepcopy(main.metadata),
-                      "main_route_id": main_route_id,
-                      "split_by_instrument_tap": operation.junction_id,
-          ''',
-              1,
-          )
-          content = content.replace(
-              '''                    **deepcopy(main.metadata),
-                      "split_from_connector_id": main.id,
-                      "split_by_instrument_tap": operation.junction_id,
-          ''',
-              '''                    **deepcopy(main.metadata),
-                      "main_route_id": main_route_id,
-                      "split_from_connector_id": main.id,
-                      "split_by_instrument_tap": operation.junction_id,
-          ''',
-          )
-          marker = '''    def _symbol_definition(
           '''
-          helper = '''    def _resolve_main_connector(
+              if old not in content:
+                  raise SystemExit("assembly metadata marker not found")
+              content = content.replace(old, new, 1)
+
+              old = '''                    **deepcopy(main.metadata),
+                      "split_by_instrument_tap": operation.junction_id,
+          '''
+              new = '''                    **deepcopy(main.metadata),
+                      "main_route_id": main_route_id,
+                      "split_by_instrument_tap": operation.junction_id,
+          '''
+              if old not in content:
+                  raise SystemExit("first split metadata marker not found")
+              content = content.replace(old, new, 1)
+
+              old = '''                    **deepcopy(main.metadata),
+                      "split_from_connector_id": main.id,
+                      "split_by_instrument_tap": operation.junction_id,
+          '''
+              new = '''                    **deepcopy(main.metadata),
+                      "main_route_id": main_route_id,
+                      "split_from_connector_id": main.id,
+                      "split_by_instrument_tap": operation.junction_id,
+          '''
+              if old not in content:
+                  raise SystemExit("second split metadata marker not found")
+              content = content.replace(old, new, 1)
+
+              marker = "    def _symbol_definition(\n"
+              helper = '''    def _resolve_main_connector(
               self,
               document: Document,
               requested_id: str,
@@ -144,11 +125,10 @@ jobs:
               )
 
           '''
-          if helper not in content:
               if marker not in content:
                   raise SystemExit("symbol definition marker not found")
-              content = content.replace(marker, helper + marker)
-          path.write_text(content)
+              content = content.replace(marker, helper + marker, 1)
+              path.write_text(content)
           PY
       - name: Commit fix
         run: |
