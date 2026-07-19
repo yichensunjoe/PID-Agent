@@ -21,6 +21,9 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install --yes libcairo2
       - run: python -m pip install -e ".[mcp,dev]"
       - run: |
+          python tools/issue4_fix_interface_ports.py
+          ruff check --fix backend
+      - run: |
           python - <<'PY' > reports/debug-complex.log 2>&1
           import runpy
           from pathlib import Path
@@ -51,9 +54,9 @@ jobs:
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add reports/debug-complex.log
+          git add backend reports/debug-complex.log
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "test: capture complex compile assessment"
+          git commit -m "fix: use real system interface ports in complex case"
           git push
