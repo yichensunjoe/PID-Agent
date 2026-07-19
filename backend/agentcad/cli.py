@@ -38,6 +38,11 @@ def main() -> None:
     matrix_parser.add_argument("--timeout", type=float, default=120)
     matrix_parser.add_argument("--repetitions", type=int, default=3)
     matrix_parser.add_argument("--max-replans", type=int, default=3)
+    matrix_parser.add_argument(
+        "--include-complex-diagram",
+        action="store_true",
+        help="Add the 30-50 element complex full-diagram generation scenario",
+    )
     matrix_parser.add_argument("--output", default="", help="Optional JSON report path")
 
     args = parser.parse_args()
@@ -63,6 +68,7 @@ def main() -> None:
             ),
             repetitions=args.repetitions,
             max_replans=args.max_replans,
+            include_complex_diagram=args.include_complex_diagram,
         )
         report = run_model_matrix(request, SymbolRegistry())
         payload = json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2)
