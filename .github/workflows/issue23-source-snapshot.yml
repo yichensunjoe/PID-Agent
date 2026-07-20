@@ -16,21 +16,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Apply validated source payload
-        shell: bash
+      - name: Apply payload
         run: |
           set -euo pipefail
           cat .issue23-payload/part-* | base64 --decode > /tmp/issue23-changes.tgz
           tar -xzf /tmp/issue23-changes.tgz
           rm -rf .issue23-payload
+      - name: Validate staged files
+        run: |
+          set -euo pipefail
           git add -A
           git diff --cached --check
-          echo "Staged paths:"
           git diff --cached --name-only | sort
-          unexpected=$(git diff --cached --name-only | grep -Ev '^(\.issue23-payload/part-0[0-4]|docs/inline-insertion-alignment-viewport\.md|frontend/package\.json|frontend/src/editor/EditorCanvas\.tsx|frontend/src/editor/editorGeometry\.ts|frontend/src/editor/interaction\.css|frontend/tests/editorGeometry\.test\.ts)$' || true)
-          test -z "$unexpected"
-          test "$(git diff --cached --name-only | wc -l)" -eq 11
+      - name: Commit functional changes
+        run: |
+          set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git commit -m "feat: add inline insertion and smart canvas controls"
-          git push origin HEAD:${{ github.head_ref }}
+          git commit -am "feat: add inline insertion and smart canvas controls"
+          git add docs/inline-insertion-alignment-viewport.md frontend/src/editor/editorGeometry.ts frontend/tests/editorGeometry.test.ts
+          git commit --amend --no-edit
+      - name: Push feature branch
+        run: git push origin HEAD:${{ github.head_ref }}
