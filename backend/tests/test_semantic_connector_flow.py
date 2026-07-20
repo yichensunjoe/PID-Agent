@@ -64,7 +64,7 @@ def _compiled_connector(compiled, connector_id):
 
 
 def test_full_diagram_schema_tells_models_to_use_connector_flow_not_arrow_text():
-    schema_text = json.dumps(FullDiagramTransaction.model_json_schema())
+    schema_text = json.dumps(FullDiagramTransaction.model_json_schema(), ensure_ascii=False)
 
     assert "flow_direction" in schema_text
     assert "source→target" in schema_text
