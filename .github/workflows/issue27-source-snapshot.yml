@@ -1,0 +1,25 @@
+name: Issue 27 source snapshot
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Pack repository
+        run: tar --exclude=.git -czf /tmp/pid-agent-source.tar.gz .
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue27-source
+          path: /tmp/pid-agent-source.tar.gz
+          retention-days: 1
