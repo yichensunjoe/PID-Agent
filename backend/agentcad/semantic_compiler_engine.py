@@ -15,7 +15,7 @@ from .semantic_compiler import SemanticTransactionCompiler as BaseSemanticTransa
 
 MIN_TAP_SNAP_TOLERANCE = 2.0
 MAX_TAP_SNAP_TOLERANCE = 80.0
-TAP_SNAP_GRID_MULTIPLIER = 2.0
+TAP_SNAP_GRID_MULTIPLIER = 4.0
 POINT_EPSILON = 1e-6
 
 
