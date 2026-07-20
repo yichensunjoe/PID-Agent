@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent, type RefObject } from "react";
 import { useWorkspace } from "../store";
 import type { ConnectorElement, Document, Element, Operation, Point, Style } from "../types";
+import { commonValue, isElementEditLocked, readEditorGroupId, type CommonValue } from "./selectionEditing";
 import {
   addOffsetSection,
   compactOrthogonalRoute,
@@ -273,58 +274,130 @@ function ConnectorPathActions({ document, element }: { document: Document; eleme
   );
 }
 
-function MultiInspector({ elements }: { elements: Element[] }) {
+function mixedText<T>(value: CommonValue<T>): string {
+  return value.state === "single" ? String(value.value) : "";
+}
+
+function MultiInspector({ document, elements }: { document: Document; elements: Element[] }) {
   const transact = useWorkspace((state) => state.transact);
+  const setSelectionLocked = useWorkspace((state) => state.setSelectionLocked);
+  const isMutating = useWorkspace((state) => state.isMutating);
   const [error, setError] = useState("");
   const value = commonStyle(elements);
+  const editorLocked = elements.filter(isElementEditLocked);
+  const lockedLayerIds = new Set(document.layers.filter((layer) => layer.locked).map((layer) => layer.id));
+  const layerLocked = elements.filter((element) => lockedLayerIds.has(element.layer_id));
+  const editingBlocked = editorLocked.length > 0 || layerLocked.length > 0;
+  const connectors = elements.filter((element): element is ConnectorElement => element.type === "connector");
+  const allConnectors = connectors.length === elements.length;
+  const layerValue = commonValue(elements, (element) => element.layer_id);
+  const systemValue = commonValue(elements, (element) => element.system_id);
+  const flowValue = commonValue(connectors, (element) => element.flow_direction);
+  const arrowValue = commonValue(connectors, (element) => element.arrow_position);
+  const crossingValue = commonValue(connectors, (element) => element.crossing_style);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    if (editingBlocked) {
+      const reasons = [
+        editorLocked.length ? `${editorLocked.length} 个元素锁` : "",
+        layerLocked.length ? `${layerLocked.length} 个图层锁` : "",
+      ].filter(Boolean).join("、");
+      setError(`选择中包含锁定内容（${reasons}），请先解锁后再批量修改。`);
+      return;
+    }
     try {
       const data = new FormData(event.currentTarget);
+      const layerId = text(data, "layer_id");
+      const systemId = text(data, "system_id");
       const stroke = text(data, "stroke");
       const fill = text(data, "fill");
       const width = text(data, "stroke_width");
       const opacity = text(data, "opacity");
       const dashText = text(data, "dash");
       const clear = data.get("clear_dash") === "on";
-      if (!stroke && !fill && !width && !opacity && !dashText && !clear) return;
-      const operations: Operation[] = elements.map((element) => {
-        const next = { ...element.style };
-        if (stroke) next.stroke = stroke;
-        if (fill) next.fill = fill;
-        if (width) next.stroke_width = Number(width);
-        if (opacity) next.opacity = Number(opacity);
-        if (dashText) next.dash = dashValue(dashText);
-        if (clear) next.dash = [];
-        return { op: "update_element", element_id: element.id, patch: { style: next } };
+      const flowDirection = text(data, "flow_direction");
+      const arrowPosition = text(data, "arrow_position");
+      const crossingStyle = text(data, "crossing_style");
+      const operations: Operation[] = elements.flatMap((element) => {
+        const patch: Record<string, unknown> = {};
+        if (layerId) patch.layer_id = layerId;
+        if (systemId) patch.system_id = systemId;
+        if (stroke || fill || width || opacity || dashText || clear) {
+          const next = { ...element.style };
+          if (stroke) next.stroke = stroke;
+          if (fill) next.fill = fill;
+          if (width) next.stroke_width = Number(width);
+          if (opacity) next.opacity = Number(opacity);
+          if (dashText) next.dash = dashValue(dashText);
+          if (clear) next.dash = [];
+          patch.style = next;
+        }
+        if (element.type === "connector") {
+          if (flowDirection) patch.flow_direction = flowDirection;
+          if (arrowPosition) patch.arrow_position = arrowPosition;
+          if (crossingStyle) patch.crossing_style = crossingStyle;
+        }
+        return Object.keys(patch).length ? [{ op: "update_element", element_id: element.id, patch } as Operation] : [];
       });
-      await transact(operations, `Update style for ${elements.length} elements`);
+      if (!operations.length) return;
+      await transact(operations, `Bulk update ${elements.length} elements`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
   };
 
   return (
-    <form className="inspector-form" onSubmit={(event) => void submit(event)}>
-      <div className="inspector-summary"><strong>{elements.length} 个元素</strong><span>批量样式</span></div>
-      <StyleFields value={value} mixed />
-      {error ? <div className="inspector-error">{error}</div> : null}
-      <button className="inspector-apply">应用批量样式</button>
-    </form>
+    <>
+      <div className={`inspector-lock-banner ${editingBlocked ? "locked" : ""}`}>
+        <div><strong>{elements.length} 个元素</strong><span>{editingBlocked ? `${editorLocked.length} 个元素锁 · ${layerLocked.length} 个图层锁` : "可批量编辑"}</span></div>
+        {editorLocked.length ? <button type="button" disabled={isMutating || Boolean(layerLocked.length)} onClick={() => void setSelectionLocked(false)}>解锁元素</button> : <button type="button" disabled={isMutating || Boolean(layerLocked.length)} onClick={() => void setSelectionLocked(true)}>锁定全部</button>}
+      </div>
+      <form className="inspector-form" onSubmit={(event) => void submit(event)}>
+        <fieldset disabled={editingBlocked || isMutating} className="inspector-fieldset-reset">
+          <fieldset className="inspector-section">
+            <legend>归属</legend>
+            <div className="inspector-grid two-columns">
+              <label>图层<select name="layer_id" defaultValue={mixedText(layerValue)}><option value="">{layerValue.state === "mixed" ? "混合；不修改" : "不修改"}</option>{document.layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name}{layer.locked ? "（锁定）" : ""}</option>)}</select></label>
+              <label>系统<select name="system_id" defaultValue={mixedText(systemValue)}><option value="">{systemValue.state === "mixed" ? "混合；不修改" : "不修改"}</option>{document.systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}</select></label>
+            </div>
+          </fieldset>
+          <StyleFields value={value} mixed />
+          {allConnectors ? <fieldset className="inspector-section">
+            <legend>管线表达</legend>
+            <div className="inspector-grid two-columns">
+              <label>流向<select name="flow_direction" defaultValue={mixedText(flowValue)}><option value="">{flowValue.state === "mixed" ? "混合；不修改" : "不修改"}</option><option value="none">无箭头</option><option value="forward">Source → Target</option><option value="reverse">Target → Source</option></select></label>
+              <label>箭头位置<select name="arrow_position" defaultValue={mixedText(arrowValue)}><option value="">{arrowValue.state === "mixed" ? "混合；不修改" : "不修改"}</option><option value="start">起点附近</option><option value="middle">中部</option><option value="end">终点附近</option></select></label>
+              <label>跨线样式<select name="crossing_style" defaultValue={mixedText(crossingValue)}><option value="">{crossingValue.state === "mixed" ? "混合；不修改" : "不修改"}</option><option value="none">普通交叉</option><option value="jump">跨线桥</option></select></label>
+            </div>
+          </fieldset> : <div className="inspector-hint">管线专用字段仅在全部选择均为 connector 时可用。</div>}
+          <button className="inspector-apply">应用批量属性</button>
+        </fieldset>
+        {error ? <div className="inspector-error">{error}</div> : null}
+      </form>
+    </>
   );
 }
 
 function SingleInspector({ document, element }: { document: Document; element: Element }) {
   const transact = useWorkspace((state) => state.transact);
   const isMutating = useWorkspace((state) => state.isMutating);
+  const setSelectionLocked = useWorkspace((state) => state.setSelectionLocked);
   const [error, setError] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const locked = isElementEditLocked(element);
+  const layerLocked = document.layers.some((layer) => layer.id === element.layer_id && layer.locked);
+  const editingBlocked = locked || layerLocked;
+  const groupId = readEditorGroupId(element);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    if (editingBlocked) {
+      setError(layerLocked ? "元素所在图层已锁定，请先解锁图层。" : "元素已锁定，请先解锁后再修改属性。");
+      return;
+    }
     try {
       const data = new FormData(event.currentTarget);
       const patch = {
@@ -343,7 +416,12 @@ function SingleInspector({ document, element }: { document: Document; element: E
 
   return (
     <>
+      <div className={`inspector-lock-banner ${editingBlocked ? "locked" : ""}`}>
+        <div><strong>{layerLocked ? "所在图层已锁定" : locked ? "元素已锁定" : "元素可编辑"}</strong><span>{groupId ? `分组 ${groupId}` : "未分组"}</span></div>
+        <button type="button" disabled={isMutating || layerLocked} onClick={() => void setSelectionLocked(!locked)}>{locked ? "解锁" : "锁定"}</button>
+      </div>
       <form key={`${element.id}:${document.revision}`} ref={formRef} className="inspector-form" onSubmit={(event) => void submit(event)}>
+        <fieldset disabled={editingBlocked || isMutating} className="inspector-fieldset-reset">
         <div className="inspector-summary"><strong>{element.type}</strong><code>{element.id}</code></div>
         <label>内部名称<input name="name" defaultValue={element.name} /></label>
         <label>工程备注<textarea name="notes" defaultValue={typeof element.metadata.notes === "string" ? element.metadata.notes : ""} rows={3} /></label>
@@ -353,10 +431,11 @@ function SingleInspector({ document, element }: { document: Document; element: E
         </div>
         <ElementFields element={element} formRef={formRef} />
         <StyleFields value={element.style} />
+        <button className="inspector-apply">{isMutating ? "提交中…" : "应用属性"}</button>
+        </fieldset>
         {error ? <div className="inspector-error">{error}</div> : null}
-        <button className="inspector-apply" disabled={isMutating}>{isMutating ? "提交中…" : "应用属性"}</button>
       </form>
-      {element.type === "connector" ? <ConnectorPathActions document={document} element={element} /> : null}
+      {element.type === "connector" && !editingBlocked ? <ConnectorPathActions document={document} element={element} /> : null}
     </>
   );
 }
@@ -371,7 +450,7 @@ export function PropertyInspector() {
   if (!document || selected.length === 0) {
     content = <div className="inspector-empty"><strong>未选择元素</strong><span>在画布中选择设备、文字、节点或管线后编辑属性。</span></div>;
   } else if (selected.length > 1) {
-    content = <MultiInspector elements={selected} />;
+    content = <MultiInspector document={document} elements={selected} />;
   } else {
     content = <SingleInspector document={document} element={selected[0]} />;
   }

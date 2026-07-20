@@ -7,6 +7,7 @@ import { ViewNavigator } from "./editor/ViewNavigator";
 import { elementPaletteCommands, type PaletteCommand } from "./editor/commandPalette";
 import { currentNavigationZone, deriveNavigationZones, loadNamedViews, persistNamedViews, sanitizeNamedViews, type CanvasView, type NamedCanvasView, type NavigationZone } from "./editor/navigationViews";
 import { rectForElement } from "./editor/editorGeometry";
+import { isElementEditLocked, readEditorGroupId } from "./editor/selectionEditing";
 import { HistoryPanel } from "./editor/HistoryPanel";
 import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
@@ -323,6 +324,13 @@ export default function App() {
   const selectedElements = state.document?.elements.filter((element) => state.selectedElementIds.includes(element.id)) ?? [];
   const selectedConnectors = selectedElements.filter((element) => element.type === "connector");
   const alignableSelection = selectedElements.filter((element) => element.type !== "connector");
+  const activeElementId = state.selectedElementIds.at(-1);
+  const activeElement = selectedElements.find((element) => element.id === activeElementId) ?? selectedElements.at(-1);
+  const selectedGroupIds = new Set(selectedElements.map(readEditorGroupId).filter((value): value is string => Boolean(value)));
+  const selectedLockedElements = selectedElements.filter(isElementEditLocked);
+  const lockedLayerIds = new Set(state.document?.layers.filter((layer) => layer.locked).map((layer) => layer.id) ?? []);
+  const selectedOnLockedLayers = selectedElements.filter((element) => lockedLayerIds.has(element.layer_id));
+  const selectionEditingBlocked = selectedLockedElements.length > 0 || selectedOnLockedLayers.length > 0;
   const hasRouteLocks = selectedConnectors.some((connector) => Array.isArray(connector.metadata.locked_route_points) && connector.metadata.locked_route_points.length > 0);
   const visibleLayerIds = new Set(state.document?.layers.filter((layer) => layer.visible).map((layer) => layer.id) ?? []);
   const visibleSystemIds = new Set(state.document?.systems.filter((system) => system.visible).map((system) => system.id) ?? []);
@@ -335,21 +343,32 @@ export default function App() {
     { id: "canvas:fit-selection", label: "适应当前选择", description: "缩放到选中元素", keywords: ["fit selection", "focus"], shortcut: shortcut("canvas:fit-selection"), enabled: selectedElements.length > 0, group: "command" },
     { id: "canvas:reset-zoom", label: "重置为 100%", description: "保持当前中心重置缩放", keywords: ["100", "zoom reset"], enabled: Boolean(state.document), group: "command" },
     { id: "canvas:fit-agent-preview", label: "定位 Agent 画布预览", description: "适应当前 ghost preview", keywords: ["agent", "preview"], enabled: Boolean(agentCanvasPreview), group: "command" },
-    { id: "canvas:avoid-obstacles", label: "选中管线避障布线", description: "确定性绕开设备、文字和节点", keywords: ["route", "obstacle", "避障"], shortcut: shortcut("canvas:avoid-obstacles"), enabled: selectedConnectors.length > 0, group: "command" },
-    { id: "canvas:reroute-selection", label: "重排选中管线", description: "保留锁定锚点并重新正交布线", keywords: ["reroute", "管线"], enabled: selectedConnectors.length > 0, group: "command" },
-    { id: "canvas:clear-route-locks", label: "清除选中管线锚点", description: "移除所有锁定路由点", keywords: ["unlock", "anchor"], enabled: hasRouteLocks, group: "command" },
-    { id: "canvas:align-left", label: "左对齐", enabled: alignableSelection.length > 1, group: "command" },
-    { id: "canvas:align-center", label: "水平居中", enabled: alignableSelection.length > 1, group: "command" },
-    { id: "canvas:align-right", label: "右对齐", enabled: alignableSelection.length > 1, group: "command" },
-    { id: "canvas:align-top", label: "顶部对齐", enabled: alignableSelection.length > 1, group: "command" },
-    { id: "canvas:align-middle", label: "垂直居中", enabled: alignableSelection.length > 1, group: "command" },
-    { id: "canvas:align-bottom", label: "底部对齐", enabled: alignableSelection.length > 1, group: "command" },
-    { id: "canvas:distribute-horizontal", label: "水平等距分布", enabled: alignableSelection.length > 2, group: "command" },
-    { id: "canvas:distribute-vertical", label: "垂直等距分布", enabled: alignableSelection.length > 2, group: "command" },
+    { id: "canvas:avoid-obstacles", label: "选中管线避障布线", description: "确定性绕开设备、文字和节点", keywords: ["route", "obstacle", "避障"], shortcut: shortcut("canvas:avoid-obstacles"), enabled: selectedConnectors.length > 0 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:reroute-selection", label: "重排选中管线", description: "保留锁定锚点并重新正交布线", keywords: ["reroute", "管线"], enabled: selectedConnectors.length > 0 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:clear-route-locks", label: "清除选中管线锚点", description: "移除所有锁定路由点", keywords: ["unlock", "anchor"], enabled: hasRouteLocks && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:align-left", label: "左对齐", enabled: alignableSelection.length > 1 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:align-center", label: "水平居中", enabled: alignableSelection.length > 1 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:align-right", label: "右对齐", enabled: alignableSelection.length > 1 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:align-top", label: "顶部对齐", enabled: alignableSelection.length > 1 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:align-middle", label: "垂直居中", enabled: alignableSelection.length > 1 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:align-bottom", label: "底部对齐", enabled: alignableSelection.length > 1 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:distribute-horizontal", label: "水平等距分布", enabled: alignableSelection.length > 2 && !selectionEditingBlocked, group: "command" },
+    { id: "canvas:distribute-vertical", label: "垂直等距分布", enabled: alignableSelection.length > 2 && !selectionEditingBlocked, group: "command" },
     { id: "workspace:undo", label: "撤销", shortcut: shortcut("workspace:undo"), enabled: true, group: "command" },
     { id: "workspace:redo", label: "重做", shortcut: shortcut("workspace:redo"), enabled: true, group: "command" },
     { id: "workspace:duplicate", label: "复制选择", shortcut: shortcut("workspace:duplicate"), enabled: selectedElements.length > 0, group: "command" },
-    { id: "workspace:delete", label: "删除选择", shortcut: shortcut("workspace:delete"), enabled: selectedElements.length > 0, group: "command" },
+    { id: "workspace:delete", label: "删除选择", shortcut: shortcut("workspace:delete"), enabled: selectedElements.length > 0 && !selectedLockedElements.length && !selectedOnLockedLayers.length, group: "command" },
+    { id: "workspace:group", label: "分组选中元素", shortcut: shortcut("workspace:group"), enabled: selectedElements.length > 1 && !selectedLockedElements.length && !selectedOnLockedLayers.length, group: "command" },
+    { id: "workspace:ungroup", label: "解除选中分组", shortcut: shortcut("workspace:ungroup"), enabled: selectedGroupIds.size > 0 && !selectedLockedElements.length && !selectedOnLockedLayers.length, group: "command" },
+    { id: "workspace:lock", label: "锁定选中元素", shortcut: shortcut("workspace:lock"), enabled: selectedElements.some((element) => !isElementEditLocked(element)) && !selectedOnLockedLayers.length, group: "command" },
+    { id: "workspace:unlock", label: "解锁选中元素", shortcut: shortcut("workspace:unlock"), enabled: selectedLockedElements.length > 0 && !selectedOnLockedLayers.length, group: "command" },
+    { id: "workspace:select-type", label: "选择同类型元素", enabled: Boolean(activeElement), group: "command" },
+    { id: "workspace:select-layer", label: "选择同图层元素", enabled: Boolean(activeElement), group: "command" },
+    { id: "workspace:select-system", label: "选择同系统元素", enabled: Boolean(activeElement), group: "command" },
+    { id: "workspace:select-tag", label: "选择同管线编号", enabled: activeElement?.type === "connector" && Boolean(activeElement.process_tag), group: "command" },
+    { id: "workspace:select-group", label: "选择当前分组", enabled: Boolean(activeElement && readEditorGroupId(activeElement)), group: "command" },
+    { id: "workspace:select-route-family", label: "选择同路由族", enabled: activeElement?.type === "connector", group: "command" },
+    { id: "workspace:invert-selection", label: "反向选择", shortcut: shortcut("workspace:invert-selection"), enabled: visibleElements.length > 0, group: "command" },
     { id: "workspace:select-all", label: "选择全部元素", shortcut: shortcut("workspace:select-all"), enabled: Boolean(state.document?.elements.length), group: "command" },
     { id: "workspace:tool-select", label: "切换到选择工具", shortcut: shortcut("workspace:tool-select"), enabled: true, group: "command" },
     { id: "workspace:tool-line", label: "切换到直线工具", shortcut: shortcut("workspace:tool-line"), enabled: true, group: "command" },
@@ -390,6 +409,17 @@ export default function App() {
     else if (id === "workspace:redo") void state.redo();
     else if (id === "workspace:duplicate") void state.duplicateSelection();
     else if (id === "workspace:delete") void state.deleteSelection();
+    else if (id === "workspace:group") void state.groupSelection();
+    else if (id === "workspace:ungroup") void state.ungroupSelection();
+    else if (id === "workspace:lock") void state.setSelectionLocked(true);
+    else if (id === "workspace:unlock") void state.setSelectionLocked(false);
+    else if (id === "workspace:select-type") state.selectByScope("type");
+    else if (id === "workspace:select-layer") state.selectByScope("layer");
+    else if (id === "workspace:select-system") state.selectByScope("system");
+    else if (id === "workspace:select-tag") state.selectByScope("process_tag");
+    else if (id === "workspace:select-group") state.selectByScope("group");
+    else if (id === "workspace:select-route-family") state.selectByScope("route_family");
+    else if (id === "workspace:invert-selection") state.selectByScope("invert");
     else if (id === "workspace:select-all") state.selectAll();
     else if (id === "workspace:tool-select") state.setTool("select");
     else if (id === "workspace:tool-line") state.setTool("line");

@@ -1,5 +1,16 @@
 import { create } from "zustand";
 import { api } from "./api";
+import {
+  directLockedOperationTargets,
+  expandSelectionByGroups,
+  isElementEditLocked,
+  metadataWithEditorLock,
+  metadataWithGroup,
+  normalizedGroupMembers,
+  readEditorGroupId,
+  semanticSelection,
+  type SelectionScope,
+} from "./editor/selectionEditing";
 import type {
   ConnectorEndpoint,
   Document,
@@ -12,6 +23,7 @@ import type {
 } from "./types";
 
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+const newGroupId = () => `group_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -70,6 +82,13 @@ function duplicateElement(element: Element, idMap: Map<string, string>, offset: 
   return clone;
 }
 
+
+function visibleElements(document: Document): Element[] {
+  const visibleLayers = new Set(document.layers.filter((layer) => layer.visible).map((layer) => layer.id));
+  const visibleSystems = new Set(document.systems.filter((system) => system.visible).map((system) => system.id));
+  return document.elements.filter((element) => visibleLayers.has(element.layer_id) && visibleSystems.has(element.system_id));
+}
+
 type SyncState = "idle" | "checking" | "synced" | "pending" | "updated" | "error";
 
 type State = {
@@ -89,10 +108,14 @@ type State = {
   createDocument: () => Promise<void>;
   openDocument: (id: string) => Promise<void>;
   setTool: (tool: Tool) => void;
-  setSelection: (ids: string[]) => void;
-  toggleSelection: (id: string) => void;
+  setSelection: (ids: string[], options?: { expandGroups?: boolean }) => void;
+  toggleSelection: (id: string, options?: { expandGroups?: boolean }) => void;
   clearSelection: () => void;
   selectAll: () => void;
+  selectByScope: (scope: SelectionScope, activeId?: string) => void;
+  groupSelection: () => Promise<void>;
+  ungroupSelection: () => Promise<void>;
+  setSelectionLocked: (locked: boolean) => Promise<void>;
   chooseSymbol: (key: string) => void;
   transact: (operations: Operation[], label: string) => Promise<void>;
   duplicateSelection: () => Promise<void>;
@@ -202,22 +225,77 @@ export const useWorkspace = create<State>((set, get) => ({
   },
 
   setTool: (tool) => set({ tool, selectedElementIds: tool === "select" ? get().selectedElementIds : [] }),
-  setSelection: (selectedElementIds) => set({ selectedElementIds: [...new Set(selectedElementIds)] }),
-  toggleSelection: (id) => {
+  setSelection: (ids, options) => {
+    const document = get().document;
+    const unique = [...new Set(ids)];
+    set({ selectedElementIds: document && options?.expandGroups !== false ? expandSelectionByGroups(document.elements, unique) : unique });
+  },
+  toggleSelection: (id, options) => {
+    const document = get().document;
     const selected = get().selectedElementIds;
-    set({
-      selectedElementIds: selected.includes(id)
-        ? selected.filter((item) => item !== id)
-        : [...selected, id],
-    });
+    const targets = document && options?.expandGroups !== false ? expandSelectionByGroups(document.elements, [id]) : [id];
+    const selectedSet = new Set(selected);
+    const remove = targets.every((target) => selectedSet.has(target));
+    set({ selectedElementIds: remove
+      ? selected.filter((item) => !targets.includes(item))
+      : [...new Set([...selected, ...targets])] });
   },
   clearSelection: () => set({ selectedElementIds: [] }),
-  selectAll: () => set({ selectedElementIds: get().document?.elements.map((item) => item.id) ?? [] }),
+  selectAll: () => {
+    const document = get().document;
+    set({ selectedElementIds: document ? visibleElements(document).map((item) => item.id) : [] });
+  },
+  selectByScope: (scope, requestedActiveId) => {
+    const document = get().document;
+    if (!document) return;
+    const activeId = requestedActiveId ?? get().selectedElementIds.at(-1) ?? null;
+    const visible = visibleElements(document);
+    set({ selectedElementIds: semanticSelection(visible, activeId, scope, get().selectedElementIds) });
+  },
+  groupSelection: async () => {
+    const document = get().document;
+    if (!document) return;
+    const selected = document.elements.filter((element) => get().selectedElementIds.includes(element.id));
+    if (selected.length < 2) {
+      set({ error: "至少选择两个元素才能分组。" });
+      return;
+    }
+    const lockedLayers = new Set(document.layers.filter((layer) => layer.locked).map((layer) => layer.id));
+    const blocked = selected.filter((element) => isElementEditLocked(element) || lockedLayers.has(element.layer_id));
+    if (blocked.length) {
+      set({ error: `锁定元素不能分组：${blocked.map((element) => element.id).join(", ")}` });
+      return;
+    }
+    const groupId = newGroupId();
+    await get().transact(selected.map((element) => ({ op: "update_element", element_id: element.id, patch: { metadata: metadataWithGroup(element, groupId) } })), `Group ${selected.length} elements`);
+    get().setSelection(selected.map((element) => element.id));
+  },
+  ungroupSelection: async () => {
+    const document = get().document;
+    if (!document) return;
+    const selected = document.elements.filter((element) => get().selectedElementIds.includes(element.id) && readEditorGroupId(element));
+    if (!selected.length) return;
+    await get().transact(selected.map((element) => ({ op: "update_element", element_id: element.id, patch: { metadata: metadataWithGroup(element, null) } })), `Ungroup ${selected.length} elements`);
+    get().setSelection(selected.map((element) => element.id), { expandGroups: false });
+  },
+  setSelectionLocked: async (locked) => {
+    const document = get().document;
+    if (!document) return;
+    const selected = document.elements.filter((element) => get().selectedElementIds.includes(element.id) && isElementEditLocked(element) !== locked);
+    if (!selected.length) return;
+    await get().transact(selected.map((element) => ({ op: "update_element", element_id: element.id, patch: { metadata: metadataWithEditorLock(element, locked) } })), `${locked ? "Lock" : "Unlock"} ${selected.length} elements`);
+  },
   chooseSymbol: (selectedSymbolKey) => set({ selectedSymbolKey, tool: "symbol", selectedElementIds: [] }),
 
   transact: async (operations, label) => {
     const document = get().document;
     if (!document) return;
+    const lockedTargets = directLockedOperationTargets(document.elements, operations);
+    if (lockedTargets.length) {
+      const error = new Error(`元素已锁定，事务已取消：${lockedTargets.join(", ")}`);
+      set({ error: error.message });
+      throw error;
+    }
     set({ isMutating: true, error: null, syncState: "checking", syncMessage: "正在提交修改…" });
     try {
       const result = await api.transact(document.id, document.revision, operations, label);
@@ -252,9 +330,16 @@ export const useWorkspace = create<State>((set, get) => ({
     if (!document || selectedIds.length === 0) return;
     const selected = document.elements.filter((element) => selectedIds.includes(element.id));
     const idMap = new Map(selected.map((element) => [element.id, newElementId()]));
+    const sourceGroups = normalizedGroupMembers(selected);
+    const groupMap = new Map([...sourceGroups.keys()].map((groupId) => [groupId, newGroupId()]));
     const offset = document.canvas.grid_size;
     const copies = selected
-      .map((element) => duplicateElement(element, idMap, offset))
+      .map((element) => {
+        const copy = duplicateElement(element, idMap, offset);
+        const groupId = readEditorGroupId(element);
+        copy.metadata = metadataWithGroup(copy, groupId ? groupMap.get(groupId) ?? null : null);
+        return copy;
+      })
       .sort((left, right) => Number(left.type === "connector") - Number(right.type === "connector"));
     await get().transact(
       copies.map((element) => ({ op: "add_element", element }) as Operation),
