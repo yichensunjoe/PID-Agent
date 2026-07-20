@@ -121,6 +121,31 @@ def test_instrument_tap_snaps_approximate_point_to_main_route(tmp_path):
     _assert_all_connectors_orthogonal(result)
 
 
+def test_instrument_tap_accepts_real_full_diagram_fifty_unit_offset(tmp_path):
+    service = _service(tmp_path)
+    document = _seed_main_route(service)
+    compiler = SemanticTransactionCompiler(service)
+
+    compiled = compiler.compile(
+        document.id,
+        SemanticTransaction(
+            expected_revision=document.revision,
+            label="Add routed downstream tap",
+            operations=[_tap("102", 500, 450, "temperature")],
+        ),
+    )
+
+    assert compiled.assessment.valid, compiled.assessment.model_dump(mode="json")
+    assert compiled.transaction is not None
+    result = service.apply_transaction(document.id, compiled.transaction, source="llm").document
+    junction = next(element for element in result.elements if element.id == "j_102")
+    assert junction.type == "junction"
+    assert junction.position == Point(x=500, y=400)
+    assert junction.metadata["tap_snap_distance"] == pytest.approx(50)
+    assert junction.metadata["tap_snap_tolerance"] == pytest.approx(80)
+    _assert_all_connectors_orthogonal(result)
+
+
 def test_four_approximate_taps_resolve_against_same_route_family_without_replan(tmp_path):
     service = _service(tmp_path)
     document = _seed_main_route(service)
@@ -178,7 +203,7 @@ def test_distant_tap_still_returns_nearest_route_diagnostics(tmp_path):
     assert compiled.assessment.valid is False
     issue = compiled.assessment.issues[0]
     assert issue.code == "tap_point_not_on_connector"
-    assert issue.available_values["snap_tolerance"] == ["40.0000"]
+    assert issue.available_values["snap_tolerance"] == ["80.0000"]
     assert issue.available_values["nearest_connector_id"] == ["main"]
     assert issue.available_values["nearest_point"] == ["400.0000,400.0000"]
     assert issue.available_values["nearest_distance"] == ["100.0000"]
