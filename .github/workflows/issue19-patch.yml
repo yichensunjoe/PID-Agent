@@ -1,0 +1,32 @@
+name: Issue 19 integration patch
+
+on:
+  push:
+    branches:
+      - agent/issue-19-persistent-provider-routing
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-19-persistent-provider-routing
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply strict patch
+        run: python scripts/issue19_patch.py
+      - name: Remove one-shot helpers
+        run: rm scripts/issue19_patch.py .github/workflows/issue19-patch.yml
+      - name: Commit production changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: persist agent runs, discover models, and straighten pipes"
+          git push
