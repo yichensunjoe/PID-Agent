@@ -22,6 +22,42 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Disambiguate strict compiler replacement
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/issue19_patch.py')
+          text = path.read_text(encoding='utf-8')
+          helper_anchor = '''def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"expected one match in {path}, found {count}: {old[:100]!r}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+          '''
+          helper_replacement = helper_anchor + '''\n\ndef replace_last(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count < 1:
+                  raise RuntimeError(f"expected at least one match in {path}: {old[:100]!r}")
+              head, tail = text.rsplit(old, 1)
+              target.write_text(head + new + tail, encoding="utf-8")
+          '''
+          if helper_anchor not in text:
+              raise SystemExit('replace_once helper anchor not found')
+          text = text.replace(helper_anchor, helper_replacement, 1)
+          ambiguous = '''replace_once(
+              "backend/agentcad/semantic_compiler_engine.py",
+              "        operation: ConnectPortsOperation,\\n    ) -> list[Operation]:\\n",
+              "        operation: ConnectPortsOperation,\\n        grid_size: float,\\n    ) -> list[Operation]:\\n",
+          )'''
+          resolved = ambiguous.replace('replace_once(', 'replace_last(', 1)
+          if ambiguous not in text:
+              raise SystemExit('ambiguous compiler replacement not found')
+          path.write_text(text.replace(ambiguous, resolved, 1), encoding='utf-8')
+          PY
       - name: Apply strict patch
         shell: bash
         run: |
