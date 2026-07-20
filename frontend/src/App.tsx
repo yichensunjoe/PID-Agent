@@ -6,6 +6,7 @@ import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
+import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
 import { useWorkspace } from "./store";
 import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
 import "./issue1.css";
@@ -53,6 +54,10 @@ export default function App() {
   const [testingProvider, setTestingProvider] = useState(false);
   const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
   const [providerTestError, setProviderTestError] = useState("");
+  const [providerPreset, setProviderPreset] = useState("custom");
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; owned_by: string | null }>>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelDiscoveryError, setModelDiscoveryError] = useState("");
   const [canvasPointerActive, setCanvasPointerActive] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel>("properties");
   const [planningAgent, setPlanningAgent] = useState(false);
@@ -127,6 +132,50 @@ export default function App() {
     api_key: apiKey.trim() || undefined,
     timeout_seconds: timeoutSeconds,
   });
+
+  const selectProviderPreset = (presetId: string) => {
+    setProviderPreset(presetId);
+    const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
+    if (preset && preset.id !== "custom") setBaseUrl(preset.baseUrl);
+    if (presetId === "custom") setBaseUrl((current) => current);
+    setAvailableModels([]);
+    setModelDiscoveryError("");
+    setProviderTest(null);
+  };
+
+  const discoverProviderModels = async (silent = false) => {
+    if (!baseUrl.trim()) return;
+    setLoadingModels(true);
+    setModelDiscoveryError("");
+    try {
+      const result = await api.listProviderModels({
+        base_url: baseUrl.trim(),
+        api_key: apiKey.trim() || undefined,
+        timeout_seconds: timeoutSeconds,
+      });
+      setAvailableModels(result.models);
+      if (result.models.length) {
+        setModel((current) => result.models.some((item) => item.id === current) ? current : result.models[0].id);
+      } else if (!silent) {
+        setModelDiscoveryError("服务连接成功，但 /models 没有返回可用模型。仍可手工输入模型名称。");
+      }
+    } catch (error) {
+      setAvailableModels([]);
+      setModelDiscoveryError(error instanceof ApiError ? error.message : String(error));
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  useEffect(() => {
+    const preset = PROVIDER_PRESETS.find((item) => item.id === providerPreset);
+    if (!baseUrl.trim() || (preset?.requiresApiKey && !apiKey.trim())) {
+      setAvailableModels([]);
+      return;
+    }
+    const timer = window.setTimeout(() => { void discoverProviderModels(true); }, 450);
+    return () => window.clearTimeout(timer);
+  }, [baseUrl, apiKey, providerPreset, timeoutSeconds]);
 
   const scopedContext = () => {
     const document = state.document;
@@ -306,21 +355,25 @@ export default function App() {
           {rightPanel === "properties" ? <section className="inspector-panel" role="tabpanel"><h2>元素属性</h2><PropertyInspector /></section> : null}
           {rightPanel === "groups" ? <section className="inspector-panel" role="tabpanel"><h2>图层与工艺系统</h2><LayerSystemPanel /></section> : null}
           {rightPanel === "history" ? <section className="inspector-panel" role="tabpanel"><h2>Revision 历史</h2><HistoryPanel /></section> : null}
-          {rightPanel === "agent" ? <section className="agent-panel" role="tabpanel">
+          <section className="agent-panel" role="tabpanel" hidden={rightPanel !== "agent"}>
             <h2>P&amp;ID Agent</h2>
             <label>工艺/设计上下文<textarea value={context} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContext(event.target.value)} placeholder="粘贴工艺原则、设备要求、位号规则、管线说明等。" rows={7} /></label>
             <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门替换为球阀，并保持原有管线连接。" rows={6} /></label>
             {state.selectedElementIds.length ? <div className="agent-scope">局部修改范围：已选择 {state.selectedElementIds.length} 个元素，并附带其直接相连管线</div> : <div className="agent-scope agent-scope-wide">未选择元素：Agent 将以整张图为范围</div>}
-            <details>
-              <summary>自定义模型 API（可选）</summary>
-              <label>Base URL（可含自定义端口）<input value={baseUrl} onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseUrl(event.target.value)} placeholder="例如 http://127.0.0.1:11434/v1" /></label>
-              <label>Model<input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="qwen3-coder" /></label>
-              <label>API Key<div className="secret-input-row"><input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event: ChangeEvent<HTMLInputElement>) => setApiKey(event.target.value)} placeholder="sk-...；本地无鉴权服务可留空" autoComplete="off" spellCheck={false} /><button type="button" onClick={() => setShowApiKey(!showApiKey)}>{showApiKey ? "隐藏" : "显示"}</button></div></label>
+            <details open>
+              <summary>模型服务</summary>
+              <label>服务预设<select value={providerPreset} onChange={(event: ChangeEvent<HTMLSelectElement>) => selectProviderPreset(event.target.value)}>{PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></label>
+              <label>Base URL<input value={baseUrl} onChange={(event: ChangeEvent<HTMLInputElement>) => { setBaseUrl(event.target.value); setProviderPreset(presetForBaseUrl(event.target.value)); }} placeholder="例如 http://127.0.0.1:11434/v1" /></label>
+              <label>API Key<div className="secret-input-row"><input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event: ChangeEvent<HTMLInputElement>) => setApiKey(event.target.value)} placeholder="只需输入当前服务的 API Key；本地服务可留空" autoComplete="off" spellCheck={false} /><button type="button" onClick={() => setShowApiKey(!showApiKey)}>{showApiKey ? "隐藏" : "显示"}</button></div></label>
+              {loadingModels ? <div className="provider-model-status">正在读取模型列表…</div> : null}
+              {availableModels.length ? <label>可用模型<select value={availableModels.some((item) => item.id === model) ? model : ""} onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}><option value="" disabled>选择模型</option>{availableModels.map((item) => <option key={item.id} value={item.id}>{item.id}{item.owned_by ? ` · ${item.owned_by}` : ""}</option>)}</select></label> : null}
+              <label>Model name（可手工覆盖）<input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="从列表选择，或直接输入模型名称" /></label>
               <label>超时（秒）<input type="number" min={10} max={600} value={timeoutSeconds} onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(600, Math.max(10, Number(event.target.value) || 120)))} /></label>
-              <div className="provider-actions"><button type="button" onClick={() => void testCustomProvider()} disabled={testingProvider || !baseUrl.trim() || !model.trim()}>{testingProvider ? "正在测试…" : "测试连接"}</button></div>
+              <div className="provider-actions"><button type="button" onClick={() => void discoverProviderModels()} disabled={loadingModels || !baseUrl.trim()}>{loadingModels ? "读取中…" : "刷新模型列表"}</button><button type="button" onClick={() => void testCustomProvider()} disabled={testingProvider || !baseUrl.trim() || !model.trim()}>{testingProvider ? "正在测试…" : "测试连接"}</button></div>
+              {modelDiscoveryError ? <div className="provider-test provider-test-error">{modelDiscoveryError}</div> : null}
               {providerTest ? <div className={`provider-test provider-test-${providerTest.model_available === false ? "warning" : "success"}`}><strong>{providerTest.message}</strong><span>{providerTest.model} · {providerTest.latency_ms} ms · {providerTest.method}</span></div> : null}
               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
-              <p>API Key 仅保存在当前页面内存，并随测试或生成请求发送，不写入数据库或浏览器存储。</p>
+              <p>预设只填写公开 Base URL。API Key 仅保存在当前页面内存，并随模型列表、测试或生成请求发送，不写入数据库或浏览器存储。</p>
             </details>
             <AutomaticAgentRunner
               prompt={prompt}
@@ -376,8 +429,8 @@ export default function App() {
             </div> : null}
 
             {agentError ? <div className="error-box"><strong>Agent 操作未完成</strong><span>{agentError}</span>{pendingPlan ? <button onClick={() => void replanAgent()} disabled={busyAgent || pendingPlan.attempt >= 5}>按当前 revision 局部重规划</button> : <button onClick={() => void planAgent()} disabled={busyAgent}>重新生成预览</button>}</div> : null}
-            <div className="agent-note">自动完成会在服务端结构化校验失败后连续重规划，并在检测到重复错误或达到 5 次上限时停止。手动预览仍可用于审查每个语义操作。</div>
-          </section> : null}
+            <div className="agent-note">自动完成会在服务端结构化校验失败后连续重规划，并在检测到重复错误或达到 5 次上限时停止。切换属性、图层或历史面板不会中断正在执行的请求。</div>
+          </section>
         </aside>
       </main>
     </div>

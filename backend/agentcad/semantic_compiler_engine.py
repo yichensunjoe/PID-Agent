@@ -92,7 +92,9 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         index: int,
     ) -> list[Operation]:
         compiled = super()._connect_ports_with_waypoints(document, operation, index)
-        normalized = self._normalize_waypoint_connector(compiled, operation)
+        normalized = self._normalize_waypoint_connector(
+            compiled, operation, document.canvas.grid_size
+        )
         return self._apply_connector_semantics(normalized, operation)
 
     @classmethod
@@ -100,6 +102,7 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         cls,
         compiled: list[Operation],
         operation: ConnectPortsOperation,
+        grid_size: float,
     ) -> list[Operation]:
         result: list[Operation] = []
         for low_level in compiled:
@@ -107,7 +110,10 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
                 result.append(low_level)
                 continue
             connector = low_level.element
-            points = cls._orthogonalize_route(connector.points)
+            orthogonal = cls._orthogonalize_route(connector.points)
+            points = cls._collapse_micro_doglegs(
+                orthogonal, tolerance=max(2.0, grid_size)
+            )
             changed = len(points) != len(connector.points) or any(
                 not cls._points_close(before, after)
                 for before, after in zip(connector.points, points, strict=False)
@@ -121,6 +127,7 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
                 "requested_waypoints": [
                     point.model_dump(mode="json") for point in operation.waypoints
                 ],
+                "micro_dogleg_points_removed": max(0, len(orthogonal) - len(points)),
             }
             result.append(
                 AddElementOperation(
@@ -157,6 +164,42 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
             if not cls._points_close(routed[-1], desired):
                 routed.append(desired)
         return cls._simplify_collinear_route(cls._dedupe_route_points(routed))
+
+    @classmethod
+    def _collapse_micro_doglegs(cls, points: list[Point], tolerance: float) -> list[Point]:
+        """Remove local orthogonal stair-steps while preserving larger intentional detours."""
+        result = cls._simplify_collinear_route(cls._dedupe_route_points(points))
+        changed = True
+        while changed and len(result) >= 4:
+            changed = False
+            for start_index in range(len(result) - 3):
+                max_end = min(len(result) - 1, start_index + 4)
+                for end_index in range(max_end, start_index + 2, -1):
+                    start = result[start_index]
+                    end = result[end_index]
+                    middle = result[start_index + 1 : end_index]
+                    horizontal = (
+                        abs(start.y - end.y) <= POINT_EPSILON
+                        and all(abs(point.y - start.y) <= tolerance for point in middle)
+                    )
+                    vertical = (
+                        abs(start.x - end.x) <= POINT_EPSILON
+                        and all(abs(point.x - start.x) <= tolerance for point in middle)
+                    )
+                    if not horizontal and not vertical:
+                        continue
+                    replacement = Point(x=end.x, y=start.y) if horizontal else Point(x=start.x, y=end.y)
+                    result = [
+                        *result[: start_index + 1],
+                        replacement,
+                        *result[end_index + 1 :],
+                    ]
+                    result = cls._simplify_collinear_route(cls._dedupe_route_points(result))
+                    changed = True
+                    break
+                if changed:
+                    break
+        return result
 
     @classmethod
     def _dedupe_route_points(cls, points: list[Point]) -> list[Point]:
@@ -300,16 +343,25 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         )
         compiled = super()._instrument_tap(document, resolved_operation, index)
         main_segment_ids = {actual.id, operation.downstream_connector_id}
-        for compiled_operation in compiled:
+        for compiled_index, compiled_operation in enumerate(compiled):
             if not isinstance(compiled_operation, AddElementOperation):
                 continue
-            element = compiled_operation.element
+            element = compiled_operation.element.model_copy(deep=True)
             if element.type == "connector" and element.id in main_segment_ids:
+                before_count = len(element.points)
+                element.points = self._collapse_micro_doglegs(
+                    element.points,
+                    tolerance=max(2.0, document.canvas.grid_size),
+                )
                 element.metadata["main_route_id"] = main_route_id
+                removed = before_count - len(element.points)
+                if removed > 0:
+                    element.metadata["micro_dogleg_points_removed"] = removed
             if element.metadata.get("assembly") == "instrument_tap":
                 element.metadata["parent_main_route_id"] = main_route_id
                 element.metadata["main_connector_id"] = operation.main_connector_id
                 element.metadata["split_segment_id"] = actual.id
+            compiled[compiled_index] = AddElementOperation(element=element)
         return compiled
 
     def _main_route_candidates(
