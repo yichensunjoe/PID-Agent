@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
+import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
 import { EditorCanvas } from "./editor/EditorCanvas";
 import { HistoryPanel } from "./editor/HistoryPanel";
 import { LayerSystemPanel } from "./editor/LayerSystemPanel";
@@ -321,7 +322,18 @@ export default function App() {
               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
               <p>API Key 仅保存在当前页面内存，并随测试或生成请求发送，不写入数据库或浏览器存储。</p>
             </details>
-            <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "生成语义事务预览"}</button>
+            <AutomaticAgentRunner
+              prompt={prompt}
+              context={scopedContext()}
+              provider={providerConfig()}
+              disabled={busyAgent}
+              onApplied={() => {
+                setPendingPlan(null);
+                setAgentError("");
+                setPrompt("");
+              }}
+            />
+            <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "仅生成事务预览（手动模式）"}</button>
 
             {pendingPlan ? <div className={`agent-preview ${pendingPlan.assessment.valid ? "agent-preview-valid" : "agent-preview-invalid"}`}>
               <div className="agent-preview-heading"><strong>{pendingPlan.assessment.valid ? "待确认语义事务" : "事务需要修复"}</strong><span>plan {pendingPlan.plan.plan_id.slice(0, 8)} · attempt {pendingPlan.attempt}</span></div>
@@ -364,7 +376,7 @@ export default function App() {
             </div> : null}
 
             {agentError ? <div className="error-box"><strong>Agent 操作未完成</strong><span>{agentError}</span>{pendingPlan ? <button onClick={() => void replanAgent()} disabled={busyAgent || pendingPlan.attempt >= 5}>按当前 revision 局部重规划</button> : <button onClick={() => void planAgent()} disabled={busyAgent}>重新生成预览</button>}</div> : null}
-            <div className="agent-note">语义计划会把设备替换、端口重连、端口间连接和带连接策略的删除编译为原子事务。编译或校验失败时不会写入文档，可依据真实 ID、端口和锁定状态最多局部重规划 5 次。</div>
+            <div className="agent-note">自动完成会在服务端结构化校验失败后连续重规划，并在检测到重复错误或达到 5 次上限时停止。手动预览仍可用于审查每个语义操作。</div>
           </section> : null}
         </aside>
       </main>
