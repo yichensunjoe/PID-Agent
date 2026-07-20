@@ -342,7 +342,7 @@ export default function App() {
               <span>{state.document.elements.length} elements</span>
               <span>{state.selectedElementIds.length} selected</span>
               <button className={`sync-badge sync-${state.syncState}`} onClick={() => syncActionable && void state.refreshDocument()} disabled={!syncActionable} title={state.pendingExternalRevision ? `服务器 revision ${state.pendingExternalRevision}` : undefined}>{state.syncMessage}</button>
-              <span>框选 · Shift 多选 · Ctrl+D 复制 · 中键平移 · 滚轮缩放</span>
+              <span>框选 · Shift 多选 · 右键快捷操作 · 从主管直接拖支管</span>
             </div>
             <EditorCanvas />
           </> : <div className="empty-canvas">没有打开的文档</div>}
@@ -357,11 +357,26 @@ export default function App() {
           {rightPanel === "history" ? <section className="inspector-panel" role="tabpanel"><h2>Revision 历史</h2><HistoryPanel /></section> : null}
           <section className="agent-panel" role="tabpanel" hidden={rightPanel !== "agent"}>
             <h2>P&amp;ID Agent</h2>
-            <label>工艺/设计上下文<textarea value={context} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContext(event.target.value)} placeholder="粘贴工艺原则、设备要求、位号规则、管线说明等。" rows={7} /></label>
-            <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门替换为球阀，并保持原有管线连接。" rows={6} /></label>
+            <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门替换为球阀，并保持原有管线连接。" rows={5} /></label>
+            <details className="agent-context-settings">
+              <summary>工艺与设计上下文</summary>
+              <label>补充上下文<textarea value={context} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContext(event.target.value)} placeholder="粘贴工艺原则、设备要求、位号规则、管线说明等。" rows={7} /></label>
+            </details>
             {state.selectedElementIds.length ? <div className="agent-scope">局部修改范围：已选择 {state.selectedElementIds.length} 个元素，并附带其直接相连管线</div> : <div className="agent-scope agent-scope-wide">未选择元素：Agent 将以整张图为范围</div>}
-            <details open>
-              <summary>模型服务</summary>
+            <AutomaticAgentRunner
+              prompt={prompt}
+              context={scopedContext()}
+              provider={providerConfig()}
+              disabled={busyAgent}
+              onApplied={() => {
+                setPendingPlan(null);
+                setAgentError("");
+                setPrompt("");
+              }}
+            />
+            <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "仅生成事务预览（手动模式）"}</button>
+            <details className="agent-provider-settings">
+              <summary>模型服务与高级设置{model ? ` · ${model}` : ""}</summary>
               <label>服务预设<select value={providerPreset} onChange={(event: ChangeEvent<HTMLSelectElement>) => selectProviderPreset(event.target.value)}>{PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></label>
               <label>Base URL<input value={baseUrl} onChange={(event: ChangeEvent<HTMLInputElement>) => { setBaseUrl(event.target.value); setProviderPreset(presetForBaseUrl(event.target.value)); }} placeholder="例如 http://127.0.0.1:11434/v1" /></label>
               <label>API Key<div className="secret-input-row"><input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event: ChangeEvent<HTMLInputElement>) => setApiKey(event.target.value)} placeholder="只需输入当前服务的 API Key；本地服务可留空" autoComplete="off" spellCheck={false} /><button type="button" onClick={() => setShowApiKey(!showApiKey)}>{showApiKey ? "隐藏" : "显示"}</button></div></label>
@@ -375,21 +390,9 @@ export default function App() {
               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
               <p>预设只填写公开 Base URL。API Key 仅保存在当前页面内存，并随模型列表、测试或生成请求发送，不写入数据库或浏览器存储。</p>
             </details>
-            <AutomaticAgentRunner
-              prompt={prompt}
-              context={scopedContext()}
-              provider={providerConfig()}
-              disabled={busyAgent}
-              onApplied={() => {
-                setPendingPlan(null);
-                setAgentError("");
-                setPrompt("");
-              }}
-            />
-            <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "仅生成事务预览（手动模式）"}</button>
 
-            {pendingPlan ? <div className={`agent-preview ${pendingPlan.assessment.valid ? "agent-preview-valid" : "agent-preview-invalid"}`}>
-              <div className="agent-preview-heading"><strong>{pendingPlan.assessment.valid ? "待确认语义事务" : "事务需要修复"}</strong><span>plan {pendingPlan.plan.plan_id.slice(0, 8)} · attempt {pendingPlan.attempt}</span></div>
+            {pendingPlan ? <details className={`agent-result-drawer agent-preview ${pendingPlan.assessment.valid ? "agent-preview-valid" : "agent-preview-invalid"}`} open>
+              <summary><strong>{pendingPlan.assessment.valid ? "待确认语义事务" : "事务需要修复"}</strong><span>plan {pendingPlan.plan.plan_id.slice(0, 8)} · attempt {pendingPlan.attempt}</span></summary>
               <p>{pendingPlan.plan.explanation || "模型未提供说明"}</p>
               <dl>
                 <div><dt>Label</dt><dd>{pendingPlan.plan.transaction.label}</dd></div>
@@ -426,10 +429,10 @@ export default function App() {
                 <button type="button" className="repair" disabled={busyAgent || pendingPlan.attempt >= 5 || pendingPlan.assessment.valid} onClick={() => void replanAgent()}>{repairingAgent ? "局部重规划中…" : `按失败原因重规划${pendingPlan.attempt ? `（${pendingPlan.attempt + 1}/5）` : ""}`}</button>
                 <button type="button" disabled={busyAgent} onClick={discardAgentPlan}>放弃预览</button>
               </div>
-            </div> : null}
+            </details> : null}
 
             {agentError ? <div className="error-box"><strong>Agent 操作未完成</strong><span>{agentError}</span>{pendingPlan ? <button onClick={() => void replanAgent()} disabled={busyAgent || pendingPlan.attempt >= 5}>按当前 revision 局部重规划</button> : <button onClick={() => void planAgent()} disabled={busyAgent}>重新生成预览</button>}</div> : null}
-            <div className="agent-note">自动完成会在服务端结构化校验失败后连续重规划，并在检测到重复错误或达到 5 次上限时停止。切换属性、图层或历史面板不会中断正在执行的请求。</div>
+            <div className="agent-note">自动完成会在服务端结构化校验失败后连续重规划，并在检测到重复错误或达到 5 次上限时停止。模型设置与详细结果默认折叠，切换属性、图层或历史面板不会中断正在执行的请求。</div>
           </section>
         </aside>
       </main>
