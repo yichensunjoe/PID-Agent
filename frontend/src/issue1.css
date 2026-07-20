@@ -100,3 +100,6 @@
 .port-hit-target, .connector-endpoint-hit { fill: transparent; stroke: none; cursor: crosshair; pointer-events: all; }
 .connector-endpoint-handle { fill: #ffffff; stroke: #2563eb; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .connector-endpoint-handle.active { fill: #f97316; stroke: #c2410c; }
+
+.provider-model-status { border-radius: 6px; padding: 7px; color: #1d4ed8; background: #dbeafe; font-size: 10px; }
+.agent-panel[hidden] { display: none; }

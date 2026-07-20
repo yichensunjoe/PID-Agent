@@ -33,6 +33,14 @@ export type ProviderTestResult = {
   message: string;
 };
 
+export type ProviderModelsResult = {
+  ok: boolean;
+  base_url: string;
+  models: Array<{ id: string; owned_by: string | null }>;
+  count: number;
+  latency_ms: number;
+};
+
 export type DocumentStatus = { id: string; revision: number; updated_at: string };
 export type AgentPlanResponse = { plan: AgentPlan; document?: Document | null };
 
@@ -169,6 +177,7 @@ export const api = {
   undo: (id: string) => request<Document>(`/documents/${id}/undo`, { method: "POST" }),
   redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
+  listProviderModels: (provider: ProviderConfig) => request<ProviderModelsResult>("/agent/provider/models", { method: "POST", body: JSON.stringify(provider) }),
   testProvider: (provider: ProviderConfig) => request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider) }),
   planSemanticAgent: (
     id: string,

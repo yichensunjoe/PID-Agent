@@ -21,6 +21,7 @@ from .models import (
     TransactionRequest,
     TransactionResult,
 )
+from .provider_discovery import discover_provider_models
 from .service import (
     DocumentNotFoundError,
     DocumentService,
@@ -337,6 +338,38 @@ def create_v2_router(
     def reload_symbols():
         service.symbols.reload()
         return {"count": len(service.symbols.list())}
+
+    @router.post("/agent/provider/models")
+    def list_provider_models(request: ProviderConfig):
+        started = perf_counter()
+        if diagnostics is not None:
+            diagnostics.emit(
+                "llm.provider_models.started",
+                base_url=request.base_url,
+                timeout_seconds=request.timeout_seconds,
+                api_key_present=bool(request.api_key),
+            )
+        try:
+            result = discover_provider_models(request)
+        except PlannerError as exc:
+            if diagnostics is not None:
+                diagnostics.emit(
+                    "llm.provider_models.failed",
+                    base_url=request.base_url,
+                    duration_ms=round((perf_counter() - started) * 1000, 2),
+                    error_code=exc.code,
+                    provider_status=exc.provider_status,
+                    error=exc,
+                )
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail()) from exc
+        if diagnostics is not None:
+            diagnostics.emit(
+                "llm.provider_models.completed",
+                base_url=result.get("base_url"),
+                duration_ms=round((perf_counter() - started) * 1000, 2),
+                model_count=result.get("count"),
+            )
+        return result
 
     @router.post("/agent/provider/test")
     def test_provider(request: ProviderConfig):
