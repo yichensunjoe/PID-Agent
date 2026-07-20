@@ -72,6 +72,12 @@ class ReconnectConnectorOperation(StrictModel):
 
 
 class ConnectPortsOperation(StrictModel):
+    """Connect two real ports with an engineering connector.
+
+    Express pipe flow with flow_direction and arrow_position. Do not add standalone
+    text elements such as '→' or '←' to represent connector flow.
+    """
+
     op: Literal["connect_ports"] = "connect_ports"
     connector_id: str = Field(default_factory=lambda: _semantic_id("pipe"))
     source_element_id: str
@@ -83,10 +89,28 @@ class ConnectPortsOperation(StrictModel):
     process_tag: str = ""
     medium: str = ""
     nominal_diameter: str = ""
-    flow_direction: Literal["forward", "reverse", "none"] = "none"
-    arrow_position: Literal["start", "middle", "end"] = "middle"
-    crossing_style: Literal["none", "jump"] = "none"
-    jump_radius: float = Field(default=7, gt=1, le=50)
+    flow_direction: Literal["forward", "reverse", "none"] = Field(
+        default="none",
+        description=(
+            "Connector flow relative to source→target. Use 'forward' when flow follows "
+            "source→target, 'reverse' when it flows target→source, and 'none' only when "
+            "no direction should be shown. Prefer this over standalone arrow text."
+        ),
+    )
+    arrow_position: Literal["start", "middle", "end"] = Field(
+        default="middle",
+        description="Position of the rendered engineering flow arrow on the connector.",
+    )
+    crossing_style: Literal["none", "jump"] = Field(
+        default="none",
+        description="Use 'jump' when this connector should render bridge arcs at crossings.",
+    )
+    jump_radius: float = Field(
+        default=7,
+        gt=1,
+        le=50,
+        description="Bridge-arc radius when crossing_style is 'jump'.",
+    )
     layer_id: str | None = None
     system_id: str | None = None
     style: dict[str, Any] | None = None
