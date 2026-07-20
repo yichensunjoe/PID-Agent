@@ -17,7 +17,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: "deepseek",
     label: "DeepSeek",
-    baseUrl: "https://api.deepseek.com/v1",
+    baseUrl: "https://api.deepseek.com",
     requiresApiKey: true,
     note: "DeepSeek OpenAI-compatible API",
   },
