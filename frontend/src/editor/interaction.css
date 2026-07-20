@@ -1,0 +1,202 @@
+.editor-canvas-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-canvas-shell > .editor-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.canvas-floating-toolbar {
+  position: absolute;
+  z-index: 8;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(8px);
+}
+
+.canvas-floating-toolbar span {
+  padding: 0 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 650;
+  border-right: 1px solid #e2e8f0;
+}
+
+.canvas-floating-toolbar button,
+.canvas-context-menu button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #1e293b;
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-floating-toolbar button {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.canvas-floating-toolbar button:hover,
+.canvas-context-menu button:hover:not(:disabled) {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.canvas-floating-toolbar button.danger,
+.canvas-context-menu button.danger {
+  color: #b91c1c;
+}
+
+.canvas-floating-toolbar button.danger:hover,
+.canvas-context-menu button.danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.canvas-context-menu {
+  position: absolute;
+  z-index: 12;
+  min-width: 178px;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.18);
+}
+
+.canvas-context-menu button {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.canvas-context-menu button:disabled {
+  color: #94a3b8;
+  cursor: default;
+}
+
+.connector-segment-handle {
+  fill: #ffffff;
+  stroke: #2563eb;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: move;
+}
+
+.connector-segment-handle:hover,
+.connector-segment-handle.active {
+  fill: #dbeafe;
+  stroke: #1d4ed8;
+}
+
+.tool-connector .canvas-element:hover .element-hit-target {
+  stroke: rgba(234, 88, 12, 0.35);
+}
+
+.agent-context-settings,
+.agent-provider-settings,
+.agent-result-drawer {
+  margin: 8px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.agent-context-settings > summary,
+.agent-provider-settings > summary,
+.agent-result-drawer > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-context-settings > summary::-webkit-details-marker,
+.agent-provider-settings > summary::-webkit-details-marker,
+.agent-result-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-context-settings > summary::after,
+.agent-provider-settings > summary::after {
+  content: "展开";
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.agent-context-settings[open] > summary::after,
+.agent-provider-settings[open] > summary::after {
+  content: "收起";
+}
+
+.agent-context-settings[open] > summary,
+.agent-provider-settings[open] > summary,
+.agent-result-drawer[open] > summary {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.agent-context-settings > label,
+.agent-provider-settings > label,
+.agent-provider-settings > div,
+.agent-provider-settings > p {
+  margin-right: 10px;
+  margin-left: 10px;
+}
+
+.agent-context-settings > label:first-of-type,
+.agent-provider-settings > label:first-of-type {
+  margin-top: 10px;
+}
+
+.agent-context-settings > label:last-child,
+.agent-provider-settings > p:last-child {
+  margin-bottom: 10px;
+}
+
+.agent-result-drawer.agent-preview {
+  padding: 0 10px 10px;
+}
+
+.agent-result-drawer > summary {
+  margin: 0 -10px 9px;
+}
+
+.agent-result-drawer > summary strong {
+  color: #1e3a8a;
+  font-size: 12px;
+}
+
+.agent-result-drawer.agent-preview-invalid > summary strong {
+  color: #92400e;
+}
+
+.agent-result-drawer > summary span {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+}
