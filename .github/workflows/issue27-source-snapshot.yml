@@ -17,20 +17,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Apply validated patch
+      - name: Rebuild and verify patch
         shell: bash
         run: |
           set -euo pipefail
           if [ ! -d .issue27-payload ]; then
             echo "No payload remains; nothing to apply."
+            touch /tmp/issue27-noop
             exit 0
           fi
           cat .issue27-payload/part-* | base64 --decode > /tmp/issue27.patch.xz
           echo "5eff75d0e11f0ae33aeaac470c0c4c9859b93718b37302dfffece63040b3b0dc  /tmp/issue27.patch.xz" | sha256sum -c -
           xz -dc /tmp/issue27.patch.xz > /tmp/issue27.patch
+      - name: Check and apply patch
+        if: hashFiles('/tmp/issue27-noop') == ''
+        shell: bash
+        run: |
+          set -euo pipefail
           git apply --check /tmp/issue27.patch
           git apply /tmp/issue27.patch
           rm -rf .issue27-payload
+      - name: Validate intended diff
+        if: hashFiles('/tmp/issue27-noop') == ''
+        shell: bash
+        run: |
+          set -euo pipefail
           git add -A
           git diff --cached --check
           expected=$(cat <<'EOF' | sort
@@ -64,7 +75,14 @@ jobs:
           actual=$(git diff --cached --name-only | sort)
           printf '%s\n' "$actual"
           test "$actual" = "$expected"
+      - name: Commit functional changes
+        if: hashFiles('/tmp/issue27-noop') == ''
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git commit -m "feat: add obstacle-aware routing and command palette"
-          git push origin HEAD:${{ github.head_ref }}
+      - name: Push feature branch
+        if: hashFiles('/tmp/issue27-noop') == ''
+        run: git push origin HEAD:${{ github.head_ref }}
