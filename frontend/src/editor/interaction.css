@@ -1133,3 +1133,90 @@
   fill: #1e293b;
   stroke: #475569;
 }
+
+.canvas-context-divider {
+  height: 1px;
+  margin: 4px 3px;
+  background: #e2e8f0;
+}
+
+.element-lock-badge {
+  pointer-events: none;
+}
+
+.element-lock-badge rect {
+  fill: #d97706;
+  stroke: #92400e;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.element-lock-badge path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.inspector-lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+}
+
+.inspector-lock-banner.locked {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.inspector-lock-banner > div {
+  display: grid;
+  gap: 2px;
+}
+
+.inspector-lock-banner strong {
+  color: inherit;
+}
+
+.inspector-lock-banner button {
+  flex: 0 0 auto;
+}
+
+.inspector-fieldset-reset {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.inspector-fieldset-reset:disabled {
+  opacity: 0.66;
+}
+
+[data-theme="dark"] .canvas-context-divider {
+  background: #334155;
+}
+
+[data-theme="dark"] .inspector-lock-banner {
+  border-color: #475569;
+  background: #172033;
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .inspector-lock-banner.locked {
+  border-color: #d97706;
+  background: #3a2710;
+  color: #fcd34d;
+}

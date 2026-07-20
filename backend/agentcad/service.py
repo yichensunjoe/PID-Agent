@@ -36,6 +36,44 @@ from .models import (
 from .store import SQLiteDocumentStore, StoredDocument, StoreRevisionConflictError
 from .symbols import SymbolRegistry
 
+EDITOR_GROUP_KEY = "editor_group_id"
+EDITOR_LOCK_KEY = "editor_locked"
+
+
+def _element_edit_locked(element: Element) -> bool:
+    return element.metadata.get(EDITOR_LOCK_KEY) is True
+
+
+def _unlock_only_patch(element: Element, patch: dict[str, Any]) -> bool:
+    if set(patch) != {"metadata"} or not isinstance(patch.get("metadata"), dict):
+        return False
+    before = deepcopy(element.metadata)
+    after = deepcopy(patch["metadata"])
+    before.pop(EDITOR_LOCK_KEY, None)
+    after.pop(EDITOR_LOCK_KEY, None)
+    return before == after and patch["metadata"].get(EDITOR_LOCK_KEY) is not True
+
+
+def _normalize_editor_groups(document: Document) -> None:
+    members: dict[str, list[Element]] = {}
+    for element in document.elements:
+        group_id = element.metadata.get(EDITOR_GROUP_KEY)
+        if isinstance(group_id, str) and group_id.strip():
+            members.setdefault(group_id.strip(), []).append(element)
+    stale = {group_id for group_id, grouped in members.items() if len(grouped) < 2}
+    if not stale:
+        return
+    stale_elements = [
+        element
+        for element in document.elements
+        if isinstance((group_id := element.metadata.get(EDITOR_GROUP_KEY)), str)
+        and group_id.strip() in stale
+    ]
+    locked_stale = next((element for element in stale_elements if _element_edit_locked(element)), None)
+    if locked_stale is not None:
+        raise InvalidOperationError(f"element is locked: {locked_stale.id}")
+    for element in stale_elements:
+        element.metadata.pop(EDITOR_GROUP_KEY, None)
 
 class DocumentNotFoundError(KeyError):
     pass
@@ -110,6 +148,7 @@ class DocumentService:
         working = Document.model_validate(current.model_dump(mode="python"))
         for operation in transaction.operations:
             self._apply_operation(working, operation)
+        _normalize_editor_groups(working)
 
         working.revision = current.revision + 1
         working.updated_at = datetime.now(UTC)
@@ -280,6 +319,8 @@ class DocumentService:
             current_layer = next(item for item in document.layers if item.id == current.layer_id)
             if current_layer.locked:
                 raise InvalidOperationError(f"layer is locked: {current_layer.id}")
+            if _element_edit_locked(current) and not _unlock_only_patch(current, operation.patch):
+                raise InvalidOperationError(f"element is locked: {current.id}")
             forbidden = {"id", "type"} & operation.patch.keys()
             if forbidden:
                 raise InvalidOperationError(f"cannot update immutable fields: {sorted(forbidden)}")
@@ -290,8 +331,11 @@ class DocumentService:
             except ValidationError as exc:
                 raise InvalidOperationError(str(exc)) from exc
             updated = self._prepare_element(document, updated)
+            connectable_geometry_changed = self._connectable_geometry_changed(current, updated)
+            if connectable_geometry_changed:
+                self._assert_connected_connectors_editable(document, updated.id)
             document.elements[index] = updated
-            if updated.type in {"symbol", "junction"}:
+            if connectable_geometry_changed:
                 self._refresh_connected_connectors(document, updated.id)
             return
 
@@ -301,6 +345,10 @@ class DocumentService:
             current_layer = next(item for item in document.layers if item.id == current.layer_id)
             if current_layer.locked:
                 raise InvalidOperationError(f"layer is locked: {current_layer.id}")
+            if _element_edit_locked(current):
+                raise InvalidOperationError(f"element is locked: {current.id}")
+            if current.type in {"symbol", "junction"}:
+                self._assert_connected_connectors_editable(document, current.id)
             removed = document.elements.pop(index)
             if removed.type in {"symbol", "junction"}:
                 self._detach_connectable_connectors(document, removed.id)
@@ -331,6 +379,9 @@ class DocumentService:
             layer_index = self._layer_index(document, operation.layer_id)
             if document.layers[layer_index].locked:
                 raise InvalidOperationError(f"layer is locked: {operation.layer_id}")
+            locked_elements = [element.id for element in document.elements if element.layer_id == operation.layer_id and _element_edit_locked(element)]
+            if locked_elements:
+                raise InvalidOperationError(f"element is locked: {locked_elements[0]}")
             self._layer_index(document, operation.move_elements_to)
             for element in document.elements:
                 if element.layer_id == operation.layer_id:
@@ -361,6 +412,9 @@ class DocumentService:
             if operation.system_id == "system_default":
                 raise InvalidOperationError("default system cannot be deleted")
             self._system_index(document, operation.system_id)
+            locked_elements = [element.id for element in document.elements if element.system_id == operation.system_id and _element_edit_locked(element)]
+            if locked_elements:
+                raise InvalidOperationError(f"element is locked: {locked_elements[0]}")
             self._system_index(document, operation.move_elements_to)
             for element in document.elements:
                 if element.system_id == operation.system_id:
@@ -372,6 +426,8 @@ class DocumentService:
             locked = {layer.id for layer in document.layers if layer.locked}
             if any(element.layer_id in locked for element in document.elements):
                 raise InvalidOperationError("cannot clear document while a non-empty layer is locked")
+            if any(_element_edit_locked(element) for element in document.elements):
+                raise InvalidOperationError("cannot clear document while an element is locked")
             document.elements.clear()
             return
 
@@ -448,6 +504,32 @@ class DocumentService:
         rotated_x = center_x + dx * cos(angle) - dy * sin(angle)
         rotated_y = center_y + dx * sin(angle) + dy * cos(angle)
         return Point(x=symbol.position.x + rotated_x, y=symbol.position.y + rotated_y)
+
+    @staticmethod
+    def _connectable_geometry_changed(current: Element, updated: Element) -> bool:
+        if current.type == "symbol" and updated.type == "symbol":
+            return any(
+                getattr(current, field) != getattr(updated, field)
+                for field in ("position", "width", "height", "rotation", "symbol_key")
+            )
+        if current.type == "junction" and updated.type == "junction":
+            return current.position != updated.position
+        return False
+
+    def _assert_connected_connectors_editable(self, document: Document, element_id: str) -> None:
+        layer_map = {layer.id: layer for layer in document.layers}
+        for element in document.elements:
+            if element.type != "connector":
+                continue
+            source_match = element.source is not None and element.source.element_id == element_id
+            target_match = element.target is not None and element.target.element_id == element_id
+            if not (source_match or target_match):
+                continue
+            if _element_edit_locked(element):
+                raise InvalidOperationError(f"connected element is locked: {element.id}")
+            layer = layer_map.get(element.layer_id)
+            if layer is not None and layer.locked:
+                raise InvalidOperationError(f"connected element layer is locked: {layer.id}")
 
     def _refresh_connected_connectors(self, document: Document, element_id: str) -> None:
         for index, element in enumerate(document.elements):

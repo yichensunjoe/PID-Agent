@@ -62,6 +62,7 @@ import {
   type Rect,
 } from "./editorGeometry";
 import type { CanvasView } from "./navigationViews";
+import { expandSelectionByGroups, isElementEditLocked, readEditorGroupId } from "./selectionEditing";
 import "./interaction.css";
 
 type ConnectableElement = SymbolElement | JunctionElement;
@@ -384,7 +385,7 @@ function nearestConnectorSegment(
   let result: { connector: ConnectorElement; segmentIndex: number; point: Point } | undefined;
   let best = tolerance;
   for (const element of elements) {
-    if (element.type !== "connector" || lockedLayerIds.has(element.layer_id)) continue;
+    if (element.type !== "connector" || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) continue;
     for (let index = 0; index < element.points.length - 1; index += 1) {
       const candidate = closestPointOnSegment(point, element.points[index], element.points[index + 1]);
       if (candidate.distance > best) continue;
@@ -540,6 +541,10 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   const transact = useWorkspace((state) => state.transact);
   const duplicateSelection = useWorkspace((state) => state.duplicateSelection);
   const deleteSelection = useWorkspace((state) => state.deleteSelection);
+  const groupSelection = useWorkspace((state) => state.groupSelection);
+  const ungroupSelection = useWorkspace((state) => state.ungroupSelection);
+  const setSelectionLocked = useWorkspace((state) => state.setSelectionLocked);
+  const selectByScope = useWorkspace((state) => state.selectByScope);
   const { canvasMode, gridEnabled } = useEditorPreferences();
   const [draft, setDraft] = useState<Draft>(null);
   const [drag, setDrag] = useState<DragState>(null);
@@ -689,7 +694,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     const tolerance = Math.max(snapTolerance() * 1.75, document.canvas.grid_size);
     let best: { connector: ConnectorElement; segmentIndex: number; point: Point; distance: number } | null = null;
     for (const element of visibleElements) {
-      if (element.type !== "connector" || lockedLayerIds.has(element.layer_id)) continue;
+      if (element.type !== "connector" || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) continue;
       if (element.source?.element_id === original.id || element.target?.element_id === original.id) continue;
       for (let segmentIndex = 0; segmentIndex < element.points.length - 1; segmentIndex += 1) {
         const candidate = closestPointOnSegment(center, element.points[segmentIndex], element.points[segmentIndex + 1]);
@@ -724,7 +729,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     const moved = new Map<string, ConnectableElement>();
     for (const translation of meaningful) {
       const element = document.elements.find((item) => item.id === translation.id);
-      if (!element || element.type === "connector" || lockedLayerIds.has(element.layer_id)) continue;
+      if (!element || element.type === "connector" || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) continue;
       const translated = translateElement(element, translation.dx, translation.dy);
       operations.push({ op: "update_element", element_id: element.id, patch: updatePatch(translated) });
       if (translated.type === "symbol" || translated.type === "junction") moved.set(translated.id, translated);
@@ -1176,7 +1181,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       const moved = new Map<string, ConnectableElement>();
       for (const id of drag.elementIds) {
         const element = document.elements.find((item) => item.id === id);
-        if (!element || lockedLayerIds.has(element.layer_id)) continue;
+        if (!element || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) continue;
         if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue;
         const translated = translateElement(element, dx, dy);
         operations.push({ op: "update_element", element_id: id, patch: updatePatch(translated) });
@@ -1275,7 +1280,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     if (event.button !== 0) return;
     if (tool === "connector" && element.type === "connector") {
       event.stopPropagation();
-      if (lockedLayerIds.has(element.layer_id)) return;
+      if (lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) return;
       const raw = rawPointFromEvent(event);
       const segmentIndex = nearestSegmentIndex(element.points, raw);
       const projected = closestPointOnSegment(raw, element.points[segmentIndex], element.points[segmentIndex + 1]).point;
@@ -1292,12 +1297,20 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     if (tool !== "select") return;
     event.stopPropagation();
     if (event.shiftKey) {
-      toggleSelection(element.id);
+      toggleSelection(element.id, { expandGroups: !event.altKey });
       return;
     }
-    const ids = selectedSet.has(element.id) ? selectedElementIds : [element.id];
-    if (!selectedSet.has(element.id)) setSelection(ids);
-    if (lockedLayerIds.has(element.layer_id)) return;
+    const ids = event.altKey
+      ? [element.id]
+      : selectedSet.has(element.id)
+        ? selectedElementIds
+        : expandSelectionByGroups(document.elements, [element.id]);
+    if (!selectedSet.has(element.id) || event.altKey) setSelection(ids, { expandGroups: false });
+    const blocked = document.elements.filter((item) => ids.includes(item.id) && (lockedLayerIds.has(item.layer_id) || isElementEditLocked(item)));
+    if (blocked.length) {
+      setCanvasMessage(`锁定元素不能移动：${blocked.map((item) => item.id).join(", ")}`);
+      return;
+    }
     const point = pointFromEvent(event);
     setDrag({ elementIds: ids, start: point, current: point });
     svgRef.current?.setPointerCapture(event.pointerId);
@@ -1320,7 +1333,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
 
   const onSegmentHandlePointerDown = (event: React.PointerEvent, connector: ConnectorElement, segmentIndex: number) => {
     event.stopPropagation();
-    if (event.button !== 0 || lockedLayerIds.has(connector.layer_id)) return;
+    if (event.button !== 0 || lockedLayerIds.has(connector.layer_id) || isElementEditLocked(connector)) return;
     if (segmentTouchesLockedPoint(connector, segmentIndex)) {
       setCanvasMessage("该线段连接锁定锚点，请先点击锚点解锁。");
       return;
@@ -1333,7 +1346,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
 
   const onEndpointHandlePointerDown = (event: React.PointerEvent, connector: ConnectorElement, endpoint: "source" | "target") => {
     event.stopPropagation();
-    if (event.button !== 0 || lockedLayerIds.has(connector.layer_id)) return;
+    if (event.button !== 0 || lockedLayerIds.has(connector.layer_id) || isElementEditLocked(connector)) return;
     setSelection([connector.id]);
     const point = endpoint === "source" ? connector.points[0] : connector.points[connector.points.length - 1];
     setEndpointDrag({ connector, endpoint, current: point });
@@ -1393,7 +1406,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     const direct = new Map<string, Element>();
     for (const id of drag.elementIds) {
       const element = visibleElementMap.get(id);
-      if (!element || lockedLayerIds.has(element.layer_id)) continue;
+      if (!element || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) continue;
       if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue;
       const translated = translateElement(element, dragGeometry.dx, dragGeometry.dy);
       if (translated.type === "symbol" && inlinePreview?.result.ok && translated.id === inlinePreview.symbol.id) {
@@ -1413,8 +1426,12 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   const showAllConnections = tool === "connector" || quickConnector.current;
   const selectedElements = document.elements.filter((element) => selectedSet.has(element.id));
   const selectedConnectors = selectedElements.filter((element): element is ConnectorElement => element.type === "connector");
+  const selectedLockedElements = selectedElements.filter((element) => isElementEditLocked(element) || lockedLayerIds.has(element.layer_id));
+  const selectionEditingBlocked = selectedLockedElements.length > 0;
+  const selectedGroupIds = new Set(selectedElements.map(readEditorGroupId).filter((value): value is string => Boolean(value)));
   const singleSelected = selectedElements.length === 1 ? selectedElements[0] : undefined;
   const contextElement = contextMenu?.elementId ? document.elements.find((element) => element.id === contextMenu.elementId) : undefined;
+  const contextEditingBlocked = Boolean(contextElement && (isElementEditLocked(contextElement) || lockedLayerIds.has(contextElement.layer_id)));
   const removableContextDogleg = contextElement?.type === "connector" && contextMenu?.segmentIndex !== undefined
     && !doglegTouchesLockedPoint(contextElement, contextMenu.segmentIndex)
     ? removeLocalDogleg(contextElement.points, contextMenu.segmentIndex)
@@ -1471,7 +1488,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     </div> : null}
     {selectedElements.length ? <div className="canvas-floating-toolbar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <span>{selectedElements.length === 1 ? singleSelected?.type : `${selectedElements.length} 项`}</span>
-      {singleSelected?.type === "connector" ? <>
+      {singleSelected?.type === "connector" && !selectionEditingBlocked ? <>
         <button type="button" onClick={() => void addBend(singleSelected)}>加折点</button>
         <button type="button" onClick={() => void straightenConnector(singleSelected)}>拉直</button>
         <button type="button" onClick={() => void rerouteConnector(singleSelected)}>重排</button>
@@ -1479,9 +1496,13 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         {readLockedRoutePoints(singleSelected).length ? <button type="button" onClick={() => void clearRouteLocks([singleSelected])}>清除锚点</button> : null}
         <button type="button" onClick={() => void reverseConnectorFlow(singleSelected)}>反向</button>
       </> : null}
-      {singleSelected?.type === "symbol" ? <button type="button" onClick={() => void rotateSymbol(singleSelected)}>旋转 90°</button> : null}
-      {selectedConnectors.length > 1 ? <button type="button" onClick={() => void routeSelectedConnectors(true)}>批量避障</button> : null}
-      {alignableSelected.length > 1 ? <details className="canvas-align-menu">
+      {singleSelected?.type === "symbol" && !selectionEditingBlocked ? <button type="button" onClick={() => void rotateSymbol(singleSelected)}>旋转 90°</button> : null}
+      {selectedConnectors.length > 1 && !selectionEditingBlocked ? <button type="button" onClick={() => void routeSelectedConnectors(true)}>批量避障</button> : null}
+      {selectedElements.length > 1 && !selectedLockedElements.length ? <button type="button" onClick={() => void groupSelection()}>分组</button> : null}
+      {selectedGroupIds.size && !selectedLockedElements.length ? <button type="button" onClick={() => void ungroupSelection()}>解组</button> : null}
+      {selectedElements.some((element) => !isElementEditLocked(element)) && !selectedElements.some((element) => lockedLayerIds.has(element.layer_id)) ? <button type="button" onClick={() => void setSelectionLocked(true)}>锁定</button> : null}
+      {selectedElements.some(isElementEditLocked) && !selectedElements.some((element) => lockedLayerIds.has(element.layer_id)) ? <button type="button" onClick={() => void setSelectionLocked(false)}>解锁</button> : null}
+      {alignableSelected.length > 1 && !selectionEditingBlocked ? <details className="canvas-align-menu">
         <summary>对齐</summary>
         <div>
           <button type="button" onClick={() => void alignSelection("left")}>左对齐</button>
@@ -1497,7 +1518,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         </div>
       </details> : null}
       <button type="button" onClick={() => void duplicateSelection()}>复制</button>
-      <button type="button" className="danger" onClick={() => void deleteSelection()}>删除</button>
+      <button type="button" className="danger" disabled={selectionEditingBlocked} onClick={() => void deleteSelection()}>删除</button>
     </div> : null}
     <svg
       ref={svgRef}
@@ -1533,7 +1554,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       </g> : null}
       {activeElements.map((element) => <g
         key={element.id}
-        className={`canvas-element ${selectedSet.has(element.id) ? "is-selected" : ""} ${lockedLayerIds.has(element.layer_id) ? "is-locked" : ""}`}
+        className={`canvas-element ${selectedSet.has(element.id) ? "is-selected" : ""} ${lockedLayerIds.has(element.layer_id) || isElementEditLocked(element) ? "is-locked" : ""}`}
         onPointerEnter={() => setHoveredElementId(element.id)}
         onPointerLeave={() => setHoveredElementId((current) => current === element.id ? null : current)}
         onPointerDown={(event: React.PointerEvent<SVGGElement>) => onElementPointerDown(event, element)}
@@ -1549,6 +1570,16 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         </g>)}
         {agentSimulation.added.map((change) => change.after ? <g key={`add-${change.id}`} className="agent-ghost-added">{renderElement(previewTint(change.after, "#16a34a", [8, 4]), symbolMap)}</g> : null)}
       </g> : null}
+      {activeElements.filter(isElementEditLocked).map((element) => {
+        const bounds = rectForElement(element);
+        const size = 15 * portScale;
+        const x = bounds.x2 - size * 0.8;
+        const y = bounds.y1 - size * 0.2;
+        return <g key={`element-lock-${element.id}`} className="element-lock-badge" pointerEvents="none">
+          <rect x={x} y={y + size * 0.35} width={size} height={size * 0.75} rx={size * 0.16} />
+          <path d={`M ${x + size * 0.25} ${y + size * 0.42} V ${y + size * 0.23} A ${size * 0.25} ${size * 0.25} 0 0 1 ${x + size * 0.75} ${y + size * 0.23} V ${y + size * 0.42}`} />
+        </g>;
+      })}
       {activeElements.map((element) => {
         const visible = showAllConnections || selectedSet.has(element.id) || hoveredElementId === element.id || drag?.elementIds.includes(element.id);
         if (!visible) return null;
@@ -1569,7 +1600,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         })}</g>;
       })}
       {activeElements.map((element) => {
-        if (element.type !== "connector" || !selectedSet.has(element.id) || lockedLayerIds.has(element.layer_id)) return null;
+        if (element.type !== "connector" || !selectedSet.has(element.id) || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) return null;
         const source = element.points[0];
         const target = element.points[element.points.length - 1];
         return <g key={`handles-${element.id}`}>
@@ -1591,7 +1622,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
               transform={`rotate(45 ${point.x} ${point.y})`}
               onPointerDown={(event: React.PointerEvent<SVGRectElement>) => {
                 event.stopPropagation();
-                if (event.button !== 0 || lockedLayerIds.has(element.layer_id)) return;
+                if (event.button !== 0 || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) return;
                 void toggleRouteAnchor(element, pointIndex);
               }}
             ><title>{locked ? "点击解锁路由锚点" : "点击锁定路由锚点"}</title></rect>;
@@ -1645,6 +1676,8 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         <span>X {Math.round(cursorPoint.x)} · Y {Math.round(cursorPoint.y)}</span>
         <span>{zoomPercent}%</span>
         <span>{selectedElements.length} selected</span>
+        {selectedGroupIds.size ? <span>{selectedGroupIds.size} group(s)</span> : null}
+        {selectedElements.some(isElementEditLocked) ? <span>{selectedElements.filter(isElementEditLocked).length} locked element(s)</span> : null}
         {selectedConnectors.some((connector) => readLockedRoutePoints(connector).length) ? <span>{selectedConnectors.reduce((sum, connector) => sum + readLockedRoutePoints(connector).length, 0)} locked anchors</span> : null}
         <button type="button" onClick={fitAll}>适应全部</button>
         <button type="button" onClick={fitSelection} disabled={!selectedElements.length}>适应选择</button>
@@ -1652,7 +1685,22 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       </div>
     </div>
     {contextMenu ? <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
-      {contextElement?.type === "connector" ? <>
+      {selectedElements.length > 1 && !selectedLockedElements.length ? <button type="button" onClick={() => { setContextMenu(null); void groupSelection(); }}>分组选中元素</button> : null}
+      {selectedGroupIds.size && !selectedLockedElements.length ? <button type="button" onClick={() => { setContextMenu(null); void ungroupSelection(); }}>解除分组</button> : null}
+      {selectedElements.some((element) => !isElementEditLocked(element)) && !selectedElements.some((element) => lockedLayerIds.has(element.layer_id)) ? <button type="button" onClick={() => { setContextMenu(null); void setSelectionLocked(true); }}>锁定选中元素</button> : null}
+      {selectedElements.some(isElementEditLocked) && !selectedElements.some((element) => lockedLayerIds.has(element.layer_id)) ? <button type="button" onClick={() => { setContextMenu(null); void setSelectionLocked(false); }}>解锁选中元素</button> : null}
+      {contextElement ? <>
+        <div className="canvas-context-divider" />
+        <button type="button" onClick={() => { setContextMenu(null); selectByScope("type", contextElement.id); }}>选择同类型</button>
+        <button type="button" onClick={() => { setContextMenu(null); selectByScope("layer", contextElement.id); }}>选择同图层</button>
+        <button type="button" onClick={() => { setContextMenu(null); selectByScope("system", contextElement.id); }}>选择同系统</button>
+        {readEditorGroupId(contextElement) ? <button type="button" onClick={() => { setContextMenu(null); selectByScope("group", contextElement.id); }}>选择当前组</button> : null}
+        {contextElement.type === "connector" && contextElement.process_tag ? <button type="button" onClick={() => { setContextMenu(null); selectByScope("process_tag", contextElement.id); }}>选择同管线编号</button> : null}
+        {contextElement.type === "connector" ? <button type="button" onClick={() => { setContextMenu(null); selectByScope("route_family", contextElement.id); }}>选择同路由族</button> : null}
+        <button type="button" onClick={() => { setContextMenu(null); selectByScope("invert"); }}>反向选择</button>
+        <div className="canvas-context-divider" />
+      </> : null}
+      {contextElement?.type === "connector" && !contextEditingBlocked ? <>
         <button type="button" onClick={() => { setContextMenu(null); void addBend(contextElement, contextMenu.segmentIndex, contextMenu.point); }}>在此添加折点</button>
         <button type="button" disabled={!removableContextDogleg} onClick={() => { const index = contextMenu.segmentIndex; setContextMenu(null); if (index !== undefined) void removeBend(contextElement, index); }}>删除此折弯</button>
         <button type="button" onClick={() => { const index = contextMenu.segmentIndex; const point = contextMenu.point; setContextMenu(null); if (index !== undefined) void addLockedAnchor(contextElement, index, point); }}>在此锁定路由锚点</button>
@@ -1662,9 +1710,9 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         <button type="button" disabled={!readLockedRoutePoints(contextElement).length} onClick={() => { setContextMenu(null); void clearRouteLocks([contextElement]); }}>清除全部锚点</button>
         <button type="button" onClick={() => { setContextMenu(null); void reverseConnectorFlow(contextElement); }}>反转流向</button>
       </> : null}
-      {contextElement?.type === "symbol" ? <button type="button" onClick={() => { setContextMenu(null); void rotateSymbol(contextElement); }}>旋转 90°</button> : null}
+      {contextElement?.type === "symbol" && !contextEditingBlocked ? <button type="button" onClick={() => { setContextMenu(null); void rotateSymbol(contextElement); }}>旋转 90°</button> : null}
       <button type="button" onClick={() => { setContextMenu(null); void duplicateSelection(); }}>复制选择</button>
-      <button type="button" className="danger" onClick={() => { setContextMenu(null); void deleteSelection(); }}>删除选择</button>
+      <button type="button" className="danger" disabled={selectionEditingBlocked} onClick={() => { setContextMenu(null); void deleteSelection(); }}>删除选择</button>
     </div> : null}
   </div>;
 }
