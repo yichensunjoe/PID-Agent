@@ -1,12 +1,24 @@
 from agentcad.agent_semantic_models import ConnectPortsOperation, SemanticTransaction
-from agentcad.models import AddElementOperation, CreateDocumentRequest, Point, SymbolElement, TransactionRequest
+from agentcad.models import (
+    AddElementOperation,
+    CreateDocumentRequest,
+    Point,
+    SymbolElement,
+    TransactionRequest,
+)
 from agentcad.semantic_compiler_engine import SemanticTransactionCompiler
 from agentcad.service import DocumentService
 from agentcad.store import SQLiteDocumentStore
 from agentcad.symbols import SymbolRegistry
 
 
-def _symbol(symbols: SymbolRegistry, element_id: str, key: str, x: float, y: float) -> SymbolElement:
+def _symbol(
+    symbols: SymbolRegistry,
+    element_id: str,
+    key: str,
+    x: float,
+    y: float,
+) -> SymbolElement:
     definition = symbols.get(key)
     return SymbolElement(
         id=element_id,
@@ -34,14 +46,21 @@ def test_horizontal_shell_exchanger_exposes_two_left_right_streams():
 def test_waypoint_route_is_orthogonalized_without_replanning(tmp_path):
     symbols = SymbolRegistry()
     service = DocumentService(SQLiteDocumentStore(tmp_path / "route.db"), symbols)
-    document = service.create_document(CreateDocumentRequest(name="Route normalization"), source="system")
+    document = service.create_document(
+        CreateDocumentRequest(name="Route normalization"),
+        source="system",
+    )
     document = service.apply_transaction(
         document.id,
         TransactionRequest(
             expected_revision=document.revision,
             operations=[
-                AddElementOperation(element=_symbol(symbols, "source", "ball_valve", 100, 100)),
-                AddElementOperation(element=_symbol(symbols, "target", "ball_valve", 500, 220)),
+                AddElementOperation(
+                    element=_symbol(symbols, "source", "ball_valve", 100, 100)
+                ),
+                AddElementOperation(
+                    element=_symbol(symbols, "target", "ball_valve", 500, 220)
+                ),
             ],
         ),
         source="system",
