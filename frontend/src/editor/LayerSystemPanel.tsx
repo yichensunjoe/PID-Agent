@@ -2,6 +2,7 @@ import { useWorkspace } from "../store";
 import type { Layer, Operation, SystemGroup } from "../types";
 import { ExportPanel } from "./ExportPanel";
 import { LayoutPanel } from "./LayoutPanel";
+import { WorkspaceControls } from "./WorkspaceControls";
 
 const newGroupId = (prefix: "layer" | "system") =>
   `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -126,6 +127,11 @@ export function LayerSystemPanel() {
           ))}
         </div>
         <p className="group-hint">系统显隐同时影响网页画布和 SVG/PNG 导出。</p>
+      </section>
+
+      <section className="layout-manager-section">
+        <div className="group-manager-heading"><h3>画布与定位</h3></div>
+        <WorkspaceControls />
       </section>
 
       <section className="layout-manager-section">
