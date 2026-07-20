@@ -102,6 +102,7 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         cls,
         compiled: list[Operation],
         operation: ConnectPortsOperation,
+        grid_size: float,
     ) -> list[Operation]:
         result: list[Operation] = []
         for low_level in compiled:
@@ -241,7 +242,6 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
     def _apply_connector_semantics(
         compiled: list[Operation],
         operation: ConnectPortsOperation,
-        grid_size: float,
     ) -> list[Operation]:
         result: list[Operation] = []
         for low_level in compiled:
