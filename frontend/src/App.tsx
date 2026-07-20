@@ -1,6 +1,8 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
-import { EditorCanvas, type AgentCanvasPreview, type CanvasFocusRequest } from "./editor/EditorCanvas";
+import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest } from "./editor/EditorCanvas";
+import { CommandPalette } from "./editor/CommandPalette";
+import { elementPaletteCommands, type PaletteCommand } from "./editor/commandPalette";
 import { HistoryPanel } from "./editor/HistoryPanel";
 import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
@@ -66,6 +68,8 @@ export default function App() {
   const [agentError, setAgentError] = useState("");
   const [pendingPlan, setPendingPlan] = useState<SemanticAgentPlanResult | null>(null);
   const [canvasFocusRequest, setCanvasFocusRequest] = useState<CanvasFocusRequest | null>(null);
+  const [canvasCommandRequest, setCanvasCommandRequest] = useState<CanvasCommandRequest | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
   useEffect(() => { if (state.selectedElementIds.length) setRightPanel("properties"); }, [state.selectedElementIds]);
@@ -98,12 +102,25 @@ export default function App() {
   }, []);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const command = event.ctrlKey || event.metaKey;
+      if (command && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((current) => !current);
+        return;
+      }
+      if (commandPaletteOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setCommandPaletteOpen(false);
+        }
+        return;
+      }
       if (
         event.target instanceof HTMLInputElement
         || event.target instanceof HTMLTextAreaElement
         || event.target instanceof HTMLSelectElement
+        || (event.target instanceof HTMLElement && event.target.isContentEditable)
       ) return;
-      const command = event.ctrlKey || event.metaKey;
       if (command && event.key.toLowerCase() === "z") {
         event.preventDefault();
         void (event.shiftKey ? state.redo() : state.undo());
@@ -136,7 +153,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [state.selectedElementIds, state.document]);
+  }, [state.selectedElementIds, state.document, commandPaletteOpen]);
 
   const providerConfig = (): ProviderConfig => ({
     base_url: baseUrl.trim() || undefined,
@@ -303,6 +320,10 @@ export default function App() {
     setCanvasFocusRequest((current) => ({ ids: [elementId], nonce: (current?.nonce ?? 0) + 1 }));
   };
 
+  const dispatchCanvasCommand = (id: CanvasCommandId) => {
+    setCanvasCommandRequest((current) => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
+  };
+
   const testCustomProvider = async () => {
     if (!baseUrl.trim() || !model.trim()) return;
     setTestingProvider(true);
@@ -333,6 +354,50 @@ export default function App() {
         operations: pendingPlan.compiled_plan.transaction.operations,
       }
     : null;
+  const selectedElements = state.document?.elements.filter((element) => state.selectedElementIds.includes(element.id)) ?? [];
+  const selectedConnectors = selectedElements.filter((element) => element.type === "connector");
+  const alignableSelection = selectedElements.filter((element) => element.type !== "connector");
+  const hasRouteLocks = selectedConnectors.some((connector) => Array.isArray(connector.metadata.locked_route_points) && connector.metadata.locked_route_points.length > 0);
+  const paletteCommands: PaletteCommand[] = [
+    { id: "canvas:fit-all", label: "适应全部内容", description: "缩放到全部可见元素", keywords: ["fit all", "zoom"], enabled: Boolean(state.document?.elements.length), group: "command" },
+    { id: "canvas:fit-selection", label: "适应当前选择", description: "缩放到选中元素", keywords: ["fit selection", "focus"], enabled: selectedElements.length > 0, group: "command" },
+    { id: "canvas:reset-zoom", label: "重置为 100%", description: "保持当前中心重置缩放", keywords: ["100", "zoom reset"], enabled: Boolean(state.document), group: "command" },
+    { id: "canvas:fit-agent-preview", label: "定位 Agent 画布预览", description: "适应当前 ghost preview", keywords: ["agent", "preview"], enabled: Boolean(agentCanvasPreview), group: "command" },
+    { id: "canvas:avoid-obstacles", label: "选中管线避障布线", description: "确定性绕开设备、文字和节点", keywords: ["route", "obstacle", "避障"], enabled: selectedConnectors.length > 0, group: "command" },
+    { id: "canvas:reroute-selection", label: "重排选中管线", description: "保留锁定锚点并重新正交布线", keywords: ["reroute", "管线"], enabled: selectedConnectors.length > 0, group: "command" },
+    { id: "canvas:clear-route-locks", label: "清除选中管线锚点", description: "移除所有锁定路由点", keywords: ["unlock", "anchor"], enabled: hasRouteLocks, group: "command" },
+    { id: "canvas:align-left", label: "左对齐", enabled: alignableSelection.length > 1, group: "command" },
+    { id: "canvas:align-center", label: "水平居中", enabled: alignableSelection.length > 1, group: "command" },
+    { id: "canvas:align-right", label: "右对齐", enabled: alignableSelection.length > 1, group: "command" },
+    { id: "canvas:align-top", label: "顶部对齐", enabled: alignableSelection.length > 1, group: "command" },
+    { id: "canvas:align-middle", label: "垂直居中", enabled: alignableSelection.length > 1, group: "command" },
+    { id: "canvas:align-bottom", label: "底部对齐", enabled: alignableSelection.length > 1, group: "command" },
+    { id: "canvas:distribute-horizontal", label: "水平等距分布", enabled: alignableSelection.length > 2, group: "command" },
+    { id: "canvas:distribute-vertical", label: "垂直等距分布", enabled: alignableSelection.length > 2, group: "command" },
+    { id: "workspace:duplicate", label: "复制选择", description: "Ctrl/Cmd + D", enabled: selectedElements.length > 0, group: "command" },
+    { id: "workspace:delete", label: "删除选择", description: "Delete", enabled: selectedElements.length > 0, group: "command" },
+    { id: "workspace:select-all", label: "选择全部元素", description: "Ctrl/Cmd + A", enabled: Boolean(state.document?.elements.length), group: "command" },
+    { id: "workspace:tool-select", label: "切换到选择工具", description: "V", enabled: true, group: "command" },
+    { id: "workspace:tool-connector", label: "切换到工艺管线工具", description: "P", enabled: true, group: "command" },
+    { id: "workspace:agent-panel", label: "打开 Agent 面板", enabled: true, group: "command" },
+    ...elementPaletteCommands(state.document?.elements ?? []),
+  ];
+  const executePaletteCommand = (command: PaletteCommand) => {
+    if (command.elementId) {
+      focusCanvasElement(command.elementId);
+      return;
+    }
+    if (command.id.startsWith("canvas:")) {
+      dispatchCanvasCommand(command.id.slice("canvas:".length) as CanvasCommandId);
+      return;
+    }
+    if (command.id === "workspace:duplicate") void state.duplicateSelection();
+    else if (command.id === "workspace:delete") void state.deleteSelection();
+    else if (command.id === "workspace:select-all") state.selectAll();
+    else if (command.id === "workspace:tool-select") state.setTool("select");
+    else if (command.id === "workspace:tool-connector") state.setTool("connector");
+    else if (command.id === "workspace:agent-panel") setRightPanel("agent");
+  };
 
   return (
     <div className="app-shell">
@@ -342,6 +407,7 @@ export default function App() {
           {tools.map((tool) => <button key={tool.id} className={state.tool === tool.id ? "active" : ""} onClick={() => state.setTool(tool.id)} title={`${tool.label} (${tool.key})`}>{tool.label}</button>)}
         </div>
         <div className="toolbar-actions">
+          <button type="button" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title="命令面板 (Ctrl/Cmd + K)">命令 <kbd>⌘K</kbd></button>
           <button onClick={() => void state.duplicateSelection()} disabled={!state.selectedElementIds.length}>复制</button>
           <button onClick={() => void state.undo()}>撤销</button>
           <button onClick={() => void state.redo()}>重做</button>
@@ -368,9 +434,9 @@ export default function App() {
               <span>{state.document.elements.length} elements</span>
               <span>{state.selectedElementIds.length} selected</span>
               <button className={`sync-badge sync-${state.syncState}`} onClick={() => syncActionable && void state.refreshDocument()} disabled={!syncActionable} title={state.pendingExternalRevision ? `服务器 revision ${state.pendingExternalRevision}` : undefined}>{state.syncMessage}</button>
-              <span>框选 · Shift 多选 · 右键快捷操作 · 从主管直接拖支管</span>
+              <span>框选 · Shift 多选 · 右键快捷操作 · Ctrl/Cmd+K 命令面板</span>
             </div>
-            <EditorCanvas agentPreview={agentCanvasPreview} focusRequest={canvasFocusRequest} />
+            <EditorCanvas agentPreview={agentCanvasPreview} focusRequest={canvasFocusRequest} commandRequest={canvasCommandRequest} />
           </> : <div className="empty-canvas">没有打开的文档</div>}
         </section>
 
@@ -466,6 +532,12 @@ export default function App() {
           </section>
         </aside>
       </main>
+      <CommandPalette
+        open={commandPaletteOpen}
+        commands={paletteCommands}
+        onClose={() => setCommandPaletteOpen(false)}
+        onExecute={executePaletteCommand}
+      />
     </div>
   );
 }

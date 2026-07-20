@@ -20,10 +20,22 @@ import {
   moveOrthogonalSegment,
   nearestSegmentIndex,
   orthogonalRoute,
-  preserveEndpointMoves,
   removeLocalDogleg,
-  shortestOrthogonalRoute,
 } from "./connectorRouting";
+import {
+  doglegTouchesLockedPoint,
+  inflateObstacle,
+  insertLockedRoutePoint,
+  isLockedRoutePoint,
+  metadataWithLockedRoutePoints,
+  obstaclePiecesWithPortExit,
+  preserveEndpointMovesWithLockedPoints,
+  readLockedRoutePoints,
+  routeAvoidingObstacles,
+  routeThroughLockedPointsFallback,
+  segmentTouchesLockedPoint,
+  toggleLockedRoutePoint,
+} from "./obstacleRouting";
 import {
   canvasRectToMinimap,
   centerViewAt,
@@ -103,9 +115,27 @@ type InlineDragPreview = {
 
 export type AgentCanvasPreview = AgentPreviewRequest;
 export type CanvasFocusRequest = { ids: string[]; nonce: number };
+export type CanvasCommandId =
+  | "fit-all"
+  | "fit-selection"
+  | "reset-zoom"
+  | "fit-agent-preview"
+  | "align-left"
+  | "align-center"
+  | "align-right"
+  | "align-top"
+  | "align-middle"
+  | "align-bottom"
+  | "distribute-horizontal"
+  | "distribute-vertical"
+  | "reroute-selection"
+  | "avoid-obstacles"
+  | "clear-route-locks";
+export type CanvasCommandRequest = { id: CanvasCommandId; nonce: number };
 type EditorCanvasProps = {
   agentPreview?: AgentCanvasPreview | null;
   focusRequest?: CanvasFocusRequest | null;
+  commandRequest?: CanvasCommandRequest | null;
 };
 
 const MINIMAP_WIDTH = 188;
@@ -175,6 +205,7 @@ function shiftPoint(point: Point, dx: number, dy: number): Point {
 }
 
 function translateElement(element: Element, dx: number, dy: number): Element {
+  const lockedRoutePoints = element.type === "connector" ? readLockedRoutePoints(element) : [];
   const clone = structuredClone(element);
   if (clone.type === "line") {
     clone.start = shiftPoint(clone.start, dx, dy);
@@ -191,6 +222,8 @@ function translateElement(element: Element, dx: number, dy: number): Element {
     if (clone.type === "connector") {
       if (clone.source && !clone.source.element_id) clone.source.point = shiftPoint(clone.source.point, dx, dy);
       if (clone.target && !clone.target.element_id) clone.target.point = shiftPoint(clone.target.point, dx, dy);
+      const shiftedLocks = lockedRoutePoints.map((point) => shiftPoint(point, dx, dy));
+      clone.metadata = metadataWithLockedRoutePoints(clone, shiftedLocks);
     }
   }
   return clone;
@@ -201,7 +234,7 @@ function updatePatch(element: Element): Record<string, unknown> {
   if (element.type === "rectangle") return { x: element.x, y: element.y };
   if (element.type === "circle") return { center: element.center };
   if (element.type === "text" || element.type === "symbol" || element.type === "junction") return { position: element.position };
-  if (element.type === "connector") return { points: element.points, source: element.source, target: element.target, routing: element.routing };
+  if (element.type === "connector") return { points: element.points, source: element.source, target: element.target, routing: element.routing, metadata: element.metadata };
   return { points: element.points };
 }
 
@@ -292,7 +325,7 @@ function syncConnectorPreview(
   if (clone.routing === "direct") {
     clone.points = dedupePoints([start, end]);
   } else {
-    clone.points = preserveEndpointMoves(clone.points, start, end);
+    clone.points = preserveEndpointMovesWithLockedPoints(clone.points, start, end, readLockedRoutePoints(clone));
     clone.routing = "manual";
   }
   return clone;
@@ -373,12 +406,14 @@ function splitConnector(
   first.points = dedupePoints([...connector.points.slice(0, segmentIndex + 1), point]);
   first.target = endpoint;
   first.routing = "manual";
+  first.metadata = metadataWithLockedRoutePoints(first, readLockedRoutePoints(connector));
   first.metadata = { ...first.metadata, main_route_id: routeId };
   const second = structuredClone(connector);
   second.id = newElementId();
   second.points = dedupePoints([point, ...connector.points.slice(segmentIndex + 1)]);
   second.source = endpoint;
   second.routing = "manual";
+  second.metadata = metadataWithLockedRoutePoints(second, readLockedRoutePoints(connector));
   second.metadata = { ...second.metadata, main_route_id: routeId };
   return [first, second];
 }
@@ -485,7 +520,7 @@ function longestSegmentIndex(connector: ConnectorElement): number {
   return bestIndex;
 }
 
-export function EditorCanvas({ agentPreview = null, focusRequest = null }: EditorCanvasProps) {
+export function EditorCanvas({ agentPreview = null, focusRequest = null, commandRequest = null }: EditorCanvasProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const document = useWorkspace((state) => state.document);
@@ -511,8 +546,10 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [cursorPoint, setCursorPoint] = useState<Point>({ x: 0, y: 0 });
+  const [canvasMessage, setCanvasMessage] = useState("");
   const quickConnector = useRef(false);
   const minimapDragging = useRef(false);
+  const commandHandlerRef = useRef<(id: CanvasCommandId) => void>(() => undefined);
 
   useEffect(() => {
     setViewBox(null);
@@ -535,6 +572,9 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
     window.addEventListener("pointerdown", close);
     return () => window.removeEventListener("pointerdown", close);
   }, []);
+  useEffect(() => {
+    if (commandRequest) commandHandlerRef.current(commandRequest.id);
+  }, [commandRequest?.nonce]);
 
   const symbolMap = useMemo(() => new Map(symbols.map((symbol) => [symbol.key, symbol])), [symbols]);
   const selectedSet = useMemo(() => new Set(selectedElementIds), [selectedElementIds]);
@@ -709,6 +749,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
       point: plan.secondPoint,
     };
     second.routing = "manual";
+    second.metadata = metadataWithLockedRoutePoints(second, readLockedRoutePoints(preview.connector));
     second.metadata = {
       ...second.metadata,
       main_route_id: routeId,
@@ -732,7 +773,10 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
           points: route.first,
           target: firstTarget,
           routing: "manual",
-          metadata: { ...preview.connector.metadata, main_route_id: routeId },
+          metadata: {
+            ...metadataWithLockedRoutePoints({ ...preview.connector, points: route.first }, readLockedRoutePoints(preview.connector)),
+            main_route_id: routeId,
+          },
         },
       },
       { op: "add_element", element: second },
@@ -772,8 +816,114 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
     await transact([{
       op: "update_element",
       element_id: connector.id,
-      patch: { points, routing, source: connector.source, target: connector.target },
+      patch: { points, routing, source: connector.source, target: connector.target, metadata: connector.metadata },
     }], label);
+  };
+
+  const connectorObstacles = (connector: ConnectorElement) => {
+    const ownerPorts = new Map<string, Point[]>();
+    for (const endpoint of [connector.source, connector.target]) {
+      if (!endpoint?.element_id) continue;
+      ownerPorts.set(endpoint.element_id, [...(ownerPorts.get(endpoint.element_id) ?? []), endpoint.point]);
+    }
+    const clearance = Math.max(10, document.canvas.grid_size * 0.65);
+    const channelHalfWidth = Math.max(6, document.canvas.grid_size * 0.55);
+    return document.elements.flatMap((element) => {
+      if (element.id === connector.id || !["symbol", "junction", "text", "rectangle", "circle"].includes(element.type)) return [];
+      const ownerEndpoints = ownerPorts.get(element.id) ?? [];
+      if (element.type === "junction" && ownerEndpoints.length) return [];
+      if (element.type === "symbol" && ownerEndpoints.length === 1) {
+        return obstaclePiecesWithPortExit(rectForElement(element), ownerEndpoints[0], clearance, channelHalfWidth)
+          .map((obstacle) => ({ ...obstacle, id: element.id }));
+      }
+      if (element.type === "symbol" && ownerEndpoints.length > 1) return [];
+      return [{ ...inflateObstacle(rectForElement(element), clearance), id: element.id }];
+    });
+  };
+
+  const obstacleRouteFor = (connector: ConnectorElement) => routeAvoidingObstacles({
+    start: connector.points[0],
+    end: connector.points[connector.points.length - 1],
+    obstacles: connectorObstacles(connector),
+    grid: document.canvas.grid_size,
+    existingPoints: connector.points,
+    lockedPoints: readLockedRoutePoints(connector),
+    bounds: canvasMode === "page" ? {
+      x1: Math.min(document.canvas.grid_size, connector.points[0].x, connector.points[connector.points.length - 1].x),
+      y1: Math.min(document.canvas.grid_size, connector.points[0].y, connector.points[connector.points.length - 1].y),
+      x2: Math.max(document.canvas.width - document.canvas.grid_size, connector.points[0].x, connector.points[connector.points.length - 1].x),
+      y2: Math.max(document.canvas.height - document.canvas.grid_size, connector.points[0].y, connector.points[connector.points.length - 1].y),
+    } : undefined,
+  });
+
+  const avoidConnectorObstacles = async (connector: ConnectorElement) => {
+    const result = obstacleRouteFor(connector);
+    await updateConnector(connector, result.points, "manual", "Route connector around obstacles");
+    setSelection([connector.id]);
+    setCanvasMessage(result.usedFallback
+      ? `未找到有界无障碍路径，已保留确定性回退路线：${result.reason ?? "搜索失败"}`
+      : `避障布线完成 · 探索 ${result.explored} 个状态`);
+  };
+
+  const routeSelectedConnectors = async (avoidObstacles: boolean) => {
+    const connectors = document.elements.filter((element): element is ConnectorElement => element.type === "connector" && selectedSet.has(element.id));
+    if (!connectors.length) return;
+    let fallbackCount = 0;
+    const operations: Operation[] = connectors.map((connector) => {
+      const result = avoidObstacles ? obstacleRouteFor(connector) : {
+        points: routeThroughLockedPointsFallback(
+          connector.points[0],
+          connector.points[connector.points.length - 1],
+          readLockedRoutePoints(connector),
+        ),
+        usedFallback: false,
+      };
+      if (result.usedFallback) fallbackCount += 1;
+      return {
+        op: "update_element",
+        element_id: connector.id,
+        patch: { points: result.points, routing: "manual", source: connector.source, target: connector.target, metadata: connector.metadata },
+      } as Operation;
+    });
+    await transact(operations, avoidObstacles ? "Route selected connectors around obstacles" : "Reroute selected connectors");
+    setCanvasMessage(avoidObstacles
+      ? `已处理 ${connectors.length} 条管线${fallbackCount ? ` · ${fallbackCount} 条使用确定性回退` : ""}`
+      : `已重排 ${connectors.length} 条管线并保留锁定锚点`);
+  };
+
+  const updateLockedPoints = async (connector: ConnectorElement, points: Point[], lockedPoints: Point[], label: string) => {
+    const updated = { ...connector, points };
+    updated.metadata = metadataWithLockedRoutePoints(updated, lockedPoints);
+    await transact([{
+      op: "update_element",
+      element_id: connector.id,
+      patch: { points, routing: "manual", metadata: updated.metadata },
+    }], label);
+    setSelection([connector.id]);
+  };
+
+  const toggleRouteAnchor = async (connector: ConnectorElement, pointIndex: number) => {
+    const locked = toggleLockedRoutePoint(connector, pointIndex);
+    await updateLockedPoints(connector, connector.points, locked, isLockedRoutePoint(connector, connector.points[pointIndex]) ? "Unlock connector route anchor" : "Lock connector route anchor");
+  };
+
+  const addLockedAnchor = async (connector: ConnectorElement, segmentIndex: number, point: Point) => {
+    const inserted = insertLockedRoutePoint(connector, segmentIndex, point);
+    if (!inserted) return;
+    await updateLockedPoints(connector, inserted.points, inserted.lockedPoints, "Add locked connector route anchor");
+  };
+
+  const clearRouteLocks = async (connectors: ConnectorElement[]) => {
+    const operations = connectors
+      .filter((connector) => readLockedRoutePoints(connector).length)
+      .map((connector) => ({
+        op: "update_element",
+        element_id: connector.id,
+        patch: { metadata: metadataWithLockedRoutePoints(connector, []) },
+      } as Operation));
+    if (!operations.length) return;
+    await transact(operations, "Clear connector route anchors");
+    setCanvasMessage(`已清除 ${operations.length} 条管线的锁定锚点`);
   };
 
   const addBend = async (connector: ConnectorElement, segmentIndex?: number, point?: Point) => {
@@ -787,6 +937,10 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
   };
 
   const removeBend = async (connector: ConnectorElement, segmentIndex: number) => {
+    if (doglegTouchesLockedPoint(connector, segmentIndex)) {
+      setCanvasMessage("该折弯包含锁定锚点，请先解锁后再删除。");
+      return;
+    }
     const points = removeLocalDogleg(connector.points, segmentIndex);
     if (!points) return;
     await updateConnector(connector, points, "manual", "Remove connector bend");
@@ -794,14 +948,22 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
   };
 
   const straightenConnector = async (connector: ConnectorElement) => {
-    const points = shortestOrthogonalRoute(connector.points[0], connector.points[connector.points.length - 1]);
+    const points = routeThroughLockedPointsFallback(
+      connector.points[0],
+      connector.points[connector.points.length - 1],
+      readLockedRoutePoints(connector),
+    );
     await updateConnector(connector, points, "manual", "Straighten connector");
     setSelection([connector.id]);
   };
 
   const rerouteConnector = async (connector: ConnectorElement) => {
-    const points = orthogonalRoute(connector.points[0], connector.points[connector.points.length - 1]);
-    await updateConnector(connector, points, "orthogonal", "Reroute connector");
+    const points = routeThroughLockedPointsFallback(
+      connector.points[0],
+      connector.points[connector.points.length - 1],
+      readLockedRoutePoints(connector),
+    );
+    await updateConnector(connector, points, readLockedRoutePoints(connector).length ? "manual" : "orthogonal", "Reroute connector");
     setSelection([connector.id]);
   };
 
@@ -962,7 +1124,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
       else updated.target = endpoint;
       const start = endpointDrag.endpoint === "source" ? endpoint.point : updated.points[0];
       const end = endpointDrag.endpoint === "target" ? endpoint.point : updated.points[updated.points.length - 1];
-      updated.points = updated.routing === "direct" ? dedupePoints([start, end]) : preserveEndpointMoves(updated.points, start, end);
+      updated.points = updated.routing === "direct" ? dedupePoints([start, end]) : preserveEndpointMovesWithLockedPoints(updated.points, start, end, readLockedRoutePoints(updated));
       if (updated.routing !== "direct") updated.routing = "manual";
       setEndpointDrag(null);
       await transact([{ op: "update_element", element_id: updated.id, patch: updatePatch(updated) }], `Reconnect ${updated.id} ${endpointDrag.endpoint}`);
@@ -1056,7 +1218,10 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
       branch.flow_direction = "none";
       branch.arrow_position = "middle";
       branch.crossing_style = "none";
-      branch.metadata = { ...branch.metadata, branch_of_main_route_id: String(origin.connector.metadata.main_route_id ?? origin.connector.id) };
+      branch.metadata = {
+        ...metadataWithLockedRoutePoints(branch, []),
+        branch_of_main_route_id: String(origin.connector.metadata.main_route_id ?? origin.connector.id),
+      };
       await transact([
         { op: "add_element", element: junction },
         { op: "delete_element", element_id: origin.connector.id },
@@ -1134,6 +1299,10 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
   const onSegmentHandlePointerDown = (event: React.PointerEvent, connector: ConnectorElement, segmentIndex: number) => {
     event.stopPropagation();
     if (event.button !== 0 || lockedLayerIds.has(connector.layer_id)) return;
+    if (segmentTouchesLockedPoint(connector, segmentIndex)) {
+      setCanvasMessage("该线段连接锁定锚点，请先点击锚点解锁。");
+      return;
+    }
     setSelection([connector.id]);
     const point = pointFromEvent(event);
     setSegmentDrag({ connector, segmentIndex, start: point, current: point });
@@ -1187,7 +1356,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
       else changed.target = endpoint;
       const start = endpointDrag.endpoint === "source" ? endpoint.point : changed.points[0];
       const end = endpointDrag.endpoint === "target" ? endpoint.point : changed.points[changed.points.length - 1];
-      changed.points = changed.routing === "direct" ? dedupePoints([start, end]) : preserveEndpointMoves(changed.points, start, end);
+      changed.points = changed.routing === "direct" ? dedupePoints([start, end]) : preserveEndpointMovesWithLockedPoints(changed.points, start, end, readLockedRoutePoints(changed));
       if (changed.routing !== "direct") changed.routing = "manual";
       return candidateElements.map((element) => element.id === changed.id ? changed : element);
     }
@@ -1221,9 +1390,11 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
   const hitPadding = 8 * portScale;
   const showAllConnections = tool === "connector" || quickConnector.current;
   const selectedElements = document.elements.filter((element) => selectedSet.has(element.id));
+  const selectedConnectors = selectedElements.filter((element): element is ConnectorElement => element.type === "connector");
   const singleSelected = selectedElements.length === 1 ? selectedElements[0] : undefined;
   const contextElement = contextMenu?.elementId ? document.elements.find((element) => element.id === contextMenu.elementId) : undefined;
   const removableContextDogleg = contextElement?.type === "connector" && contextMenu?.segmentIndex !== undefined
+    && !doglegTouchesLockedPoint(contextElement, contextMenu.segmentIndex)
     ? removeLocalDogleg(contextElement.points, contextMenu.segmentIndex)
     : null;
   const alignableSelected = selectedElements.filter((element) => element.type !== "connector");
@@ -1253,6 +1424,24 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
     setViewBox(centerViewAt(view, point));
   };
 
+  commandHandlerRef.current = (id) => {
+    if (id === "fit-all") fitAll();
+    else if (id === "fit-selection") fitSelection();
+    else if (id === "reset-zoom") resetZoom();
+    else if (id === "fit-agent-preview") fitPreview();
+    else if (id === "align-left") void alignSelection("left");
+    else if (id === "align-center") void alignSelection("center");
+    else if (id === "align-right") void alignSelection("right");
+    else if (id === "align-top") void alignSelection("top");
+    else if (id === "align-middle") void alignSelection("middle");
+    else if (id === "align-bottom") void alignSelection("bottom");
+    else if (id === "distribute-horizontal") void distributeSelection("horizontal");
+    else if (id === "distribute-vertical") void distributeSelection("vertical");
+    else if (id === "reroute-selection") void routeSelectedConnectors(false);
+    else if (id === "avoid-obstacles") void routeSelectedConnectors(true);
+    else if (id === "clear-route-locks") void clearRouteLocks(selectedConnectors);
+  };
+
   return <div ref={shellRef} className="editor-canvas-shell">
     {agentPreview ? <div className={`agent-canvas-preview-badge ${agentSimulation?.ok ? "valid" : "invalid"}`}>
       <div><strong>Agent 画布预览</strong><span>{agentSimulation?.ok ? `${agentSimulation.affectedIds.length} 个受影响元素` : agentSimulation?.reason || "无法生成预览"}</span></div>
@@ -1264,9 +1453,12 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
         <button type="button" onClick={() => void addBend(singleSelected)}>加折点</button>
         <button type="button" onClick={() => void straightenConnector(singleSelected)}>拉直</button>
         <button type="button" onClick={() => void rerouteConnector(singleSelected)}>重排</button>
+        <button type="button" onClick={() => void avoidConnectorObstacles(singleSelected)}>避障</button>
+        {readLockedRoutePoints(singleSelected).length ? <button type="button" onClick={() => void clearRouteLocks([singleSelected])}>清除锚点</button> : null}
         <button type="button" onClick={() => void reverseConnectorFlow(singleSelected)}>反向</button>
       </> : null}
       {singleSelected?.type === "symbol" ? <button type="button" onClick={() => void rotateSymbol(singleSelected)}>旋转 90°</button> : null}
+      {selectedConnectors.length > 1 ? <button type="button" onClick={() => void routeSelectedConnectors(true)}>批量避障</button> : null}
       {alignableSelected.length > 1 ? <details className="canvas-align-menu">
         <summary>对齐</summary>
         <div>
@@ -1363,10 +1555,30 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
           <circle className={`connector-endpoint-handle ${endpointDrag?.connector.id === element.id && endpointDrag.endpoint === "source" ? "active" : ""}`} cx={source.x} cy={source.y} r={portRadius * 1.15} pointerEvents="none" />
           <circle className="connector-endpoint-hit" cx={target.x} cy={target.y} r={portRadius * 2.5} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onEndpointHandlePointerDown(event, element, "target")} />
           <circle className={`connector-endpoint-handle ${endpointDrag?.connector.id === element.id && endpointDrag.endpoint === "target" ? "active" : ""}`} cx={target.x} cy={target.y} r={portRadius * 1.15} pointerEvents="none" />
+          {element.points.slice(1, -1).map((point, offset) => {
+            const pointIndex = offset + 1;
+            const locked = isLockedRoutePoint(element, point);
+            const size = (locked ? 8 : 6.5) * portScale;
+            return <rect
+              key={`anchor-${element.id}-${pointIndex}`}
+              className={`connector-route-anchor ${locked ? "locked" : "unlocked"}`}
+              x={point.x - size / 2}
+              y={point.y - size / 2}
+              width={size}
+              height={size}
+              transform={`rotate(45 ${point.x} ${point.y})`}
+              onPointerDown={(event: React.PointerEvent<SVGRectElement>) => {
+                event.stopPropagation();
+                if (event.button !== 0 || lockedLayerIds.has(element.layer_id)) return;
+                void toggleRouteAnchor(element, pointIndex);
+              }}
+            ><title>{locked ? "点击解锁路由锚点" : "点击锁定路由锚点"}</title></rect>;
+          })}
           {element.points.slice(0, -1).map((point, segmentIndex) => {
             const next = element.points[segmentIndex + 1];
             const middle = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
-            return <rect key={`segment-${element.id}-${segmentIndex}`} className={`connector-segment-handle ${segmentDrag?.connector.id === element.id && segmentDrag.segmentIndex === segmentIndex ? "active" : ""}`} x={middle.x - 5 * portScale} y={middle.y - 5 * portScale} width={10 * portScale} height={10 * portScale} rx={2 * portScale} onPointerDown={(event: React.PointerEvent<SVGRectElement>) => onSegmentHandlePointerDown(event, element, segmentIndex)} />;
+            const locked = segmentTouchesLockedPoint(element, segmentIndex);
+            return <rect key={`segment-${element.id}-${segmentIndex}`} className={`connector-segment-handle ${locked ? "locked" : ""} ${segmentDrag?.connector.id === element.id && segmentDrag.segmentIndex === segmentIndex ? "active" : ""}`} x={middle.x - 5 * portScale} y={middle.y - 5 * portScale} width={10 * portScale} height={10 * portScale} rx={2 * portScale} onPointerDown={(event: React.PointerEvent<SVGRectElement>) => onSegmentHandlePointerDown(event, element, segmentIndex)} />;
           })}
         </g>;
       })}
@@ -1405,12 +1617,13 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
     </div> : null}
     <div className="canvas-status-bar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <div className={`canvas-status-message ${inlinePreview ? inlinePreview.result.ok ? "success" : "warning" : ""}`}>
-        {inlineStatus || `${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"}`}
+        {inlineStatus || canvasMessage || `${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"}`}
       </div>
       <div className="canvas-status-controls">
         <span>X {Math.round(cursorPoint.x)} · Y {Math.round(cursorPoint.y)}</span>
         <span>{zoomPercent}%</span>
         <span>{selectedElements.length} selected</span>
+        {selectedConnectors.some((connector) => readLockedRoutePoints(connector).length) ? <span>{selectedConnectors.reduce((sum, connector) => sum + readLockedRoutePoints(connector).length, 0)} locked anchors</span> : null}
         <button type="button" onClick={fitAll}>适应全部</button>
         <button type="button" onClick={fitSelection} disabled={!selectedElements.length}>适应选择</button>
         <button type="button" onClick={resetZoom}>100%</button>
@@ -1420,8 +1633,11 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null }: Edito
       {contextElement?.type === "connector" ? <>
         <button type="button" onClick={() => { setContextMenu(null); void addBend(contextElement, contextMenu.segmentIndex, contextMenu.point); }}>在此添加折点</button>
         <button type="button" disabled={!removableContextDogleg} onClick={() => { const index = contextMenu.segmentIndex; setContextMenu(null); if (index !== undefined) void removeBend(contextElement, index); }}>删除此折弯</button>
+        <button type="button" onClick={() => { const index = contextMenu.segmentIndex; const point = contextMenu.point; setContextMenu(null); if (index !== undefined) void addLockedAnchor(contextElement, index, point); }}>在此锁定路由锚点</button>
         <button type="button" onClick={() => { setContextMenu(null); void straightenConnector(contextElement); }}>拉直管线</button>
         <button type="button" onClick={() => { setContextMenu(null); void rerouteConnector(contextElement); }}>完整重新布线</button>
+        <button type="button" onClick={() => { setContextMenu(null); void avoidConnectorObstacles(contextElement); }}>避开设备与文字</button>
+        <button type="button" disabled={!readLockedRoutePoints(contextElement).length} onClick={() => { setContextMenu(null); void clearRouteLocks([contextElement]); }}>清除全部锚点</button>
         <button type="button" onClick={() => { setContextMenu(null); void reverseConnectorFlow(contextElement); }}>反转流向</button>
       </> : null}
       {contextElement?.type === "symbol" ? <button type="button" onClick={() => { setContextMenu(null); void rotateSymbol(contextElement); }}>旋转 90°</button> : null}
