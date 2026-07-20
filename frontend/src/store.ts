@@ -54,6 +54,16 @@ function duplicateElement(element: Element, idMap: Map<string, string>, offset: 
     if (clone.type === "connector") {
       clone.source = shiftedEndpoint(clone.source, idMap, offset, offset);
       clone.target = shiftedEndpoint(clone.target, idMap, offset, offset);
+      const locked = clone.metadata.locked_route_points;
+      if (Array.isArray(locked)) {
+        clone.metadata.locked_route_points = locked.map((value) => {
+          if (!value || typeof value !== "object") return value;
+          const point = value as { x?: unknown; y?: unknown };
+          return typeof point.x === "number" && typeof point.y === "number"
+            ? shiftPoint({ x: point.x, y: point.y }, offset, offset)
+            : value;
+        });
+      }
       clone.routing = "manual";
     }
   }
