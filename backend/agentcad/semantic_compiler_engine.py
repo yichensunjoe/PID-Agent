@@ -37,7 +37,8 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
     selects the nearest current descendant segment and snaps the requested tap
     point onto that orthogonal segment within a bounded grid-scale tolerance.
     Semantic connector flow properties are preserved for automatic and waypoint
-    routes. Empty-document full diagrams also receive deterministic annotation polish.
+    routes. Near-valid waypoint routes are orthogonalized deterministically before
+    validation. Empty-document full diagrams also receive deterministic annotation polish.
     """
 
     def compile(
@@ -90,9 +91,108 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         operation: ConnectPortsOperation,
         index: int,
     ) -> list[Operation]:
-        return self._apply_connector_semantics(
-            super()._connect_ports_with_waypoints(document, operation, index),
-            operation,
+        compiled = super()._connect_ports_with_waypoints(document, operation, index)
+        normalized = self._normalize_waypoint_connector(compiled, operation)
+        return self._apply_connector_semantics(normalized, operation)
+
+    @classmethod
+    def _normalize_waypoint_connector(
+        cls,
+        compiled: list[Operation],
+        operation: ConnectPortsOperation,
+    ) -> list[Operation]:
+        result: list[Operation] = []
+        for low_level in compiled:
+            if not isinstance(low_level, AddElementOperation) or low_level.element.type != "connector":
+                result.append(low_level)
+                continue
+            connector = low_level.element
+            points = cls._orthogonalize_route(connector.points)
+            changed = len(points) != len(connector.points) or any(
+                not cls._points_close(before, after)
+                for before, after in zip(connector.points, points, strict=False)
+            )
+            if not changed:
+                result.append(low_level)
+                continue
+            metadata = {
+                **connector.metadata,
+                "route_normalized": True,
+                "requested_waypoints": [
+                    point.model_dump(mode="json") for point in operation.waypoints
+                ],
+            }
+            result.append(
+                AddElementOperation(
+                    element=connector.model_copy(
+                        update={"points": points, "metadata": metadata},
+                        deep=True,
+                    )
+                )
+            )
+        return result
+
+    @classmethod
+    def _orthogonalize_route(cls, points: list[Point]) -> list[Point]:
+        cleaned = cls._dedupe_route_points(points)
+        if len(cleaned) < 2:
+            return cleaned
+        routed: list[Point] = [cleaned[0]]
+        for index, desired in enumerate(cleaned[1:], start=1):
+            current = routed[-1]
+            if cls._axis_aligned(current, desired):
+                routed.append(desired)
+                continue
+            following = cleaned[index + 1] if index + 1 < len(cleaned) else None
+            if following is not None and abs(desired.y - following.y) <= POINT_EPSILON:
+                elbow = Point(x=current.x, y=desired.y)
+            elif following is not None and abs(desired.x - following.x) <= POINT_EPSILON:
+                elbow = Point(x=desired.x, y=current.y)
+            elif abs(desired.x - current.x) >= abs(desired.y - current.y):
+                elbow = Point(x=desired.x, y=current.y)
+            else:
+                elbow = Point(x=current.x, y=desired.y)
+            if not cls._points_close(current, elbow):
+                routed.append(elbow)
+            if not cls._points_close(routed[-1], desired):
+                routed.append(desired)
+        return cls._simplify_collinear_route(cls._dedupe_route_points(routed))
+
+    @classmethod
+    def _dedupe_route_points(cls, points: list[Point]) -> list[Point]:
+        result: list[Point] = []
+        for point in points:
+            if not result or not cls._points_close(result[-1], point):
+                result.append(point)
+        return result
+
+    @classmethod
+    def _simplify_collinear_route(cls, points: list[Point]) -> list[Point]:
+        if len(points) < 3:
+            return points
+        result = [points[0]]
+        for index in range(1, len(points) - 1):
+            previous = result[-1]
+            current = points[index]
+            following = points[index + 1]
+            vertical = (
+                abs(previous.x - current.x) <= POINT_EPSILON
+                and abs(current.x - following.x) <= POINT_EPSILON
+            )
+            horizontal = (
+                abs(previous.y - current.y) <= POINT_EPSILON
+                and abs(current.y - following.y) <= POINT_EPSILON
+            )
+            if not vertical and not horizontal:
+                result.append(current)
+        result.append(points[-1])
+        return result
+
+    @staticmethod
+    def _axis_aligned(first: Point, second: Point) -> bool:
+        return (
+            abs(first.x - second.x) <= POINT_EPSILON
+            or abs(first.y - second.y) <= POINT_EPSILON
         )
 
     @staticmethod
