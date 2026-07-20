@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useEditorPreferences } from "../editorPreferences";
 import { SpatialIndex, type SpatialBounds } from "../spatialIndex";
 import { useWorkspace } from "../store";
 import type {
@@ -349,6 +350,7 @@ export function EditorCanvas() {
   const toggleSelection = useWorkspace((state) => state.toggleSelection);
   const clearSelection = useWorkspace((state) => state.clearSelection);
   const transact = useWorkspace((state) => state.transact);
+  const { canvasMode, gridEnabled } = useEditorPreferences();
   const [draft, setDraft] = useState<Draft>(null);
   const [drag, setDrag] = useState<DragState>(null);
   const [segmentDrag, setSegmentDrag] = useState<SegmentDrag>(null);
@@ -357,6 +359,11 @@ export function EditorCanvas() {
   const [viewBox, setViewBox] = useState<ViewBox | null>(null);
 
   useEffect(() => { setViewBox(null); setDraft(null); setDrag(null); setSegmentDrag(null); setBoxSelection(null); }, [document?.id]);
+  useEffect(() => {
+    if (canvasMode === "page" && document) {
+      setViewBox({ x: 0, y: 0, width: document.canvas.width, height: document.canvas.height });
+    }
+  }, [canvasMode, document?.id]);
 
   const symbolMap = useMemo(() => new Map(symbols.map((symbol) => [symbol.key, symbol])), [symbols]);
   const selectedSet = useMemo(() => new Set(selectedElementIds), [selectedElementIds]);
@@ -381,6 +388,9 @@ export function EditorCanvas() {
     y2: view.y + view.height + cullMargin,
   };
   const viewportElements = spatialIndex.query(viewportBounds);
+  const workspaceBounds = canvasMode === "infinite"
+    ? { x: view.x - view.width, y: view.y - view.height, width: view.width * 3, height: view.height * 3 }
+    : { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height };
 
   const rawPointFromEvent = (event: React.PointerEvent | React.WheelEvent): Point => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -388,14 +398,15 @@ export function EditorCanvas() {
     return { x: view.x + ((event.clientX - rect.left) / rect.width) * view.width, y: view.y + ((event.clientY - rect.top) / rect.height) * view.height };
   };
   const snapToGrid = (point: Point): Point => { const grid = document.canvas.grid_size; return { x: Math.round(point.x / grid) * grid, y: Math.round(point.y / grid) * grid }; };
-  const pointFromEvent = (event: React.PointerEvent | React.WheelEvent): Point => snapToGrid(rawPointFromEvent(event));
+  const applyGrid = (point: Point): Point => gridEnabled ? snapToGrid(point) : point;
+  const pointFromEvent = (event: React.PointerEvent | React.WheelEvent): Point => applyGrid(rawPointFromEvent(event));
   const snapTolerance = () => (14 * view.width) / (svgRef.current?.clientWidth || 1000);
   const nearbyElements = (point: Point, tolerance: number) => spatialIndex.queryPoint(point.x, point.y, tolerance * 2);
   const connectorPointFromEvent = (event: React.PointerEvent, excluded?: ConnectorEndpoint) => {
     const raw = rawPointFromEvent(event);
     const tolerance = snapTolerance();
     const hit = findNearestConnection(raw, nearbyElements(raw, tolerance), symbolMap, tolerance, excluded);
-    return hit ? { point: hit.point, hit } : { point: snapToGrid(raw), hit: undefined };
+    return hit ? { point: hit.point, hit } : { point: applyGrid(raw), hit: undefined };
   };
   const addElement = async (element: Record<string, unknown>, label: string) => transact([{ op: "add_element", element } as Operation], label);
 
@@ -407,7 +418,7 @@ export function EditorCanvas() {
     if (nearby) { setSelection([nearby.id]); return; }
     const hit = nearestConnectorSegment(raw, candidates, tolerance, lockedLayerIds);
     const junction: JunctionElement = {
-      id: newElementId(), type: "junction", position: hit?.point ?? snapToGrid(raw), radius: 4, label: "",
+      id: newElementId(), type: "junction", position: hit?.point ?? applyGrid(raw), radius: 4, label: "",
       layer_id: hit?.connector.layer_id ?? "layer_default", system_id: hit?.connector.system_id ?? "system_default",
       style: hit?.connector.style ?? { stroke: "#111827", fill: "none", stroke_width: 1.5, opacity: 1, dash: [] }, name: "", metadata: {},
     };
@@ -497,7 +508,17 @@ export function EditorCanvas() {
   };
 
   const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); const pointerX = view.x + ((event.clientX - rect.left) / rect.width) * view.width; const pointerY = view.y + ((event.clientY - rect.top) / rect.height) * view.height; const factor = event.deltaY > 0 ? 1.12 : 0.88; const width = Math.min(document.canvas.width * 5, Math.max(120, view.width * factor)); const height = width * (rect.height / rect.width); const ratioX = (pointerX - view.x) / view.width; const ratioY = (pointerY - view.y) / view.height; setViewBox({ x: pointerX - width * ratioX, y: pointerY - height * ratioY, width, height });
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX = view.x + ((event.clientX - rect.left) / rect.width) * view.width;
+    const pointerY = view.y + ((event.clientY - rect.top) / rect.height) * view.height;
+    const factor = event.deltaY > 0 ? 1.12 : 0.88;
+    const maximumWidth = canvasMode === "infinite" ? 100000 : document.canvas.width * 5;
+    const width = Math.min(maximumWidth, Math.max(120, view.width * factor));
+    const height = width * (rect.height / rect.width);
+    const ratioX = (pointerX - view.x) / view.width;
+    const ratioY = (pointerY - view.y) / view.height;
+    setViewBox({ x: pointerX - width * ratioX, y: pointerY - height * ratioY, width, height });
   };
 
   const candidateIds = new Set(viewportElements.map((element) => element.id));
@@ -527,20 +548,23 @@ export function EditorCanvas() {
 
   return <svg
     ref={svgRef}
-    className={`editor-canvas tool-${tool}`}
+    className={`editor-canvas tool-${tool} workspace-${canvasMode} grid-${gridEnabled ? "on" : "off"}`}
     viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
     data-visible-elements={visibleElements.length}
     data-rendered-elements={activeElements.length}
     data-spatial-cells={spatialIndex.cellCount}
+    data-workspace-mode={canvasMode}
+    data-grid-enabled={gridEnabled}
     onPointerDown={onCanvasPointerDown}
     onPointerMove={onPointerMove}
     onPointerUp={onPointerUp}
     onWheel={onWheel}
   >
-    <title>{`视口渲染 ${activeElements.length}/${visibleElements.length} 个元素；空间索引 ${spatialIndex.cellCount} 个网格`}</title>
+    <title>{`${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"} · 视口渲染 ${activeElements.length}/${visibleElements.length} 个元素；空间索引 ${spatialIndex.cellCount} 个网格`}</title>
     <defs><pattern id="smallGrid" width={document.canvas.grid_size} height={document.canvas.grid_size} patternUnits="userSpaceOnUse"><path d={`M ${document.canvas.grid_size} 0 L 0 0 0 ${document.canvas.grid_size}`} fill="none" stroke="#dbe2ea" strokeWidth="0.5" /></pattern></defs>
-    <rect width={document.canvas.width} height={document.canvas.height} fill={document.canvas.background} />
-    <rect width={document.canvas.width} height={document.canvas.height} fill="url(#smallGrid)" />
+    <rect x={workspaceBounds.x} y={workspaceBounds.y} width={workspaceBounds.width} height={workspaceBounds.height} fill={document.canvas.background} />
+    {gridEnabled ? <rect x={workspaceBounds.x} y={workspaceBounds.y} width={workspaceBounds.width} height={workspaceBounds.height} fill="url(#smallGrid)" /> : null}
+    {canvasMode === "page" ? <rect x={0} y={0} width={document.canvas.width} height={document.canvas.height} fill="none" stroke="#94a3b8" strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" /> : null}
     {activeElements.map((element) => <g key={element.id} className={`canvas-element ${selectedSet.has(element.id) ? "is-selected" : ""} ${lockedLayerIds.has(element.layer_id) ? "is-locked" : ""}`} onPointerDown={(event: React.PointerEvent<SVGGElement>) => onElementPointerDown(event, element)}>{renderElement(element, symbolMap)}</g>)}
     {connectors.map((connector) => <ConnectorJumps key={`jumps-${connector.id}`} connector={connector} connectors={connectors} background={document.canvas.background} />)}
     {connectors.map((connector) => <FlowArrow key={`arrow-${connector.id}`} connector={connector} />)}
