@@ -1,5 +1,17 @@
-from agentcad.agent_semantic_models import ConnectPortsOperation, SemanticTransaction
-from agentcad.models import AddElementOperation, CreateDocumentRequest, Point, SymbolElement, TransactionRequest
+import json
+
+from agentcad.agent_semantic_models import (
+    ConnectPortsOperation,
+    FullDiagramTransaction,
+    SemanticTransaction,
+)
+from agentcad.models import (
+    AddElementOperation,
+    CreateDocumentRequest,
+    Point,
+    SymbolElement,
+    TransactionRequest,
+)
 from agentcad.semantic_compiler_engine import SemanticTransactionCompiler
 from agentcad.service import DocumentService
 from agentcad.store import SQLiteDocumentStore
@@ -49,6 +61,14 @@ def _compiled_connector(compiled, connector_id):
         and operation.element.type == "connector"
         and operation.element.id == connector_id
     )
+
+
+def test_full_diagram_schema_tells_models_to_use_connector_flow_not_arrow_text():
+    schema_text = json.dumps(FullDiagramTransaction.model_json_schema())
+
+    assert "flow_direction" in schema_text
+    assert "source→target" in schema_text
+    assert "standalone arrow text" in schema_text
 
 
 def test_automatic_connect_ports_preserves_flow_arrow_properties(tmp_path):
