@@ -1,0 +1,32 @@
+name: Issue 19 compiler signature fix
+
+on:
+  push:
+    branches:
+      - agent/issue-19-persistent-provider-routing
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-19-persistent-provider-routing
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/issue19_fix_compiler.py
+      - run: rm scripts/issue19_fix_compiler.py .github/workflows/issue19-fix-compiler.yml
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: correct route normalizer signatures"
+          git push
