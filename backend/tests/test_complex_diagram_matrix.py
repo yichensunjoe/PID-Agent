@@ -59,6 +59,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_element_id="v101",
             target_port_id="in",
             medium="waste_gas",
+            flow_direction="forward",
         ),
         ConnectPortsOperation(
             connector_id="pipe_upstream",
@@ -68,6 +69,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_port_id="tube_in",
             waypoints=[Point(x=650, y=400), Point(x=650, y=360)],
             medium="waste_gas",
+            flow_direction="forward",
         ),
         ConnectPortsOperation(
             connector_id="pipe_downstream",
@@ -77,6 +79,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_port_id="in",
             waypoints=[Point(x=870, y=390), Point(x=870, y=400)],
             medium="waste_gas",
+            flow_direction="forward",
         ),
         ConnectPortsOperation(
             connector_id="pipe_outlet",
@@ -85,6 +88,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_element_id="waste_out",
             target_port_id="left",
             medium="waste_gas",
+            flow_direction="forward",
         ),
         InstrumentTapOperation(
             main_connector_id="pipe_upstream",
@@ -142,6 +146,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_port_id="shell_out",
             waypoints=[Point(x=1000, y=540), Point(x=765, y=540)],
             medium="cooling_air",
+            flow_direction="forward",
         ),
         ConnectPortsOperation(
             connector_id="air_outlet_pipe",
@@ -151,6 +156,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             target_port_id="right",
             waypoints=[Point(x=765, y=540), Point(x=600, y=540)],
             medium="cooling_air",
+            flow_direction="forward",
         ),
     ]
     for element_id, parent_id, text in [
@@ -252,6 +258,22 @@ def test_complex_operations_compile_to_polished_transaction(tmp_path):
     assert compiled.transaction is not None
     assert compiled.annotation_metrics is not None
     assert 30 <= compiled.assessment.resulting_element_count <= 50
+    generated = [
+        operation.element
+        for operation in compiled.transaction.operations
+        if isinstance(operation, AddElementOperation)
+    ]
+    process_connectors = [
+        element
+        for element in generated
+        if element.type == "connector" and element.medium in {"waste_gas", "cooling_air"}
+    ]
+    assert process_connectors
+    assert all(connector.flow_direction == "forward" for connector in process_connectors)
+    assert not any(
+        element.type == "text" and element.text.strip() in {"→", "←"}
+        for element in generated
+    )
 
 
 def test_optional_complex_matrix_adds_one_49_element_case(monkeypatch):
