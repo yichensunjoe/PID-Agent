@@ -94,3 +94,9 @@
 .export-grid select, .export-grid input { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 5px; padding: 6px; color: #334155; background: #fff; }
 .export-grid input:disabled { background: #f1f5f9; opacity: 0.7; }
 .export-panel .primary { width: 100%; border: 1px solid #0f766e; border-radius: 6px; padding: 8px; color: #fff; background: #0f766e; font-weight: 650; cursor: pointer; }
+
+.element-hit-target { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.element-hit-target-fill { fill: transparent; stroke: none; pointer-events: all; }
+.port-hit-target, .connector-endpoint-hit { fill: transparent; stroke: none; cursor: crosshair; pointer-events: all; }
+.connector-endpoint-handle { fill: #ffffff; stroke: #2563eb; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.connector-endpoint-handle.active { fill: #f97316; stroke: #c2410c; }
