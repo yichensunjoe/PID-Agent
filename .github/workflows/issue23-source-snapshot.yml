@@ -23,26 +23,13 @@ jobs:
           cat .issue23-payload/part-* | base64 --decode > /tmp/issue23-changes.tgz
           tar -xzf /tmp/issue23-changes.tgz
           rm -rf .issue23-payload
-          rm .github/workflows/issue23-source-snapshot.yml
           git add -A
           git diff --cached --check
-          expected=$(cat <<'EOF' | sort
-          .github/workflows/issue23-source-snapshot.yml
-          .issue23-payload/part-00
-          .issue23-payload/part-01
-          .issue23-payload/part-02
-          .issue23-payload/part-03
-          .issue23-payload/part-04
-          docs/inline-insertion-alignment-viewport.md
-          frontend/package.json
-          frontend/src/editor/EditorCanvas.tsx
-          frontend/src/editor/editorGeometry.ts
-          frontend/src/editor/interaction.css
-          frontend/tests/editorGeometry.test.ts
-          EOF
-          )
-          actual=$(git diff --cached --name-only | sort)
-          test "$actual" = "$expected"
+          echo "Staged paths:"
+          git diff --cached --name-only | sort
+          unexpected=$(git diff --cached --name-only | grep -Ev '^(\.issue23-payload/part-0[0-4]|docs/inline-insertion-alignment-viewport\.md|frontend/package\.json|frontend/src/editor/EditorCanvas\.tsx|frontend/src/editor/editorGeometry\.ts|frontend/src/editor/interaction\.css|frontend/tests/editorGeometry\.test\.ts)$' || true)
+          test -z "$unexpected"
+          test "$(git diff --cached --name-only | wc -l)" -eq 11
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git commit -m "feat: add inline insertion and smart canvas controls"
