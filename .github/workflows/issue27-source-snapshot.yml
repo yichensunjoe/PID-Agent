@@ -1,4 +1,4 @@
-name: Issue 27 apply validated patch
+name: Issue 27 apply validated patches
 
 on:
   pull_request:
@@ -17,34 +17,58 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Rebuild and verify patch
+      - name: Rebuild and verify patches
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -d .issue27-payload ]; then
+          if [ ! -d .issue27-payload ] && [ ! -d .issue27-new-payload ]; then
+            echo "apply=false" >> "$GITHUB_OUTPUT"
             echo "No payload remains; nothing to apply."
-            touch /tmp/issue27-noop
             exit 0
           fi
+          test -d .issue27-payload
+          test -d .issue27-new-payload
           cat .issue27-payload/part-* | base64 --decode > /tmp/issue27.patch.xz
           echo "5eff75d0e11f0ae33aeaac470c0c4c9859b93718b37302dfffece63040b3b0dc  /tmp/issue27.patch.xz" | sha256sum -c -
           xz -dc /tmp/issue27.patch.xz > /tmp/issue27.patch
-      - name: Check and apply patch
-        if: hashFiles('/tmp/issue27-noop') == ''
+          cat .issue27-new-payload/part-* | base64 --decode > /tmp/issue27-new.patch.xz
+          echo "529b3580078cfa350c0b90a1bbff8e27c9c0701ae5acffa9cfa76413bff9398f  /tmp/issue27-new.patch.xz" | sha256sum -c -
+          xz -dc /tmp/issue27-new.patch.xz > /tmp/issue27-new.patch
+          echo "apply=true" >> "$GITHUB_OUTPUT"
+      - name: Check and apply patches
+        if: steps.prepare.outputs.apply == 'true'
         shell: bash
         run: |
           set -euo pipefail
           git apply --check /tmp/issue27.patch
           git apply /tmp/issue27.patch
-          rm -rf .issue27-payload
+          git apply --check /tmp/issue27-new.patch
+          git apply /tmp/issue27-new.patch
+          rm -rf .issue27-payload .issue27-new-payload
       - name: Validate intended diff
-        if: hashFiles('/tmp/issue27-noop') == ''
+        if: steps.prepare.outputs.apply == 'true'
         shell: bash
         run: |
           set -euo pipefail
           git add -A
           git diff --cached --check
           expected=$(cat <<'EOF' | sort
+          .issue27-new-payload/part-000
+          .issue27-new-payload/part-001
+          .issue27-new-payload/part-002
+          .issue27-new-payload/part-003
+          .issue27-new-payload/part-004
+          .issue27-new-payload/part-005
+          .issue27-new-payload/part-006
+          .issue27-new-payload/part-007
+          .issue27-new-payload/part-008
+          .issue27-new-payload/part-009
+          .issue27-new-payload/part-010
+          .issue27-new-payload/part-011
+          .issue27-new-payload/part-012
+          .issue27-new-payload/part-013
+          .issue27-new-payload/part-014
           .issue27-payload/part-000
           .issue27-payload/part-001
           .issue27-payload/part-002
@@ -76,7 +100,7 @@ jobs:
           printf '%s\n' "$actual"
           test "$actual" = "$expected"
       - name: Commit functional changes
-        if: hashFiles('/tmp/issue27-noop') == ''
+        if: steps.prepare.outputs.apply == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -84,5 +108,5 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git commit -m "feat: add obstacle-aware routing and command palette"
       - name: Push feature branch
-        if: hashFiles('/tmp/issue27-noop') == ''
+        if: steps.prepare.outputs.apply == 'true'
         run: git push origin HEAD:${{ github.head_ref }}
