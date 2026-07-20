@@ -148,7 +148,7 @@
       "key": "heat_exchanger",
       "name": "换热器",
       "category": "换热设备",
-      "description": "通用管壳式换热器占位图例。",
+      "description": "通用管壳式换热器；管程左右、壳程上下。适合需要竖向公用工程接管的布置。",
       "width": 130,
       "height": 70,
       "ports": [
@@ -164,6 +164,30 @@
         {"type": "line", "x1": 105, "y1": 50, "x2": 130, "y2": 50},
         {"type": "line", "x1": 65, "y1": 0, "x2": 65, "y2": 5},
         {"type": "line", "x1": 65, "y1": 65, "x2": 65, "y2": 70}
+      ]
+    },
+    {
+      "key": "heat_exchanger_horizontal_shell",
+      "name": "双横向管壳式换热器",
+      "category": "换热设备",
+      "description": "管程和壳程均使用左右接口的换热器/冷凝器图例。主工艺与冷却空气、冷却水等第二介质都需要水平穿过设备时优先使用；壳程入口在右、出口在左，便于表示从右向左的公用工程流向。",
+      "width": 150,
+      "height": 90,
+      "ports": [
+        {"id": "tube_in", "name": "管程入口", "x": 0, "y": 28, "direction": "in"},
+        {"id": "tube_out", "name": "管程出口", "x": 150, "y": 28, "direction": "out"},
+        {"id": "shell_in", "name": "壳程入口", "x": 150, "y": 62, "direction": "in"},
+        {"id": "shell_out", "name": "壳程出口", "x": 0, "y": 62, "direction": "out"}
+      ],
+      "shapes": [
+        {"type": "rect", "x": 10, "y": 8, "width": 130, "height": 74, "rx": 34},
+        {"type": "line", "x1": 0, "y1": 28, "x2": 20, "y2": 28},
+        {"type": "line", "x1": 20, "y1": 28, "x2": 130, "y2": 28},
+        {"type": "line", "x1": 130, "y1": 28, "x2": 150, "y2": 28},
+        {"type": "line", "x1": 150, "y1": 62, "x2": 130, "y2": 62},
+        {"type": "line", "x1": 130, "y1": 62, "x2": 20, "y2": 62},
+        {"type": "line", "x1": 20, "y1": 62, "x2": 0, "y2": 62},
+        {"type": "line", "x1": 35, "y1": 20, "x2": 115, "y2": 70}
       ]
     },
     {
