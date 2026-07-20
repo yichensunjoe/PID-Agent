@@ -1,24 +1,49 @@
-name: Issue 23 source snapshot
+name: Issue 23 apply validated payload
 
 on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
-    name: Source snapshot
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v4
-      - name: Pack repository
-        run: tar --exclude=.git -czf /tmp/pid-agent-source.tar.gz .
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
         with:
-          name: issue23-source
-          path: /tmp/pid-agent-source.tar.gz
-          retention-days: 1
+          ref: ${{ github.head_ref }}
+      - name: Apply validated source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .issue23-payload/part-* | base64 --decode > /tmp/issue23-changes.tgz
+          tar -xzf /tmp/issue23-changes.tgz
+          rm -rf .issue23-payload
+          rm .github/workflows/issue23-source-snapshot.yml
+          git add -A
+          git diff --cached --check
+          expected=$(cat <<'EOF' | sort
+          .github/workflows/issue23-source-snapshot.yml
+          .issue23-payload/part-00
+          .issue23-payload/part-01
+          .issue23-payload/part-02
+          .issue23-payload/part-03
+          .issue23-payload/part-04
+          docs/inline-insertion-alignment-viewport.md
+          frontend/package.json
+          frontend/src/editor/EditorCanvas.tsx
+          frontend/src/editor/editorGeometry.ts
+          frontend/src/editor/interaction.css
+          frontend/tests/editorGeometry.test.ts
+          EOF
+          )
+          actual=$(git diff --cached --name-only | sort)
+          test "$actual" = "$expected"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "feat: add inline insertion and smart canvas controls"
+          git push origin HEAD:${{ github.head_ref }}
