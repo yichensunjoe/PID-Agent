@@ -504,8 +504,7 @@ export function EditorCanvas() {
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
     if (pan) { const rect = event.currentTarget.getBoundingClientRect(); const dx = ((event.clientX - pan.start.x) / rect.width) * pan.view.width; const dy = ((event.clientY - pan.start.y) / rect.height) * pan.view.height; setViewBox({ ...pan.view, x: pan.view.x - dx, y: pan.view.y - dy }); return; }
     if (endpointDrag) {
-      const excluded = endpointDrag.endpoint === "source" ? endpointDrag.connector.source ?? undefined : endpointDrag.connector.target ?? undefined;
-      const snapped = connectorPointFromEvent(event, excluded);
+      const snapped = connectorPointFromEvent(event);
       setEndpointDrag({ ...endpointDrag, current: snapped.point, activeConnection: snapped.hit });
       return;
     }
@@ -522,8 +521,7 @@ export function EditorCanvas() {
   const onPointerUp = async (event: React.PointerEvent<SVGSVGElement>) => {
     if (pan) { setPan(null); releaseCapture(event); return; }
     if (endpointDrag) {
-      const existing = endpointDrag.endpoint === "source" ? endpointDrag.connector.source ?? undefined : endpointDrag.connector.target ?? undefined;
-      const released = connectorPointFromEvent(event, existing);
+      const released = connectorPointFromEvent(event);
       const endpoint = released.hit ? endpointFromHit(released.hit) : { point: released.point };
       const updated = reattachConnectorEndpoint(endpointDrag.connector, endpointDrag.endpoint, endpoint);
       setEndpointDrag(null);
