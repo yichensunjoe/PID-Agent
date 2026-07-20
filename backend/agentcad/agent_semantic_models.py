@@ -83,6 +83,10 @@ class ConnectPortsOperation(StrictModel):
     process_tag: str = ""
     medium: str = ""
     nominal_diameter: str = ""
+    flow_direction: Literal["forward", "reverse", "none"] = "none"
+    arrow_position: Literal["start", "middle", "end"] = "middle"
+    crossing_style: Literal["none", "jump"] = "none"
+    jump_radius: float = Field(default=7, gt=1, le=50)
     layer_id: str | None = None
     system_id: str | None = None
     style: dict[str, Any] | None = None
