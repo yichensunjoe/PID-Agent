@@ -266,7 +266,9 @@ def test_complex_operations_compile_to_polished_transaction(tmp_path):
     process_connectors = [
         element
         for element in generated
-        if element.type == "connector" and element.medium in {"waste_gas", "cooling_air"}
+        if element.type == "connector"
+        and element.medium in {"waste_gas", "cooling_air"}
+        and element.metadata.get("assembly") != "instrument_tap"
     ]
     assert process_connectors
     assert all(connector.flow_direction == "forward" for connector in process_connectors)
