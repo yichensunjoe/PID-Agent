@@ -1,0 +1,24 @@
+name: Issue 23 source snapshot
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Source snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Pack repository
+        run: tar --exclude=.git -czf /tmp/pid-agent-source.tar.gz .
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue23-source
+          path: /tmp/pid-agent-source.tar.gz
+          retention-days: 1
