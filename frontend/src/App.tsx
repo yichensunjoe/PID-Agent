@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
-import { EditorCanvas } from "./editor/EditorCanvas";
+import { EditorCanvas, type AgentCanvasPreview, type CanvasFocusRequest } from "./editor/EditorCanvas";
 import { HistoryPanel } from "./editor/HistoryPanel";
 import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
@@ -65,9 +65,21 @@ export default function App() {
   const [applyingAgent, setApplyingAgent] = useState(false);
   const [agentError, setAgentError] = useState("");
   const [pendingPlan, setPendingPlan] = useState<SemanticAgentPlanResult | null>(null);
+  const [canvasFocusRequest, setCanvasFocusRequest] = useState<CanvasFocusRequest | null>(null);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
   useEffect(() => { if (state.selectedElementIds.length) setRightPanel("properties"); }, [state.selectedElementIds]);
+  useEffect(() => {
+    const document = state.document;
+    if (!document || !pendingPlan) return;
+    const expectedRevision = pendingPlan.compiled_plan?.transaction.expected_revision
+      ?? pendingPlan.plan.transaction.expected_revision;
+    const wrongDocument = pendingPlan.assessment.document_id !== document.id;
+    const staleRevision = expectedRevision !== null && expectedRevision !== undefined && expectedRevision !== document.revision;
+    if (!wrongDocument && !staleRevision) return;
+    setPendingPlan(null);
+    setAgentError("文档或 revision 已变化，旧 Agent 预览已自动清除。");
+  }, [state.document?.id, state.document?.revision, pendingPlan?.plan.plan_id]);
   useEffect(() => {
     if (!state.document) return;
     const check = () => void state.checkForExternalUpdates(!canvasPointerActive);
@@ -284,6 +296,13 @@ export default function App() {
     setAgentError("");
   };
 
+  const focusCanvasElement = (elementId: string) => {
+    const document = state.document;
+    if (!document?.elements.some((element) => element.id === elementId)) return;
+    state.setSelection([elementId]);
+    setCanvasFocusRequest((current) => ({ ids: [elementId], nonce: (current?.nonce ?? 0) + 1 }));
+  };
+
   const testCustomProvider = async () => {
     if (!baseUrl.trim() || !model.trim()) return;
     setTestingProvider(true);
@@ -307,6 +326,13 @@ export default function App() {
     { id: "agent", label: "Agent" },
   ];
   const busyAgent = planningAgent || repairingAgent || applyingAgent;
+  const agentCanvasPreview: AgentCanvasPreview | null = pendingPlan?.assessment.valid && pendingPlan.compiled_plan
+    ? {
+        planId: pendingPlan.plan.plan_id,
+        expectedRevision: pendingPlan.compiled_plan.transaction.expected_revision,
+        operations: pendingPlan.compiled_plan.transaction.operations,
+      }
+    : null;
 
   return (
     <div className="app-shell">
@@ -344,7 +370,7 @@ export default function App() {
               <button className={`sync-badge sync-${state.syncState}`} onClick={() => syncActionable && void state.refreshDocument()} disabled={!syncActionable} title={state.pendingExternalRevision ? `服务器 revision ${state.pendingExternalRevision}` : undefined}>{state.syncMessage}</button>
               <span>框选 · Shift 多选 · 右键快捷操作 · 从主管直接拖支管</span>
             </div>
-            <EditorCanvas />
+            <EditorCanvas agentPreview={agentCanvasPreview} focusRequest={canvasFocusRequest} />
           </> : <div className="empty-canvas">没有打开的文档</div>}
         </section>
 
@@ -417,12 +443,16 @@ export default function App() {
               {pendingPlan.plan.transaction.operations.length > 30 ? <div className="agent-preview-more">其余 {pendingPlan.plan.transaction.operations.length - 30} 项未展开</div> : null}
               {pendingPlan.assessment.issues.length ? <section className="agent-repair-issues">
                 <h3>结构化问题</h3>
-                {pendingPlan.assessment.issues.map((issue, index) => <article key={`${issue.code}-${index}`}>
-                  <div><strong>{issue.code}</strong><code>{issue.field_path}</code></div>
+                {pendingPlan.assessment.issues.map((issue, index) => {
+                  const focusId = issue.element_id || issue.connector_id;
+                  const canFocus = Boolean(focusId && state.document?.elements.some((element) => element.id === focusId));
+                  return <article key={`${issue.code}-${index}`}>
+                  <div><strong>{issue.code}</strong><code>{issue.field_path}</code>{canFocus && focusId ? <button type="button" className="agent-issue-focus" onClick={() => focusCanvasElement(focusId)}>画布定位</button> : null}</div>
                   <p>{issue.message}</p>
                   {Object.entries(issue.available_values).map(([name, values]) => <div className="agent-available-values" key={name}><span>{name}</span><code>{values.slice(0, 20).join(", ") || "—"}</code></div>)}
                   {issue.suggestions.length ? <ul>{issue.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul> : null}
-                </article>)}
+                </article>;
+                })}
               </section> : null}
               <div className="agent-preview-actions">
                 <button type="button" className="confirm" disabled={busyAgent || !pendingPlan.assessment.valid || !pendingPlan.compiled_plan} onClick={() => void applyAgentPlan()}>{applyingAgent ? "正在应用…" : "确认应用"}</button>

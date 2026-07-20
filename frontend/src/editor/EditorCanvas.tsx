@@ -25,6 +25,15 @@ import {
   shortestOrthogonalRoute,
 } from "./connectorRouting";
 import {
+  canvasRectToMinimap,
+  centerViewAt,
+  createMinimapTransform,
+  minimapPointToCanvas,
+  simulateAgentPreview,
+  viewToMinimap,
+  type AgentPreviewRequest,
+} from "./agentCanvasPreview";
+import {
   alignmentTranslations,
   distributionTranslations,
   evaluateInlineSymbolInsertion,
@@ -92,6 +101,15 @@ type InlineDragPreview = {
   result: InlineInsertionResult;
 };
 
+export type AgentCanvasPreview = AgentPreviewRequest;
+export type CanvasFocusRequest = { ids: string[]; nonce: number };
+type EditorCanvasProps = {
+  agentPreview?: AgentCanvasPreview | null;
+  focusRequest?: CanvasFocusRequest | null;
+};
+
+const MINIMAP_WIDTH = 188;
+const MINIMAP_HEIGHT = 124;
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
 function shapeNode(shape: SymbolShape, key: number) {
@@ -104,6 +122,18 @@ function shapeNode(shape: SymbolShape, key: number) {
   if (shape.type === "circle") return <circle key={key} {...shape} />;
   if (shape.type === "path") return <path key={key} d={shape.d} />;
   return <text key={key} x={shape.x} y={shape.y} fontSize={shape.font_size ?? 12} textAnchor="middle">{shape.text}</text>;
+}
+
+function previewTint(element: Element, stroke: string, dash: number[] = [7, 5], opacity = 0.88): Element {
+  const clone = structuredClone(element);
+  clone.style = {
+    ...clone.style,
+    stroke,
+    fill: clone.type === "circle" || clone.type === "rectangle" ? `${stroke}18` : "none",
+    dash,
+    opacity,
+  };
+  return clone;
 }
 
 function styleProps(element: Element) {
@@ -455,7 +485,7 @@ function longestSegmentIndex(connector: ConnectorElement): number {
   return bestIndex;
 }
 
-export function EditorCanvas() {
+export function EditorCanvas({ agentPreview = null, focusRequest = null }: EditorCanvasProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const document = useWorkspace((state) => state.document);
@@ -482,6 +512,7 @@ export function EditorCanvas() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [cursorPoint, setCursorPoint] = useState<Point>({ x: 0, y: 0 });
   const quickConnector = useRef(false);
+  const minimapDragging = useRef(false);
 
   useEffect(() => {
     setViewBox(null);
@@ -517,6 +548,21 @@ export function EditorCanvas() {
     boundsFor,
     Math.max(160, (document?.canvas.grid_size ?? 20) * 12),
   ), [visibleElements, document?.canvas.grid_size]);
+  const agentSimulation = useMemo(
+    () => document && agentPreview ? simulateAgentPreview(document, agentPreview, symbols) : null,
+    [document, agentPreview, symbols],
+  );
+
+  useEffect(() => {
+    if (!document || !focusRequest?.ids.length) return;
+    const source = agentSimulation?.ok ? agentSimulation.resultingElements : document.elements;
+    const focused = source.filter((element) => focusRequest.ids.includes(element.id));
+    const bounds = unionRects(focused.map(rectForElement));
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!bounds || !rect?.width || !rect.height) return;
+    const extent = Math.max(bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+    setViewBox(fitRectToAspect(bounds, rect.width / rect.height, Math.max(document.canvas.grid_size * 2, extent * 0.12)));
+  }, [focusRequest?.nonce, document?.id, document?.revision, agentSimulation]);
 
   if (!document) return <div className="empty-canvas">正在加载文档…</div>;
   const view = viewBox ?? { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height };
@@ -706,6 +752,15 @@ export function EditorCanvas() {
 
   const fitAll = () => fitElements(visibleElements);
   const fitSelection = () => fitElements(document.elements.filter((element) => selectedSet.has(element.id)));
+  const fitPreview = () => {
+    if (!agentSimulation?.ok) return;
+    const elements = [
+      ...agentSimulation.added.map((change) => change.after).filter((element): element is Element => Boolean(element)),
+      ...agentSimulation.updated.flatMap((change) => [change.before, change.after]).filter((element): element is Element => Boolean(element)),
+      ...agentSimulation.deleted.map((change) => change.before).filter((element): element is Element => Boolean(element)),
+    ];
+    fitElements(elements);
+  };
   const resetZoom = () => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect || !rect.width || !rect.height) return;
@@ -1178,8 +1233,31 @@ export function EditorCanvas() {
       ? `松开鼠标：插入 ${inlinePreview.symbol.label || inlinePreview.symbol.symbol_key} 到 ${inlinePreview.connector.process_tag || inlinePreview.connector.id}`
       : inlinePreview.result.reason
     : "";
+  const minimapSourceBounds = unionRects(visibleElements.map(rectForElement));
+  const pageBounds = { x1: 0, y1: 0, x2: document.canvas.width, y2: document.canvas.height };
+  const viewBounds = { x1: view.x, y1: view.y, x2: view.x + view.width, y2: view.y + view.height };
+  const minimapContent = canvasMode === "page"
+    ? unionRects(minimapSourceBounds ? [pageBounds, minimapSourceBounds, viewBounds] : [pageBounds, viewBounds])
+    : minimapSourceBounds ? unionRects([minimapSourceBounds, viewBounds]) : null;
+  const minimapTransform = minimapContent
+    ? createMinimapTransform(minimapContent, MINIMAP_WIDTH, MINIMAP_HEIGHT, 9)
+    : null;
+  const minimapViewport = minimapTransform ? viewToMinimap(view, minimapTransform) : null;
+  const panFromMinimap = (clientX: number, clientY: number, target: SVGSVGElement) => {
+    if (!minimapTransform) return;
+    const rect = target.getBoundingClientRect();
+    const point = minimapPointToCanvas({
+      x: ((clientX - rect.left) / rect.width) * MINIMAP_WIDTH,
+      y: ((clientY - rect.top) / rect.height) * MINIMAP_HEIGHT,
+    }, minimapTransform);
+    setViewBox(centerViewAt(view, point));
+  };
 
   return <div ref={shellRef} className="editor-canvas-shell">
+    {agentPreview ? <div className={`agent-canvas-preview-badge ${agentSimulation?.ok ? "valid" : "invalid"}`}>
+      <div><strong>Agent 画布预览</strong><span>{agentSimulation?.ok ? `${agentSimulation.affectedIds.length} 个受影响元素` : agentSimulation?.reason || "无法生成预览"}</span></div>
+      <button type="button" onClick={fitPreview} disabled={!agentSimulation?.ok || !agentSimulation.affectedIds.length}>定位预览</button>
+    </div> : null}
     {selectedElements.length ? <div className="canvas-floating-toolbar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <span>{selectedElements.length === 1 ? singleSelected?.type : `${selectedElements.length} 项`}</span>
       {singleSelected?.type === "connector" ? <>
@@ -1249,6 +1327,14 @@ export function EditorCanvas() {
       >{renderHitTarget(element, hitPadding)}{renderElement(element, symbolMap)}</g>)}
       {connectors.map((connector) => <ConnectorJumps key={`jumps-${connector.id}`} connector={connector} connectors={connectors} background={document.canvas.background} />)}
       {connectors.map((connector) => <FlowArrow key={`arrow-${connector.id}`} connector={connector} />)}
+      {agentSimulation?.ok ? <g className="agent-ghost-preview" pointerEvents="none">
+        {agentSimulation.deleted.map((change) => change.before ? <g key={`delete-${change.id}`} className="agent-ghost-deleted">{renderElement(previewTint(change.before, "#dc2626"), symbolMap)}</g> : null)}
+        {agentSimulation.updated.map((change) => <g key={`update-${change.id}`}>
+          {change.before ? <g className="agent-ghost-updated-before">{renderElement(previewTint(change.before, "#7c3aed", [5, 5], 0.45), symbolMap)}</g> : null}
+          {change.after ? <g className="agent-ghost-updated-after">{renderElement(previewTint(change.after, "#7c3aed", [8, 4]), symbolMap)}</g> : null}
+        </g>)}
+        {agentSimulation.added.map((change) => change.after ? <g key={`add-${change.id}`} className="agent-ghost-added">{renderElement(previewTint(change.after, "#16a34a", [8, 4]), symbolMap)}</g> : null)}
+      </g> : null}
       {activeElements.map((element) => {
         const visible = showAllConnections || selectedSet.has(element.id) || hoveredElementId === element.id || drag?.elementIds.includes(element.id);
         if (!visible) return null;
@@ -1287,6 +1373,36 @@ export function EditorCanvas() {
       {draft ? <DraftPreview tool={quickConnector.current || draft.branch ? "connector" : tool} start={draft.start} current={draft.current} branch={Boolean(draft.branch)} /> : null}
       {boxSelection ? <SelectionBox start={boxSelection.start} current={boxSelection.current} /> : null}
     </svg>
+    {minimapTransform && minimapViewport ? <div className="canvas-minimap" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
+      <div className="canvas-minimap-heading"><strong>导航</strong><span>{visibleElements.length} elements</span></div>
+      <svg
+        viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}
+        role="img"
+        aria-label="画布缩略导航"
+        onPointerDown={(event: React.PointerEvent<SVGSVGElement>) => {
+          event.stopPropagation();
+          minimapDragging.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          panFromMinimap(event.clientX, event.clientY, event.currentTarget);
+        }}
+        onPointerMove={(event: React.PointerEvent<SVGSVGElement>) => {
+          if (minimapDragging.current) panFromMinimap(event.clientX, event.clientY, event.currentTarget);
+        }}
+        onPointerUp={(event: React.PointerEvent<SVGSVGElement>) => {
+          minimapDragging.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => { minimapDragging.current = false; }}
+      >
+        <rect className="canvas-minimap-background" x="0" y="0" width={MINIMAP_WIDTH} height={MINIMAP_HEIGHT} />
+        {canvasMode === "page" ? (() => { const page = canvasRectToMinimap(pageBounds, minimapTransform); return <rect className="canvas-minimap-page" x={page.x1} y={page.y1} width={Math.max(1, page.x2 - page.x1)} height={Math.max(1, page.y2 - page.y1)} />; })() : null}
+        {visibleElements.map((element) => {
+          const bounds = canvasRectToMinimap(rectForElement(element), minimapTransform);
+          return <rect key={`mini-${element.id}`} className={`canvas-minimap-element type-${element.type}`} x={bounds.x1} y={bounds.y1} width={Math.max(1.2, bounds.x2 - bounds.x1)} height={Math.max(1.2, bounds.y2 - bounds.y1)} />;
+        })}
+        <rect className="canvas-minimap-viewport" x={minimapViewport.x1} y={minimapViewport.y1} width={Math.max(3, minimapViewport.x2 - minimapViewport.x1)} height={Math.max(3, minimapViewport.y2 - minimapViewport.y1)} />
+      </svg>
+    </div> : null}
     <div className="canvas-status-bar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <div className={`canvas-status-message ${inlinePreview ? inlinePreview.result.ok ? "success" : "warning" : ""}`}>
         {inlineStatus || `${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"}`}

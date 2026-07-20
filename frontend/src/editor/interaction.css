@@ -357,3 +357,187 @@
   color: #94a3b8;
   cursor: default;
 }
+
+.agent-canvas-preview-badge {
+  position: absolute;
+  z-index: 9;
+  top: 12px;
+  left: 12px;
+  min-width: 220px;
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 9px 8px 11px;
+  border: 1px solid #c4b5fd;
+  border-radius: 9px;
+  color: #5b21b6;
+  background: rgba(245, 243, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(76, 29, 149, 0.13);
+  backdrop-filter: blur(8px);
+}
+
+.agent-canvas-preview-badge.invalid {
+  border-color: #fcd34d;
+  color: #92400e;
+  background: rgba(255, 251, 235, 0.97);
+}
+
+.agent-canvas-preview-badge > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.agent-canvas-preview-badge strong {
+  font-size: 11px;
+}
+
+.agent-canvas-preview-badge span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-canvas-preview-badge button {
+  flex: 0 0 auto;
+  border: 1px solid #a78bfa;
+  border-radius: 6px;
+  padding: 5px 7px;
+  color: #6d28d9;
+  background: #ffffff;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.agent-canvas-preview-badge button:disabled {
+  border-color: #d1d5db;
+  color: #9ca3af;
+  cursor: default;
+}
+
+.agent-ghost-preview {
+  isolation: isolate;
+}
+
+.agent-ghost-preview > g,
+.agent-ghost-preview > g > g {
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.18));
+}
+
+.agent-ghost-deleted {
+  opacity: 0.9;
+}
+
+.agent-ghost-updated-before {
+  opacity: 0.55;
+}
+
+.agent-ghost-updated-after,
+.agent-ghost-added {
+  opacity: 0.96;
+}
+
+.canvas-minimap {
+  position: absolute;
+  z-index: 8;
+  right: 12px;
+  bottom: 54px;
+  width: 188px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.65);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(8px);
+}
+
+.canvas-minimap-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 7px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 9px;
+}
+
+.canvas-minimap-heading strong {
+  color: #334155;
+  font-size: 10px;
+}
+
+.canvas-minimap svg {
+  display: block;
+  width: 188px;
+  height: 124px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.canvas-minimap svg:active {
+  cursor: grabbing;
+}
+
+.canvas-minimap-background {
+  fill: #f8fafc;
+}
+
+.canvas-minimap-page {
+  fill: #ffffff;
+  stroke: #cbd5e1;
+  stroke-width: 1;
+}
+
+.canvas-minimap-element {
+  fill: #94a3b8;
+  opacity: 0.7;
+}
+
+.canvas-minimap-element.type-connector,
+.canvas-minimap-element.type-line,
+.canvas-minimap-element.type-polyline {
+  fill: #475569;
+  opacity: 0.8;
+}
+
+.canvas-minimap-element.type-symbol,
+.canvas-minimap-element.type-junction {
+  fill: #2563eb;
+  opacity: 0.75;
+}
+
+.canvas-minimap-viewport {
+  fill: rgba(37, 99, 235, 0.1);
+  stroke: #2563eb;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.agent-issue-focus {
+  flex: 0 0 auto;
+  border: 1px solid #c4b5fd;
+  border-radius: 5px;
+  padding: 3px 5px;
+  color: #6d28d9;
+  background: #f5f3ff;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .canvas-minimap {
+    width: 156px;
+  }
+
+  .canvas-minimap svg {
+    width: 156px;
+  }
+
+  .agent-canvas-preview-badge {
+    max-width: 280px;
+  }
+}
