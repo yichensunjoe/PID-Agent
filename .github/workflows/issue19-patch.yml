@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/issue-19-persistent-provider-routing
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
