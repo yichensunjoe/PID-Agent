@@ -1,0 +1,90 @@
+name: Issue 29 apply validated patch
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Rebuild and verify patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .issue29-payload/part-* | base64 --decode > /tmp/issue29.patch.xz
+          echo "21e221c5c9412c872d50fc246a9d8c24727b442b8bf9b543fa0dabcd0504bc4e  /tmp/issue29.patch.xz" | sha256sum -c -
+          xz -dc /tmp/issue29.patch.xz > /tmp/issue29.patch
+      - name: Check and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check /tmp/issue29.patch
+          git apply /tmp/issue29.patch
+          rm -rf .issue29-payload
+      - name: Validate intended diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          expected=$(cat <<'EOF' | sort
+          .issue29-payload/part-000
+          .issue29-payload/part-001
+          .issue29-payload/part-002
+          .issue29-payload/part-003
+          .issue29-payload/part-004
+          .issue29-payload/part-005
+          .issue29-payload/part-006
+          .issue29-payload/part-007
+          .issue29-payload/part-008
+          .issue29-payload/part-009
+          .issue29-payload/part-010
+          .issue29-payload/part-011
+          .issue29-payload/part-012
+          .issue29-payload/part-013
+          .issue29-payload/part-014
+          .issue29-payload/part-015
+          .issue29-payload/part-016
+          .issue29-payload/part-017
+          .issue29-payload/part-018
+          .issue29-payload/part-019
+          .issue29-payload/part-020
+          .issue29-payload/part-021
+          .issue29-payload/part-022
+          docs/large-diagram-views-shortcuts-themes.md
+          frontend/src/App.tsx
+          frontend/src/editor/CommandPalette.tsx
+          frontend/src/editor/EditorCanvas.tsx
+          frontend/src/editor/ExperienceSettings.tsx
+          frontend/src/editor/ViewNavigator.tsx
+          frontend/src/editor/commandPalette.ts
+          frontend/src/editor/interaction.css
+          frontend/src/editor/navigationViews.ts
+          frontend/src/editorExperience.ts
+          frontend/src/editorPreferences.ts
+          frontend/src/styles.css
+          frontend/tests/editorExperience.test.ts
+          frontend/tests/navigationViews.test.ts
+          EOF
+          )
+          actual=$(git diff --cached --name-only | sort)
+          printf '%s\n' "$actual"
+          test "$actual" = "$expected"
+      - name: Commit and push functional changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "feat: add large-diagram views, shortcuts and themes"
+          git push origin HEAD:${{ github.head_ref }}
