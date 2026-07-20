@@ -6,6 +6,7 @@ from math import hypot
 from .agent_semantic import AgentCompileError, _element, _issue, analyze_transaction
 from .agent_semantic_models import (
     CompiledSemanticTransaction,
+    ConnectPortsOperation,
     InstrumentTapOperation,
     SemanticTransaction,
 )
@@ -35,7 +36,8 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
     taps may continue to reference the original main connector ID; the compiler
     selects the nearest current descendant segment and snaps the requested tap
     point onto that orthogonal segment within a bounded grid-scale tolerance.
-    Empty-document full diagrams also receive a deterministic annotation polish.
+    Semantic connector flow properties are preserved for automatic and waypoint
+    routes. Empty-document full diagrams also receive deterministic annotation polish.
     """
 
     def compile(
@@ -70,6 +72,50 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
             assessment=assessment,
             annotation_metrics=metrics,
         )
+
+    def _connect_ports(
+        self,
+        document: Document,
+        operation: ConnectPortsOperation,
+        index: int,
+    ) -> list[Operation]:
+        return self._apply_connector_semantics(
+            super()._connect_ports(document, operation, index),
+            operation,
+        )
+
+    def _connect_ports_with_waypoints(
+        self,
+        document: Document,
+        operation: ConnectPortsOperation,
+        index: int,
+    ) -> list[Operation]:
+        return self._apply_connector_semantics(
+            super()._connect_ports_with_waypoints(document, operation, index),
+            operation,
+        )
+
+    @staticmethod
+    def _apply_connector_semantics(
+        compiled: list[Operation],
+        operation: ConnectPortsOperation,
+    ) -> list[Operation]:
+        result: list[Operation] = []
+        for low_level in compiled:
+            if isinstance(low_level, AddElementOperation) and low_level.element.type == "connector":
+                connector = low_level.element.model_copy(
+                    update={
+                        "flow_direction": operation.flow_direction,
+                        "arrow_position": operation.arrow_position,
+                        "crossing_style": operation.crossing_style,
+                        "jump_radius": operation.jump_radius,
+                    },
+                    deep=True,
+                )
+                result.append(AddElementOperation(element=connector))
+            else:
+                result.append(low_level)
+        return result
 
     def _instrument_tap(
         self,
