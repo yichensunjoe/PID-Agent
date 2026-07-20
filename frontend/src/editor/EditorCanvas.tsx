@@ -24,6 +24,21 @@ import {
   removeLocalDogleg,
   shortestOrthogonalRoute,
 } from "./connectorRouting";
+import {
+  alignmentTranslations,
+  distributionTranslations,
+  evaluateInlineSymbolInsertion,
+  fitRectToAspect,
+  rectForElement,
+  snapSelectionToGuides,
+  splitInlineConnectorPoints,
+  unionRects,
+  type AlignmentGuide,
+  type AlignmentMode,
+  type DistributionAxis,
+  type InlineInsertionResult,
+  type Translation,
+} from "./editorGeometry";
 import "./interaction.css";
 
 type ConnectableElement = SymbolElement | JunctionElement;
@@ -68,6 +83,14 @@ type ContextMenuState = {
   elementId?: string;
   segmentIndex?: number;
 } | null;
+type DragGeometry = { dx: number; dy: number; guides: AlignmentGuide[] };
+type InlineDragPreview = {
+  symbol: SymbolElement;
+  connector: ConnectorElement;
+  segmentIndex: number;
+  point: Point;
+  result: InlineInsertionResult;
+};
 
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
@@ -457,6 +480,7 @@ export function EditorCanvas() {
   const [viewBox, setViewBox] = useState<ViewBox | null>(null);
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [cursorPoint, setCursorPoint] = useState<Point>({ x: 0, y: 0 });
   const quickConnector = useRef(false);
 
   useEffect(() => {
@@ -529,6 +553,165 @@ export function EditorCanvas() {
     return hit ? { point: hit.point, hit } : { point: applyGrid(raw), hit: undefined };
   };
   const addElement = async (element: Record<string, unknown>, label: string) => transact([{ op: "add_element", element } as Operation], label);
+
+  const dragGeometryFor = (state: NonNullable<DragState>): DragGeometry => {
+    const dx = state.current.x - state.start.x;
+    const dy = state.current.y - state.start.y;
+    const moving = document.elements.filter((element) => state.elementIds.includes(element.id) && element.type !== "connector");
+    const guideMoving = moving.filter((element) => element.type === "symbol" || element.type === "junction");
+    const guideTargets = visibleElements.filter((element) => !state.elementIds.includes(element.id) && (element.type === "symbol" || element.type === "junction"));
+    if (!guideMoving.length || !guideTargets.length) return { dx, dy, guides: [] };
+    const tolerance = (7 * view.width) / (svgRef.current?.clientWidth || 1000);
+    return snapSelectionToGuides(
+      guideMoving.map(rectForElement),
+      guideTargets.map(rectForElement),
+      dx,
+      dy,
+      tolerance,
+    );
+  };
+
+  const inlineInsertionForDrag = (state: NonNullable<DragState>, geometry: DragGeometry): InlineDragPreview | null => {
+    if (state.elementIds.length !== 1) return null;
+    const original = document.elements.find((element) => element.id === state.elementIds[0]);
+    if (!original || original.type !== "symbol") return null;
+    const moved = translateElement(original, geometry.dx, geometry.dy);
+    if (moved.type !== "symbol") return null;
+    const center = { x: moved.position.x + moved.width / 2, y: moved.position.y + moved.height / 2 };
+    const tolerance = Math.max(snapTolerance() * 1.75, document.canvas.grid_size);
+    let best: { connector: ConnectorElement; segmentIndex: number; point: Point; distance: number } | null = null;
+    for (const element of visibleElements) {
+      if (element.type !== "connector" || lockedLayerIds.has(element.layer_id)) continue;
+      if (element.source?.element_id === original.id || element.target?.element_id === original.id) continue;
+      for (let segmentIndex = 0; segmentIndex < element.points.length - 1; segmentIndex += 1) {
+        const candidate = closestPointOnSegment(center, element.points[segmentIndex], element.points[segmentIndex + 1]);
+        if (candidate.distance > tolerance || (best && candidate.distance >= best.distance)) continue;
+        best = { connector: element, segmentIndex, point: candidate.point, distance: candidate.distance };
+      }
+    }
+    if (!best) return null;
+    const definition = symbolMap.get(original.symbol_key);
+    const alreadyConnected = document.elements.some((element) => element.type === "connector" && (
+      element.source?.element_id === original.id || element.target?.element_id === original.id
+    ));
+    const result: InlineInsertionResult = !definition
+      ? { ok: false, reason: "找不到当前设备的符号定义" }
+      : alreadyConnected
+        ? { ok: false, reason: "已有连接的设备不能直接插入另一条主管" }
+        : evaluateInlineSymbolInsertion(
+          moved,
+          definition,
+          best.connector,
+          best.segmentIndex,
+          best.point,
+          Math.max(document.canvas.grid_size, 12),
+        );
+    return { symbol: moved, connector: best.connector, segmentIndex: best.segmentIndex, point: best.point, result };
+  };
+
+  const applyTranslations = async (translations: Translation[], label: string) => {
+    const meaningful = translations.filter((translation) => Math.abs(translation.dx) > 1e-6 || Math.abs(translation.dy) > 1e-6);
+    if (!meaningful.length) return;
+    const operations: Operation[] = [];
+    const moved = new Map<string, ConnectableElement>();
+    for (const translation of meaningful) {
+      const element = document.elements.find((item) => item.id === translation.id);
+      if (!element || element.type === "connector" || lockedLayerIds.has(element.layer_id)) continue;
+      const translated = translateElement(element, translation.dx, translation.dy);
+      operations.push({ op: "update_element", element_id: element.id, patch: updatePatch(translated) });
+      if (translated.type === "symbol" || translated.type === "junction") moved.set(translated.id, translated);
+    }
+    if (moved.size) {
+      for (const element of document.elements) {
+        if (element.type !== "connector") continue;
+        const sourceMoved = element.source?.element_id && moved.has(element.source.element_id);
+        const targetMoved = element.target?.element_id && moved.has(element.target.element_id);
+        if (!sourceMoved && !targetMoved) continue;
+        const updated = syncConnectorPreview(element, moved, symbolMap);
+        operations.push({ op: "update_element", element_id: element.id, patch: updatePatch(updated) });
+      }
+    }
+    if (operations.length) await transact(operations, label);
+  };
+
+  const alignSelection = async (mode: AlignmentMode) => {
+    const elements = document.elements.filter((element) => selectedSet.has(element.id) && element.type !== "connector");
+    await applyTranslations(alignmentTranslations(elements, mode), `Align selection ${mode}`);
+  };
+
+  const distributeSelection = async (axis: DistributionAxis) => {
+    const elements = document.elements.filter((element) => selectedSet.has(element.id) && element.type !== "connector");
+    await applyTranslations(distributionTranslations(elements, axis), `Distribute selection ${axis}`);
+  };
+
+  const applyInlineInsertion = async (preview: InlineDragPreview) => {
+    if (!preview.result.ok) return false;
+    const plan = preview.result.plan;
+    const route = splitInlineConnectorPoints(preview.connector, plan);
+    const routeId = String(preview.connector.metadata.main_route_id ?? preview.connector.id);
+    const firstTarget: ConnectorEndpoint = {
+      element_id: preview.symbol.id,
+      port_id: plan.firstPort.id,
+      point: plan.firstPoint,
+    };
+    const second = structuredClone(preview.connector);
+    second.id = newElementId();
+    second.points = route.second;
+    second.source = {
+      element_id: preview.symbol.id,
+      port_id: plan.secondPort.id,
+      point: plan.secondPoint,
+    };
+    second.routing = "manual";
+    second.metadata = {
+      ...second.metadata,
+      main_route_id: routeId,
+      inline_parent_connector_id: preview.connector.id,
+    };
+    await transact([
+      {
+        op: "update_element",
+        element_id: preview.symbol.id,
+        patch: {
+          position: plan.position,
+          rotation: plan.rotation,
+          layer_id: preview.connector.layer_id,
+          system_id: preview.connector.system_id,
+        },
+      },
+      {
+        op: "update_element",
+        element_id: preview.connector.id,
+        patch: {
+          points: route.first,
+          target: firstTarget,
+          routing: "manual",
+          metadata: { ...preview.connector.metadata, main_route_id: routeId },
+        },
+      },
+      { op: "add_element", element: second },
+    ], "Insert symbol into process connector");
+    setSelection([preview.symbol.id]);
+    return true;
+  };
+
+  const fitElements = (elements: Element[]) => {
+    const bounds = unionRects(elements.map(rectForElement));
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!bounds || !rect || !rect.width || !rect.height) return;
+    const extent = Math.max(bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+    const padding = Math.max(document.canvas.grid_size * 2, extent * 0.08);
+    setViewBox(fitRectToAspect(bounds, rect.width / rect.height, padding));
+  };
+
+  const fitAll = () => fitElements(visibleElements);
+  const fitSelection = () => fitElements(document.elements.filter((element) => selectedSet.has(element.id)));
+  const resetZoom = () => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const center = { x: view.x + view.width / 2, y: view.y + view.height / 2 };
+    setViewBox({ x: center.x - rect.width / 2, y: center.y - rect.height / 2, width: rect.width, height: rect.height });
+  };
 
   const updateConnector = async (connector: ConnectorElement, points: Point[], routing: ConnectorElement["routing"], label: string) => {
     await transact([{
@@ -671,6 +854,7 @@ export function EditorCanvas() {
   };
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    setCursorPoint(rawPointFromEvent(event));
     if (pan) {
       const rect = event.currentTarget.getBoundingClientRect();
       const dx = ((event.clientX - pan.start.x) / rect.width) * pan.view.width;
@@ -740,8 +924,15 @@ export function EditorCanvas() {
       return;
     }
     if (drag) {
-      const dx = drag.current.x - drag.start.x;
-      const dy = drag.current.y - drag.start.y;
+      const geometry = dragGeometryFor(drag);
+      const inlinePreview = inlineInsertionForDrag(drag, geometry);
+      setDrag(null);
+      if (inlinePreview?.result.ok) {
+        await applyInlineInsertion(inlinePreview);
+        releaseCapture(event);
+        return;
+      }
+      const { dx, dy } = geometry;
       const operations: Operation[] = [];
       const moved = new Map<string, ConnectableElement>();
       for (const id of drag.elementIds) {
@@ -762,8 +953,7 @@ export function EditorCanvas() {
           operations.push({ op: "update_element", element_id: element.id, patch: updatePatch(updated) });
         }
       }
-      setDrag(null);
-      if ((dx || dy) && operations.length) await transact(operations, `Move ${drag.elementIds.length} element(s) with local connector routing`);
+      if ((dx || dy) && operations.length) await transact(operations, `Move ${drag.elementIds.length} element(s) with smart alignment`);
       releaseCapture(event);
       return;
     }
@@ -918,10 +1108,13 @@ export function EditorCanvas() {
     setViewBox({ x: pointerX - width * ratioX, y: pointerY - height * ratioY, width, height });
   };
 
+  const dragGeometry = drag ? dragGeometryFor(drag) : null;
+  const inlinePreview = drag && dragGeometry ? inlineInsertionForDrag(drag, dragGeometry) : null;
   const candidateIds = new Set(viewportElements.map((element) => element.id));
   for (const id of selectedElementIds) candidateIds.add(id);
   if (endpointDrag) candidateIds.add(endpointDrag.connector.id);
   if (segmentDrag) candidateIds.add(segmentDrag.connector.id);
+  if (inlinePreview) candidateIds.add(inlinePreview.connector.id);
   if (drag) {
     const draggedIds = new Set(drag.elementIds);
     for (const id of draggedIds) candidateIds.add(id);
@@ -949,16 +1142,18 @@ export function EditorCanvas() {
       changed.routing = "manual";
       return candidateElements.map((element) => element.id === changed.id ? changed : element);
     }
-    if (!drag) return candidateElements;
-    const dx = drag.current.x - drag.start.x;
-    const dy = drag.current.y - drag.start.y;
+    if (!drag || !dragGeometry) return candidateElements;
     const moved = new Map<string, ConnectableElement>();
     const direct = new Map<string, Element>();
     for (const id of drag.elementIds) {
       const element = visibleElementMap.get(id);
       if (!element || lockedLayerIds.has(element.layer_id)) continue;
       if (element.type === "connector" && (element.source?.element_id || element.target?.element_id)) continue;
-      const translated = translateElement(element, dx, dy);
+      const translated = translateElement(element, dragGeometry.dx, dragGeometry.dy);
+      if (translated.type === "symbol" && inlinePreview?.result.ok && translated.id === inlinePreview.symbol.id) {
+        translated.position = inlinePreview.result.plan.position;
+        translated.rotation = inlinePreview.result.plan.rotation;
+      }
       direct.set(id, translated);
       if (translated.type === "symbol" || translated.type === "junction") moved.set(id, translated);
     }
@@ -976,6 +1171,13 @@ export function EditorCanvas() {
   const removableContextDogleg = contextElement?.type === "connector" && contextMenu?.segmentIndex !== undefined
     ? removeLocalDogleg(contextElement.points, contextMenu.segmentIndex)
     : null;
+  const alignableSelected = selectedElements.filter((element) => element.type !== "connector");
+  const zoomPercent = Math.round(((svgRef.current?.clientWidth || document.canvas.width) / view.width) * 100);
+  const inlineStatus = inlinePreview
+    ? inlinePreview.result.ok
+      ? `松开鼠标：插入 ${inlinePreview.symbol.label || inlinePreview.symbol.symbol_key} 到 ${inlinePreview.connector.process_tag || inlinePreview.connector.id}`
+      : inlinePreview.result.reason
+    : "";
 
   return <div ref={shellRef} className="editor-canvas-shell">
     {selectedElements.length ? <div className="canvas-floating-toolbar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
@@ -987,6 +1189,21 @@ export function EditorCanvas() {
         <button type="button" onClick={() => void reverseConnectorFlow(singleSelected)}>反向</button>
       </> : null}
       {singleSelected?.type === "symbol" ? <button type="button" onClick={() => void rotateSymbol(singleSelected)}>旋转 90°</button> : null}
+      {alignableSelected.length > 1 ? <details className="canvas-align-menu">
+        <summary>对齐</summary>
+        <div>
+          <button type="button" onClick={() => void alignSelection("left")}>左对齐</button>
+          <button type="button" onClick={() => void alignSelection("center")}>水平居中</button>
+          <button type="button" onClick={() => void alignSelection("right")}>右对齐</button>
+          <button type="button" onClick={() => void alignSelection("top")}>顶对齐</button>
+          <button type="button" onClick={() => void alignSelection("middle")}>垂直居中</button>
+          <button type="button" onClick={() => void alignSelection("bottom")}>底对齐</button>
+          {alignableSelected.length > 2 ? <>
+            <button type="button" onClick={() => void distributeSelection("horizontal")}>水平等距</button>
+            <button type="button" onClick={() => void distributeSelection("vertical")}>垂直等距</button>
+          </> : null}
+        </div>
+      </details> : null}
       <button type="button" onClick={() => void duplicateSelection()}>复制</button>
       <button type="button" className="danger" onClick={() => void deleteSelection()}>删除</button>
     </div> : null}
@@ -1010,6 +1227,18 @@ export function EditorCanvas() {
       <rect x={workspaceBounds.x} y={workspaceBounds.y} width={workspaceBounds.width} height={workspaceBounds.height} fill={document.canvas.background} />
       {gridEnabled ? <rect x={workspaceBounds.x} y={workspaceBounds.y} width={workspaceBounds.width} height={workspaceBounds.height} fill="url(#smallGrid)" /> : null}
       {canvasMode === "page" ? <rect x={0} y={0} width={document.canvas.width} height={document.canvas.height} fill="none" stroke="#94a3b8" strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" /> : null}
+      {dragGeometry?.guides.map((guide, index) => guide.axis === "x"
+        ? <line key={`guide-x-${index}`} className={`alignment-guide ${guide.source}`} x1={guide.value} y1={view.y} x2={guide.value} y2={view.y + view.height} />
+        : <line key={`guide-y-${index}`} className={`alignment-guide ${guide.source}`} x1={view.x} y1={guide.value} x2={view.x + view.width} y2={guide.value} />)}
+      {inlinePreview ? <polyline
+        className={`inline-target-preview ${inlinePreview.result.ok ? "valid" : "invalid"}`}
+        points={inlinePreview.connector.points.map((point) => `${point.x},${point.y}`).join(" ")}
+      /> : null}
+      {inlinePreview?.result.ok ? <g className="inline-insertion-preview" pointerEvents="none">
+        <line x1={inlinePreview.result.plan.firstPoint.x} y1={inlinePreview.result.plan.firstPoint.y} x2={inlinePreview.result.plan.secondPoint.x} y2={inlinePreview.result.plan.secondPoint.y} />
+        <circle cx={inlinePreview.result.plan.firstPoint.x} cy={inlinePreview.result.plan.firstPoint.y} r={portRadius * 1.25} />
+        <circle cx={inlinePreview.result.plan.secondPoint.x} cy={inlinePreview.result.plan.secondPoint.y} r={portRadius * 1.25} />
+      </g> : null}
       {activeElements.map((element) => <g
         key={element.id}
         className={`canvas-element ${selectedSet.has(element.id) ? "is-selected" : ""} ${lockedLayerIds.has(element.layer_id) ? "is-locked" : ""}`}
@@ -1058,6 +1287,19 @@ export function EditorCanvas() {
       {draft ? <DraftPreview tool={quickConnector.current || draft.branch ? "connector" : tool} start={draft.start} current={draft.current} branch={Boolean(draft.branch)} /> : null}
       {boxSelection ? <SelectionBox start={boxSelection.start} current={boxSelection.current} /> : null}
     </svg>
+    <div className="canvas-status-bar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
+      <div className={`canvas-status-message ${inlinePreview ? inlinePreview.result.ok ? "success" : "warning" : ""}`}>
+        {inlineStatus || `${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"}`}
+      </div>
+      <div className="canvas-status-controls">
+        <span>X {Math.round(cursorPoint.x)} · Y {Math.round(cursorPoint.y)}</span>
+        <span>{zoomPercent}%</span>
+        <span>{selectedElements.length} selected</span>
+        <button type="button" onClick={fitAll}>适应全部</button>
+        <button type="button" onClick={fitSelection} disabled={!selectedElements.length}>适应选择</button>
+        <button type="button" onClick={resetZoom}>100%</button>
+      </div>
+    </div>
     {contextMenu ? <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       {contextElement?.type === "connector" ? <>
         <button type="button" onClick={() => { setContextMenu(null); void addBend(contextElement, contextMenu.segmentIndex, contextMenu.point); }}>在此添加折点</button>
