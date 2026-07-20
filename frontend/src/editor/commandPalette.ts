@@ -6,7 +6,8 @@ export type PaletteCommand = {
   description?: string;
   keywords?: string[];
   enabled: boolean;
-  group: "command" | "element";
+  group: "command" | "element" | "view";
+  shortcut?: string;
   elementId?: string;
 };
 
@@ -29,7 +30,7 @@ function subsequenceScore(query: string, candidate: string): number | null {
 
 export function paletteScore(command: PaletteCommand, query: string): number | null {
   const needle = normalized(query);
-  if (!needle) return command.group === "command" ? 0 : 20;
+  if (!needle) return command.group === "command" ? 0 : command.group === "view" ? 10 : 20;
   const fields = [command.label, command.description ?? "", ...(command.keywords ?? [])].map(normalized).filter(Boolean);
   let best = Number.POSITIVE_INFINITY;
   for (const field of fields) {
@@ -43,7 +44,7 @@ export function paletteScore(command: PaletteCommand, query: string): number | n
     }
   }
   if (!Number.isFinite(best)) return null;
-  return best + (command.enabled ? 0 : 1000) + (command.group === "element" ? 5 : 0);
+  return best + (command.enabled ? 0 : 1000) + (command.group === "element" ? 5 : command.group === "view" ? 2 : 0);
 }
 
 export function filterPaletteCommands(commands: PaletteCommand[], query: string, limit = 18): PaletteCommand[] {

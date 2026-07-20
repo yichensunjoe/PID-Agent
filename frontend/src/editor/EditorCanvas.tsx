@@ -59,7 +59,9 @@ import {
   type DistributionAxis,
   type InlineInsertionResult,
   type Translation,
+  type Rect,
 } from "./editorGeometry";
+import type { CanvasView } from "./navigationViews";
 import "./interaction.css";
 
 type ConnectableElement = SymbolElement | JunctionElement;
@@ -132,10 +134,13 @@ export type CanvasCommandId =
   | "avoid-obstacles"
   | "clear-route-locks";
 export type CanvasCommandRequest = { id: CanvasCommandId; nonce: number };
+export type CanvasViewportRequest = { nonce: number; view?: CanvasView; bounds?: Rect };
 type EditorCanvasProps = {
   agentPreview?: AgentCanvasPreview | null;
   focusRequest?: CanvasFocusRequest | null;
   commandRequest?: CanvasCommandRequest | null;
+  viewportRequest?: CanvasViewportRequest | null;
+  onViewChange?: (view: CanvasView) => void;
 };
 
 const MINIMAP_WIDTH = 188;
@@ -520,7 +525,7 @@ function longestSegmentIndex(connector: ConnectorElement): number {
   return bestIndex;
 }
 
-export function EditorCanvas({ agentPreview = null, focusRequest = null, commandRequest = null }: EditorCanvasProps) {
+export function EditorCanvas({ agentPreview = null, focusRequest = null, commandRequest = null, viewportRequest = null, onViewChange }: EditorCanvasProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const document = useWorkspace((state) => state.document);
@@ -575,6 +580,23 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   useEffect(() => {
     if (commandRequest) commandHandlerRef.current(commandRequest.id);
   }, [commandRequest?.nonce]);
+  useEffect(() => {
+    if (!document || !viewportRequest) return;
+    if (viewportRequest.view) {
+      setViewBox({ ...viewportRequest.view });
+      return;
+    }
+    if (!viewportRequest.bounds) return;
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect?.width || !rect.height) return;
+    const bounds = viewportRequest.bounds;
+    const extent = Math.max(bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+    setViewBox(fitRectToAspect(bounds, rect.width / rect.height, Math.max(document.canvas.grid_size * 2, extent * 0.1)));
+  }, [viewportRequest?.nonce, document?.id]);
+  useEffect(() => {
+    if (!document || !onViewChange) return;
+    onViewChange(viewBox ?? { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height });
+  }, [document?.id, document?.canvas.width, document?.canvas.height, viewBox?.x, viewBox?.y, viewBox?.width, viewBox?.height, onViewChange]);
 
   const symbolMap = useMemo(() => new Map(symbols.map((symbol) => [symbol.key, symbol])), [symbols]);
   const selectedSet = useMemo(() => new Set(selectedElementIds), [selectedElementIds]);

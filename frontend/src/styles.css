@@ -135,3 +135,115 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .provider-test-warning { color: #854d0e; background: #fef9c3; }
 .provider-test-error { color: #991b1b; background: #fee2e2; }
 .provider-test span { opacity: 0.8; }
+
+/* Browser-local application theme. Engineering canvas colors remain untouched. */
+.app-shell[data-theme="light"] {
+  color: #172033;
+  background: #e8edf3;
+}
+
+.app-shell[data-theme="dark"] {
+  color: #e2e8f0;
+  background: #0b1120;
+}
+
+.app-shell[data-theme="dark"] .topbar {
+  color: #f8fafc;
+  background: #020617;
+  border-color: #1e293b;
+}
+
+.app-shell[data-theme="dark"] .toolbar button,
+.app-shell[data-theme="dark"] .toolbar-actions button,
+.app-shell[data-theme="dark"] .toolbar-actions a {
+  border-color: #334155;
+  color: #cbd5e1;
+  background: #111827;
+}
+
+.app-shell[data-theme="dark"] .toolbar button:hover,
+.app-shell[data-theme="dark"] .toolbar-actions button:hover,
+.app-shell[data-theme="dark"] .toolbar-actions a:hover {
+  background: #1e293b;
+}
+
+.app-shell[data-theme="dark"] .sidebar,
+.app-shell[data-theme="dark"] .right-panel,
+.app-shell[data-theme="dark"] .inspector-panel,
+.app-shell[data-theme="dark"] .agent-panel {
+  color: #e2e8f0;
+  background: #111827;
+  border-color: #334155;
+}
+
+.app-shell[data-theme="dark"] .canvas-stage,
+.app-shell[data-theme="dark"] .document-bar {
+  border-color: #334155;
+  color: #cbd5e1;
+  background: #0f172a;
+}
+
+.app-shell[data-theme="dark"] .sidebar h2,
+.app-shell[data-theme="dark"] .document-list button span,
+.app-shell[data-theme="dark"] .brand span,
+.app-shell[data-theme="dark"] .document-bar span,
+.app-shell[data-theme="dark"] .inspector-hint,
+.app-shell[data-theme="dark"] .layout-hint,
+.app-shell[data-theme="dark"] .agent-panel label,
+.app-shell[data-theme="dark"] .agent-panel p {
+  color: #94a3b8;
+}
+
+.app-shell[data-theme="dark"] .document-list button,
+.app-shell[data-theme="dark"] .symbol-card,
+.app-shell[data-theme="dark"] .right-panel-tabs button,
+.app-shell[data-theme="dark"] .workspace-control-buttons button,
+.app-shell[data-theme="dark"] .group-row,
+.app-shell[data-theme="dark"] .history-list button,
+.app-shell[data-theme="dark"] .inspector-section,
+.app-shell[data-theme="dark"] .agent-context-settings,
+.app-shell[data-theme="dark"] .agent-provider-settings,
+.app-shell[data-theme="dark"] .agent-result-drawer,
+.app-shell[data-theme="dark"] .layout-preview,
+.app-shell[data-theme="dark"] .provider-test {
+  border-color: #334155;
+  color: #cbd5e1;
+  background: #1e293b;
+}
+
+.app-shell[data-theme="dark"] .document-list button.active,
+.app-shell[data-theme="dark"] .right-panel-tabs button.active,
+.app-shell[data-theme="dark"] .workspace-control-buttons button.active {
+  border-color: #60a5fa;
+  color: #dbeafe;
+  background: #1e3a5f;
+}
+
+.app-shell[data-theme="dark"] input,
+.app-shell[data-theme="dark"] textarea,
+.app-shell[data-theme="dark"] select {
+  border-color: #475569;
+  color: #f8fafc;
+  background: #0f172a;
+}
+
+.app-shell[data-theme="dark"] input::placeholder,
+.app-shell[data-theme="dark"] textarea::placeholder {
+  color: #64748b;
+}
+
+.app-shell[data-theme="dark"] .divider,
+.app-shell[data-theme="dark"] .layout-manager-section,
+.app-shell[data-theme="dark"] .export-panel,
+.app-shell[data-theme="dark"] .right-panel-tabs,
+.app-shell[data-theme="dark"] .agent-context-settings[open] > summary,
+.app-shell[data-theme="dark"] .agent-provider-settings[open] > summary,
+.app-shell[data-theme="dark"] .agent-result-drawer[open] > summary {
+  border-color: #334155;
+}
+
+.app-shell[data-theme="dark"] .document-view-button {
+  border-color: #3b82f6;
+  color: #bfdbfe;
+  background: #1e3a5f;
+}

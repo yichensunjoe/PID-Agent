@@ -1,14 +1,19 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
-import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest } from "./editor/EditorCanvas";
+import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest, type CanvasViewportRequest } from "./editor/EditorCanvas";
 import { CommandPalette } from "./editor/CommandPalette";
+import { ExperienceSettings } from "./editor/ExperienceSettings";
+import { ViewNavigator } from "./editor/ViewNavigator";
 import { elementPaletteCommands, type PaletteCommand } from "./editor/commandPalette";
+import { currentNavigationZone, deriveNavigationZones, loadNamedViews, persistNamedViews, sanitizeNamedViews, type CanvasView, type NamedCanvasView, type NavigationZone } from "./editor/navigationViews";
+import { rectForElement } from "./editor/editorGeometry";
 import { HistoryPanel } from "./editor/HistoryPanel";
 import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
 import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
+import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
 import { useWorkspace } from "./store";
 import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
 import "./issue1.css";
@@ -46,6 +51,9 @@ function operationDescription(operation: SemanticOperation): string {
 
 export default function App() {
   const state = useWorkspace();
+  const preferences = useEditorPreferences();
+  const resolvedAppearance = useResolvedAppearance();
+  const shortcutMap = useMemo(() => resolvedShortcutMap(preferences.shortcutOverrides), [preferences.shortcutOverrides]);
   const [prompt, setPrompt] = useState("");
   const [context, setContext] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -70,6 +78,11 @@ export default function App() {
   const [canvasFocusRequest, setCanvasFocusRequest] = useState<CanvasFocusRequest | null>(null);
   const [canvasCommandRequest, setCanvasCommandRequest] = useState<CanvasCommandRequest | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [experienceSettingsOpen, setExperienceSettingsOpen] = useState(false);
+  const [viewNavigatorOpen, setViewNavigatorOpen] = useState(false);
+  const [canvasView, setCanvasView] = useState<CanvasView | null>(null);
+  const [canvasViewportRequest, setCanvasViewportRequest] = useState<CanvasViewportRequest | null>(null);
+  const [namedViews, setNamedViews] = useState<NamedCanvasView[]>([]);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
   useEffect(() => { if (state.selectedElementIds.length) setRightPanel("properties"); }, [state.selectedElementIds]);
@@ -101,59 +114,12 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const command = event.ctrlKey || event.metaKey;
-      if (command && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandPaletteOpen((current) => !current);
-        return;
-      }
-      if (commandPaletteOpen) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setCommandPaletteOpen(false);
-        }
-        return;
-      }
-      if (
-        event.target instanceof HTMLInputElement
-        || event.target instanceof HTMLTextAreaElement
-        || event.target instanceof HTMLSelectElement
-        || (event.target instanceof HTMLElement && event.target.isContentEditable)
-      ) return;
-      if (command && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        void (event.shiftKey ? state.redo() : state.undo());
-        return;
-      }
-      if (command && event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        void state.duplicateSelection();
-        return;
-      }
-      if (command && event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        state.selectAll();
-        return;
-      }
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (state.selectedElementIds.length) {
-          event.preventDefault();
-          void state.deleteSelection();
-        }
-        return;
-      }
-      if (event.key === "Escape") {
-        state.clearSelection();
-        state.setTool("select");
-        return;
-      }
-      const match = tools.find((tool) => tool.key.toLowerCase() === event.key.toLowerCase());
-      if (match) state.setTool(match.id);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [state.selectedElementIds, state.document, commandPaletteOpen]);
+    const documentId = state.document?.id;
+    setNamedViews(documentId ? loadNamedViews(documentId) : []);
+    setCanvasView(null);
+    setCanvasViewportRequest(null);
+    setViewNavigatorOpen(false);
+  }, [state.document?.id]);
 
   const providerConfig = (): ProviderConfig => ({
     base_url: baseUrl.trim() || undefined,
@@ -358,12 +324,18 @@ export default function App() {
   const selectedConnectors = selectedElements.filter((element) => element.type === "connector");
   const alignableSelection = selectedElements.filter((element) => element.type !== "connector");
   const hasRouteLocks = selectedConnectors.some((connector) => Array.isArray(connector.metadata.locked_route_points) && connector.metadata.locked_route_points.length > 0);
+  const visibleLayerIds = new Set(state.document?.layers.filter((layer) => layer.visible).map((layer) => layer.id) ?? []);
+  const visibleSystemIds = new Set(state.document?.systems.filter((system) => system.visible).map((system) => system.id) ?? []);
+  const visibleElements = state.document?.elements.filter((element) => visibleLayerIds.has(element.layer_id) && visibleSystemIds.has(element.system_id)) ?? [];
+  const navigationZones = deriveNavigationZones(visibleElements.map((element) => ({ id: element.id, bounds: rectForElement(element) })));
+  const activeZone = currentNavigationZone(navigationZones, canvasView);
+  const shortcut = (commandId: string) => shortcutMap[commandId] || undefined;
   const paletteCommands: PaletteCommand[] = [
-    { id: "canvas:fit-all", label: "适应全部内容", description: "缩放到全部可见元素", keywords: ["fit all", "zoom"], enabled: Boolean(state.document?.elements.length), group: "command" },
-    { id: "canvas:fit-selection", label: "适应当前选择", description: "缩放到选中元素", keywords: ["fit selection", "focus"], enabled: selectedElements.length > 0, group: "command" },
+    { id: "canvas:fit-all", label: "适应全部内容", description: "缩放到全部可见元素", keywords: ["fit all", "zoom"], shortcut: shortcut("canvas:fit-all"), enabled: Boolean(visibleElements.length), group: "command" },
+    { id: "canvas:fit-selection", label: "适应当前选择", description: "缩放到选中元素", keywords: ["fit selection", "focus"], shortcut: shortcut("canvas:fit-selection"), enabled: selectedElements.length > 0, group: "command" },
     { id: "canvas:reset-zoom", label: "重置为 100%", description: "保持当前中心重置缩放", keywords: ["100", "zoom reset"], enabled: Boolean(state.document), group: "command" },
     { id: "canvas:fit-agent-preview", label: "定位 Agent 画布预览", description: "适应当前 ghost preview", keywords: ["agent", "preview"], enabled: Boolean(agentCanvasPreview), group: "command" },
-    { id: "canvas:avoid-obstacles", label: "选中管线避障布线", description: "确定性绕开设备、文字和节点", keywords: ["route", "obstacle", "避障"], enabled: selectedConnectors.length > 0, group: "command" },
+    { id: "canvas:avoid-obstacles", label: "选中管线避障布线", description: "确定性绕开设备、文字和节点", keywords: ["route", "obstacle", "避障"], shortcut: shortcut("canvas:avoid-obstacles"), enabled: selectedConnectors.length > 0, group: "command" },
     { id: "canvas:reroute-selection", label: "重排选中管线", description: "保留锁定锚点并重新正交布线", keywords: ["reroute", "管线"], enabled: selectedConnectors.length > 0, group: "command" },
     { id: "canvas:clear-route-locks", label: "清除选中管线锚点", description: "移除所有锁定路由点", keywords: ["unlock", "anchor"], enabled: hasRouteLocks, group: "command" },
     { id: "canvas:align-left", label: "左对齐", enabled: alignableSelection.length > 1, group: "command" },
@@ -374,40 +346,126 @@ export default function App() {
     { id: "canvas:align-bottom", label: "底部对齐", enabled: alignableSelection.length > 1, group: "command" },
     { id: "canvas:distribute-horizontal", label: "水平等距分布", enabled: alignableSelection.length > 2, group: "command" },
     { id: "canvas:distribute-vertical", label: "垂直等距分布", enabled: alignableSelection.length > 2, group: "command" },
-    { id: "workspace:duplicate", label: "复制选择", description: "Ctrl/Cmd + D", enabled: selectedElements.length > 0, group: "command" },
-    { id: "workspace:delete", label: "删除选择", description: "Delete", enabled: selectedElements.length > 0, group: "command" },
-    { id: "workspace:select-all", label: "选择全部元素", description: "Ctrl/Cmd + A", enabled: Boolean(state.document?.elements.length), group: "command" },
-    { id: "workspace:tool-select", label: "切换到选择工具", description: "V", enabled: true, group: "command" },
-    { id: "workspace:tool-connector", label: "切换到工艺管线工具", description: "P", enabled: true, group: "command" },
+    { id: "workspace:undo", label: "撤销", shortcut: shortcut("workspace:undo"), enabled: true, group: "command" },
+    { id: "workspace:redo", label: "重做", shortcut: shortcut("workspace:redo"), enabled: true, group: "command" },
+    { id: "workspace:duplicate", label: "复制选择", shortcut: shortcut("workspace:duplicate"), enabled: selectedElements.length > 0, group: "command" },
+    { id: "workspace:delete", label: "删除选择", shortcut: shortcut("workspace:delete"), enabled: selectedElements.length > 0, group: "command" },
+    { id: "workspace:select-all", label: "选择全部元素", shortcut: shortcut("workspace:select-all"), enabled: Boolean(state.document?.elements.length), group: "command" },
+    { id: "workspace:tool-select", label: "切换到选择工具", shortcut: shortcut("workspace:tool-select"), enabled: true, group: "command" },
+    { id: "workspace:tool-line", label: "切换到直线工具", shortcut: shortcut("workspace:tool-line"), enabled: true, group: "command" },
+    { id: "workspace:tool-connector", label: "切换到工艺管线工具", shortcut: shortcut("workspace:tool-connector"), enabled: true, group: "command" },
+    { id: "workspace:tool-junction", label: "切换到连接节点工具", shortcut: shortcut("workspace:tool-junction"), enabled: true, group: "command" },
+    { id: "workspace:tool-rectangle", label: "切换到矩形工具", shortcut: shortcut("workspace:tool-rectangle"), enabled: true, group: "command" },
+    { id: "workspace:tool-circle", label: "切换到圆工具", shortcut: shortcut("workspace:tool-circle"), enabled: true, group: "command" },
+    { id: "workspace:tool-text", label: "切换到文字工具", shortcut: shortcut("workspace:tool-text"), enabled: true, group: "command" },
     { id: "workspace:agent-panel", label: "打开 Agent 面板", enabled: true, group: "command" },
+    { id: "views:open", label: "打开大图视图导航", description: "自动分区与命名视图", shortcut: shortcut("views:open"), enabled: Boolean(state.document), group: "command" },
+    { id: "settings:open", label: "打开编辑偏好", description: "主题与快捷键", shortcut: shortcut("settings:open"), enabled: true, group: "command" },
+    ...navigationZones.map((zone) => ({ id: `view:${zone.id}`, label: `分区 ${zone.label}`, description: `${zone.elementCount} 个可见元素`, keywords: ["zone", "section", zone.label], enabled: true, group: "view" as const })),
+    ...namedViews.map((view) => ({ id: `named-view:${view.id}`, label: view.name, description: "命名视图", keywords: ["saved view", "bookmark"], enabled: true, group: "view" as const })),
     ...elementPaletteCommands(state.document?.elements ?? []),
   ];
+
+  const navigateToBounds = (bounds: NavigationZone["bounds"]) => {
+    setCanvasViewportRequest((current) => ({ bounds, nonce: (current?.nonce ?? 0) + 1 }));
+  };
+  const navigateToView = (view: CanvasView) => {
+    setCanvasViewportRequest((current) => ({ view, nonce: (current?.nonce ?? 0) + 1 }));
+  };
+  const updateNamedViews = (next: NamedCanvasView[]) => {
+    const documentId = state.document?.id;
+    const sanitized = sanitizeNamedViews(next);
+    setNamedViews(sanitized);
+    if (documentId) persistNamedViews(documentId, sanitized);
+  };
+  const saveNamedView = (name: string, view: CanvasView) => {
+    const id = `view_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    updateNamedViews([...namedViews, { id, name, view: { ...view }, createdAt: Date.now() }]);
+  };
+  const executeCommandId = (id: string) => {
+    const command = paletteCommands.find((item) => item.id === id);
+    if (command && !command.enabled) return false;
+    if (id.startsWith("canvas:")) dispatchCanvasCommand(id.slice("canvas:".length) as CanvasCommandId);
+    else if (id === "workspace:undo") void state.undo();
+    else if (id === "workspace:redo") void state.redo();
+    else if (id === "workspace:duplicate") void state.duplicateSelection();
+    else if (id === "workspace:delete") void state.deleteSelection();
+    else if (id === "workspace:select-all") state.selectAll();
+    else if (id === "workspace:tool-select") state.setTool("select");
+    else if (id === "workspace:tool-line") state.setTool("line");
+    else if (id === "workspace:tool-connector") state.setTool("connector");
+    else if (id === "workspace:tool-junction") state.setTool("junction");
+    else if (id === "workspace:tool-rectangle") state.setTool("rectangle");
+    else if (id === "workspace:tool-circle") state.setTool("circle");
+    else if (id === "workspace:tool-text") state.setTool("text");
+    else if (id === "workspace:agent-panel") setRightPanel("agent");
+    else if (id === "settings:open") setExperienceSettingsOpen(true);
+    else if (id === "views:open") setViewNavigatorOpen(true);
+    else if (id.startsWith("view:")) {
+      const zone = navigationZones.find((item) => `view:${item.id}` === id);
+      if (zone) navigateToBounds(zone.bounds);
+      else return false;
+    } else if (id.startsWith("named-view:")) {
+      const named = namedViews.find((item) => `named-view:${item.id}` === id);
+      if (named) navigateToView(named.view);
+      else return false;
+    } else return false;
+    return true;
+  };
   const executePaletteCommand = (command: PaletteCommand) => {
     if (command.elementId) {
       focusCanvasElement(command.elementId);
       return;
     }
-    if (command.id.startsWith("canvas:")) {
-      dispatchCanvasCommand(command.id.slice("canvas:".length) as CanvasCommandId);
-      return;
-    }
-    if (command.id === "workspace:duplicate") void state.duplicateSelection();
-    else if (command.id === "workspace:delete") void state.deleteSelection();
-    else if (command.id === "workspace:select-all") state.selectAll();
-    else if (command.id === "workspace:tool-select") state.setTool("select");
-    else if (command.id === "workspace:tool-connector") state.setTool("connector");
-    else if (command.id === "workspace:agent-panel") setRightPanel("agent");
+    executeCommandId(command.id);
   };
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const pressed = shortcutFromKeyboardEvent(event);
+      const commandId = commandForShortcut(pressed, shortcutMap);
+      if (commandId === "palette:open") {
+        event.preventDefault();
+        setCommandPaletteOpen((current) => !current);
+        return;
+      }
+      if (commandPaletteOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setCommandPaletteOpen(false);
+        }
+        return;
+      }
+      if (
+        event.target instanceof HTMLInputElement
+        || event.target instanceof HTMLTextAreaElement
+        || event.target instanceof HTMLSelectElement
+        || (event.target instanceof HTMLElement && event.target.isContentEditable)
+      ) return;
+      if (commandId && executeCommandId(commandId)) {
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "Escape") {
+        state.clearSelection();
+        state.setTool("select");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [commandPaletteOpen, shortcutMap, state.document, state.selectedElementIds, namedViews, navigationZones, canvasView]);
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-theme={resolvedAppearance}>
       <header className="topbar">
         <div className="brand"><strong>P&amp;ID-Agent</strong><span>轻量 P&amp;ID 人机协同工作区</span></div>
         <div className="toolbar">
-          {tools.map((tool) => <button key={tool.id} className={state.tool === tool.id ? "active" : ""} onClick={() => state.setTool(tool.id)} title={`${tool.label} (${tool.key})`}>{tool.label}</button>)}
+          {tools.map((tool) => <button key={tool.id} className={state.tool === tool.id ? "active" : ""} onClick={() => state.setTool(tool.id)} title={`${tool.label} (${shortcutMap[`workspace:tool-${tool.id}`] ?? tool.key})`}>{tool.label}</button>)}
         </div>
         <div className="toolbar-actions">
-          <button type="button" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title="命令面板 (Ctrl/Cmd + K)">命令 <kbd>⌘K</kbd></button>
+          <button type="button" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title={`命令面板 (${shortcutMap["palette:open"]})`}>命令 <kbd>{shortcutMap["palette:open"]}</kbd></button>
+          <button type="button" onClick={() => setViewNavigatorOpen(true)} disabled={!state.document} title={`视图导航 (${shortcutMap["views:open"]})`}>视图</button>
+          <button type="button" onClick={() => setExperienceSettingsOpen(true)} title={`编辑偏好 (${shortcutMap["settings:open"]})`}>{resolvedAppearance === "dark" ? "深色" : "浅色"}</button>
           <button onClick={() => void state.duplicateSelection()} disabled={!state.selectedElementIds.length}>复制</button>
           <button onClick={() => void state.undo()}>撤销</button>
           <button onClick={() => void state.redo()}>重做</button>
@@ -434,9 +492,10 @@ export default function App() {
               <span>{state.document.elements.length} elements</span>
               <span>{state.selectedElementIds.length} selected</span>
               <button className={`sync-badge sync-${state.syncState}`} onClick={() => syncActionable && void state.refreshDocument()} disabled={!syncActionable} title={state.pendingExternalRevision ? `服务器 revision ${state.pendingExternalRevision}` : undefined}>{state.syncMessage}</button>
-              <span>框选 · Shift 多选 · 右键快捷操作 · Ctrl/Cmd+K 命令面板</span>
+              <button type="button" className="document-view-button" onClick={() => setViewNavigatorOpen(true)}>分区 {activeZone?.label ?? "—"} · 命名视图 {namedViews.length}</button>
+              <span>框选 · Shift 多选 · 右键快捷操作 · {shortcutMap["palette:open"]} 命令面板</span>
             </div>
-            <EditorCanvas agentPreview={agentCanvasPreview} focusRequest={canvasFocusRequest} commandRequest={canvasCommandRequest} />
+            <EditorCanvas agentPreview={agentCanvasPreview} focusRequest={canvasFocusRequest} commandRequest={canvasCommandRequest} viewportRequest={canvasViewportRequest} onViewChange={setCanvasView} />
           </> : <div className="empty-canvas">没有打开的文档</div>}
         </section>
 
@@ -538,6 +597,20 @@ export default function App() {
         onClose={() => setCommandPaletteOpen(false)}
         onExecute={executePaletteCommand}
       />
+      <ViewNavigator
+        open={viewNavigatorOpen}
+        zones={navigationZones}
+        currentZoneId={activeZone?.id}
+        namedViews={namedViews}
+        currentView={canvasView}
+        onClose={() => setViewNavigatorOpen(false)}
+        onOpenZone={(zone) => { navigateToBounds(zone.bounds); setViewNavigatorOpen(false); }}
+        onOpenNamedView={(view) => { navigateToView(view.view); setViewNavigatorOpen(false); }}
+        onSaveNamedView={saveNamedView}
+        onRenameNamedView={(id, name) => updateNamedViews(namedViews.map((view) => view.id === id ? { ...view, name: name.slice(0, 80) } : view))}
+        onDeleteNamedView={(id) => updateNamedViews(namedViews.filter((view) => view.id !== id))}
+      />
+      <ExperienceSettings open={experienceSettingsOpen} onClose={() => setExperienceSettingsOpen(false)} />
     </div>
   );
 }

@@ -75,7 +75,7 @@ export function CommandPalette({ open, commands, onClose, onExecute }: CommandPa
           onClick={() => execute(command)}
         >
           <span><strong>{command.label}</strong>{command.description ? <small>{command.description}</small> : null}</span>
-          <em>{command.group === "element" ? "定位" : command.enabled ? "执行" : "不可用"}</em>
+          <em>{command.shortcut ? <kbd>{command.shortcut}</kbd> : command.group === "element" || command.group === "view" ? "定位" : command.enabled ? "执行" : "不可用"}</em>
         </button>) : <div className="command-palette-empty">没有匹配的命令或元素</div>}
       </div>
       <footer><span>↑↓ 选择</span><span>Enter 执行</span><span>Esc 关闭</span></footer>

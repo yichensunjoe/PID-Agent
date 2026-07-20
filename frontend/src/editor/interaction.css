@@ -718,3 +718,418 @@
   background: #f8fafc;
   font-size: 9px;
 }
+
+/* Issue 29: browser-local views, shortcuts and application appearance. */
+.document-view-button {
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.experience-settings-backdrop,
+.view-navigator-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.experience-settings,
+.view-navigator {
+  width: min(880px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  color: #1e293b;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
+}
+
+.view-navigator {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.experience-settings > header,
+.view-navigator > header,
+.experience-settings > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-color: #e2e8f0;
+}
+
+.experience-settings > header,
+.view-navigator > header {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.experience-settings > footer {
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.experience-settings > header > div,
+.view-navigator > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.experience-settings > header strong,
+.view-navigator > header strong {
+  font-size: 15px;
+}
+
+.experience-settings > header span,
+.view-navigator > header span {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.experience-settings button,
+.view-navigator button {
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.experience-settings button:hover:not(:disabled),
+.view-navigator button:hover:not(:disabled) {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.experience-settings-body,
+.view-navigator-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.experience-settings-body {
+  display: grid;
+  gap: 16px;
+}
+
+.experience-settings fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 13px;
+}
+
+.experience-settings legend,
+.view-navigator-body h3 {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.appearance-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.appearance-options button {
+  min-height: 74px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  text-align: left;
+}
+
+.appearance-options button.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #dbeafe;
+  box-shadow: inset 0 0 0 1px #60a5fa;
+}
+
+.appearance-options button span,
+.settings-hint,
+.navigator-empty,
+.shortcut-row small,
+.named-view-open span,
+.zone-grid button span {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.settings-hint {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.shortcut-list {
+  display: grid;
+  gap: 3px;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-radius: 7px;
+  padding: 4px 6px;
+}
+
+.shortcut-row h3 {
+  margin: 0;
+  color: #64748b;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.shortcut-row label {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 150px;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  font-size: 11px;
+}
+
+.shortcut-row input,
+.save-view-row input {
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.shortcut-row input:focus,
+.save-view-row input:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  border-color: #2563eb;
+}
+
+.shortcut-row.conflict {
+  background: #fff7ed;
+}
+
+.shortcut-row.conflict input {
+  border-color: #f97316;
+  color: #9a3412;
+}
+
+.shortcut-conflicts {
+  margin-top: 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: #9a3412;
+  background: #fff7ed;
+  font-size: 10px;
+}
+
+.experience-settings > footer > div {
+  display: flex;
+  gap: 7px;
+}
+
+.experience-settings .primary-action {
+  border-color: #2563eb;
+  color: #ffffff;
+  background: #2563eb;
+  font-weight: 650;
+}
+
+.view-navigator-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+}
+
+.view-navigator-body > section {
+  min-width: 0;
+}
+
+.view-navigator-body h3 {
+  margin: 0 0 9px;
+}
+
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 7px;
+}
+
+.zone-grid button {
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  text-align: left;
+}
+
+.zone-grid button strong {
+  font-size: 15px;
+}
+
+.zone-grid button.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.save-view-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  margin-bottom: 9px;
+}
+
+.named-view-list {
+  display: grid;
+  gap: 6px;
+}
+
+.named-view-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.named-view-open {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.named-view-open strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view-navigator button.danger {
+  color: #b91c1c;
+}
+
+@media (max-width: 820px) {
+  .view-navigator-body {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .shortcut-row label {
+    grid-template-columns: minmax(0, 1fr) 140px;
+  }
+}
+
+/* Dark application chrome. Canvas/SVG colors remain document-controlled. */
+[data-theme="dark"] .canvas-floating-toolbar,
+[data-theme="dark"] .canvas-context-menu,
+[data-theme="dark"] .command-palette,
+[data-theme="dark"] .experience-settings,
+[data-theme="dark"] .view-navigator,
+[data-theme="dark"] .canvas-minimap {
+  border-color: #475569;
+  color: #e2e8f0;
+  background: #111827;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+}
+
+[data-theme="dark"] .command-palette-search,
+[data-theme="dark"] .command-palette footer,
+[data-theme="dark"] .experience-settings > header,
+[data-theme="dark"] .view-navigator > header,
+[data-theme="dark"] .experience-settings > footer,
+[data-theme="dark"] .canvas-minimap-heading {
+  border-color: #334155;
+  color: #cbd5e1;
+  background: #0f172a;
+}
+
+[data-theme="dark"] .command-palette-search input,
+[data-theme="dark"] .experience-settings input,
+[data-theme="dark"] .view-navigator input {
+  color: #f8fafc;
+  background: #1e293b;
+  border-color: #475569;
+}
+
+[data-theme="dark"] .command-palette-search > span,
+[data-theme="dark"] .command-palette-search button,
+[data-theme="dark"] .experience-settings button,
+[data-theme="dark"] .view-navigator button,
+[data-theme="dark"] .canvas-floating-toolbar button,
+[data-theme="dark"] .canvas-context-menu button {
+  border-color: #475569;
+  color: #dbeafe;
+  background: #1e293b;
+}
+
+[data-theme="dark"] .command-palette-results > button,
+[data-theme="dark"] .shortcut-row label,
+[data-theme="dark"] .experience-settings legend,
+[data-theme="dark"] .view-navigator-body h3,
+[data-theme="dark"] .canvas-floating-toolbar span,
+[data-theme="dark"] .canvas-minimap-heading strong {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .command-palette-results > button.active:not(:disabled),
+[data-theme="dark"] .command-palette-results > button:hover:not(:disabled),
+[data-theme="dark"] .experience-settings button:hover:not(:disabled),
+[data-theme="dark"] .view-navigator button:hover:not(:disabled) {
+  color: #bfdbfe;
+  background: #1e3a5f;
+}
+
+[data-theme="dark"] .experience-settings fieldset {
+  border-color: #334155;
+}
+
+[data-theme="dark"] .appearance-options button.active,
+[data-theme="dark"] .zone-grid button.active {
+  border-color: #60a5fa;
+  color: #dbeafe;
+  background: #1e3a5f;
+}
+
+[data-theme="dark"] .shortcut-row.conflict,
+[data-theme="dark"] .shortcut-conflicts {
+  border-color: #9a3412;
+  color: #fdba74;
+  background: #431407;
+}
+
+[data-theme="dark"] .canvas-minimap-background {
+  fill: #0f172a;
+}
+
+[data-theme="dark"] .canvas-minimap-page {
+  fill: #1e293b;
+  stroke: #475569;
+}
