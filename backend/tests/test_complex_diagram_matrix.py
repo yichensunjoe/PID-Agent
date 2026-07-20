@@ -124,7 +124,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ),
         InstrumentTapOperation(
             main_connector_id="pipe_downstream",
-            junction_point=Point(x=1050, y=382),
+            junction_point=Point(x=1050, y=450),
             measurement="temperature",
             instrument_label="TE-102",
             junction_id="j_te102",
