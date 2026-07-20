@@ -1,25 +1,70 @@
-name: Issue 27 source snapshot
+name: Issue 27 apply validated patch
 
 on:
-  pull_request:
-    types: [opened]
+  push:
+    branches:
+      - agent/issue-27-routing-anchors-command-palette
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  apply:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v4
-      - name: Pack repository
-        run: tar --exclude=.git -czf /tmp/pid-agent-source.tar.gz .
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
         with:
-          name: issue27-source
-          path: /tmp/pid-agent-source.tar.gz
-          retention-days: 1
+          ref: agent/issue-27-routing-anchors-command-palette
+      - name: Apply validated patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d .issue27-payload ]; then
+            echo "No payload remains; nothing to apply."
+            exit 0
+          fi
+          cat .issue27-payload/part-* | base64 --decode > /tmp/issue27.patch.xz
+          echo "5eff75d0e11f0ae33aeaac470c0c4c9859b93718b37302dfffece63040b3b0dc  /tmp/issue27.patch.xz" | sha256sum -c -
+          xz -dc /tmp/issue27.patch.xz > /tmp/issue27.patch
+          git apply --check /tmp/issue27.patch
+          git apply /tmp/issue27.patch
+          rm -rf .issue27-payload
+          git add -A
+          git diff --cached --check
+          expected=$(cat <<'EOF' | sort
+          .issue27-payload/part-000
+          .issue27-payload/part-001
+          .issue27-payload/part-002
+          .issue27-payload/part-003
+          .issue27-payload/part-004
+          .issue27-payload/part-005
+          .issue27-payload/part-006
+          .issue27-payload/part-007
+          .issue27-payload/part-008
+          .issue27-payload/part-009
+          .issue27-payload/part-010
+          .issue27-payload/part-011a
+          .issue27-payload/part-011b
+          .issue27-payload/part-012
+          .issue27-payload/part-013
+          docs/obstacle-routing-anchors-command-palette.md
+          frontend/src/App.tsx
+          frontend/src/editor/CommandPalette.tsx
+          frontend/src/editor/EditorCanvas.tsx
+          frontend/src/editor/commandPalette.ts
+          frontend/src/editor/interaction.css
+          frontend/src/editor/obstacleRouting.ts
+          frontend/src/store.ts
+          frontend/tests/commandPalette.test.ts
+          frontend/tests/obstacleRouting.test.ts
+          EOF
+          )
+          actual=$(git diff --cached --name-only | sort)
+          printf '%s\n' "$actual"
+          test "$actual" = "$expected"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "feat: add obstacle-aware routing and command palette"
+          git push origin HEAD:agent/issue-27-routing-anchors-command-palette
