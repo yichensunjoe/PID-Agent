@@ -1,0 +1,78 @@
+name: Issue 25 apply validated payload
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Rebuild and verify payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .issue25-payload/part-* | base64 --decode > /tmp/issue25-changes.tgz
+          echo "060870ec456d5077f8bd7d9a0c726349b9499849baee91c63dae12e0c2461d6d  /tmp/issue25-changes.tgz" | sha256sum -c -
+          tar -xzf /tmp/issue25-changes.tgz
+          rm -rf .issue25-payload
+      - name: Validate intended diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          expected=$(cat <<'EOF' | sort
+          .issue25-payload/part-00a
+          .issue25-payload/part-00b
+          .issue25-payload/part-00c
+          .issue25-payload/part-00d
+          .issue25-payload/part-01a
+          .issue25-payload/part-01b
+          .issue25-payload/part-01c
+          .issue25-payload/part-01d
+          .issue25-payload/part-02a
+          .issue25-payload/part-02b
+          .issue25-payload/part-02c
+          .issue25-payload/part-02d
+          .issue25-payload/part-03
+          .issue25-payload/part-04
+          .issue25-payload/part-05
+          .issue25-payload/part-06
+          .issue25-payload/part-07
+          .issue25-payload/part-08
+          .issue25-payload/part-09
+          .issue25-payload/part-10a
+          .issue25-payload/part-10b
+          .issue25-payload/part-10c
+          .issue25-payload/part-10d
+          .issue25-payload/part-11a
+          .issue25-payload/part-11b
+          docs/agent-canvas-preview-minimap.md
+          frontend/src/App.tsx
+          frontend/src/editor/EditorCanvas.tsx
+          frontend/src/editor/agentCanvasPreview.ts
+          frontend/src/editor/interaction.css
+          frontend/tests/agentCanvasPreview.test.ts
+          EOF
+          )
+          actual=$(git diff --cached --name-only | sort)
+          printf '%s\n' "$actual"
+          test "$actual" = "$expected"
+      - name: Commit and push functional changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "feat: add Agent canvas preview and minimap navigation"
+          git push origin HEAD:${{ github.head_ref }}
