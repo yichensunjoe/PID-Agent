@@ -55,6 +55,28 @@ jobs:
           --fetch-retries=1
           --fetch-timeout=30000
 
+      - name: Repair validated transport character
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+
+          path = Path('.github/issue35-payload-01.b64')
+          payload = path.read_text(encoding='ascii').replace('\r', '').replace('\n', '')
+          damaged_sha256 = 'a853a32872cf2809109b80388cf4e0debf05d45e3a9d76e196e3d3be44e9c435'
+          repaired_sha256 = '2a6082b5a98dc79e591febe71831bd99fd4c6f4e7f258ec862d9689249573263'
+          if len(payload) != 16902 or sha256(payload.encode('ascii')).hexdigest() != damaged_sha256:
+              raise SystemExit('unexpected issue35 transport segment')
+          if payload[4918] != 'l':
+              raise SystemExit('unexpected issue35 transport character')
+          payload = payload[:4918] + 'p' + payload[4919:]
+          if sha256(payload.encode('ascii')).hexdigest() != repaired_sha256:
+              raise SystemExit('issue35 transport repair failed')
+          path.write_text(payload, encoding='ascii')
+          PY
+
       - name: Validate, test, apply and clean payload
         shell: bash
         run: bash -x .github/issue35-apply.sh 2>&1 | tee /tmp/issue35-apply.log
