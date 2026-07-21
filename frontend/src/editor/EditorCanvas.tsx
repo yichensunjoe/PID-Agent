@@ -646,7 +646,13 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     : { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height };
 
   const pointFromClient = (clientX: number, clientY: number): Point => {
-    const rect = svgRef.current?.getBoundingClientRect();
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM();
+    if (matrix) {
+      const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+      return { x: point.x, y: point.y };
+    }
+    const rect = svg?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return { x: view.x + ((clientX - rect.left) / rect.width) * view.width, y: view.y + ((clientY - rect.top) / rect.height) * view.height };
   };
@@ -1481,12 +1487,12 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     else if (id === "clear-route-locks") void clearRouteLocks(selectedConnectors);
   };
 
-  return <div ref={shellRef} className="editor-canvas-shell">
-    {agentPreview ? <div className={`agent-canvas-preview-badge ${agentSimulation?.ok ? "valid" : "invalid"}`}>
+  return <div ref={shellRef} className="editor-canvas-shell" data-testid="editor-canvas-shell">
+    {agentPreview ? <div data-testid="agent-preview-badge" className={`agent-canvas-preview-badge ${agentSimulation?.ok ? "valid" : "invalid"}`}>
       <div><strong>Agent 画布预览</strong><span>{agentSimulation?.ok ? `${agentSimulation.affectedIds.length} 个受影响元素` : agentSimulation?.reason || "无法生成预览"}</span></div>
       <button type="button" onClick={fitPreview} disabled={!agentSimulation?.ok || !agentSimulation.affectedIds.length}>定位预览</button>
     </div> : null}
-    {selectedElements.length ? <div className="canvas-floating-toolbar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
+    {selectedElements.length ? <div data-testid="canvas-floating-toolbar" className="canvas-floating-toolbar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <span>{selectedElements.length === 1 ? singleSelected?.type : `${selectedElements.length} 项`}</span>
       {singleSelected?.type === "connector" && !selectionEditingBlocked ? <>
         <button type="button" onClick={() => void addBend(singleSelected)}>加折点</button>
@@ -1522,6 +1528,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     </div> : null}
     <svg
       ref={svgRef}
+      data-testid="editor-canvas"
       className={`editor-canvas tool-${tool} workspace-${canvasMode} grid-${gridEnabled ? "on" : "off"}`}
       viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
       data-visible-elements={visibleElements.length}
@@ -1554,6 +1561,9 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       </g> : null}
       {activeElements.map((element) => <g
         key={element.id}
+        data-element-id={element.id}
+        data-element-type={element.type}
+        data-element-locked={lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)}
         className={`canvas-element ${selectedSet.has(element.id) ? "is-selected" : ""} ${lockedLayerIds.has(element.layer_id) || isElementEditLocked(element) ? "is-locked" : ""}`}
         onPointerEnter={() => setHoveredElementId(element.id)}
         onPointerLeave={() => setHoveredElementId((current) => current === element.id ? null : current)}
@@ -1562,7 +1572,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       >{renderHitTarget(element, hitPadding)}{renderElement(element, symbolMap)}</g>)}
       {connectors.map((connector) => <ConnectorJumps key={`jumps-${connector.id}`} connector={connector} connectors={connectors} background={document.canvas.background} />)}
       {connectors.map((connector) => <FlowArrow key={`arrow-${connector.id}`} connector={connector} />)}
-      {agentSimulation?.ok ? <g className="agent-ghost-preview" pointerEvents="none">
+      {agentSimulation?.ok ? <g data-testid="agent-ghost-preview" className="agent-ghost-preview" pointerEvents="none">
         {agentSimulation.deleted.map((change) => change.before ? <g key={`delete-${change.id}`} className="agent-ghost-deleted">{renderElement(previewTint(change.before, "#dc2626"), symbolMap)}</g> : null)}
         {agentSimulation.updated.map((change) => <g key={`update-${change.id}`}>
           {change.before ? <g className="agent-ghost-updated-before">{renderElement(previewTint(change.before, "#7c3aed", [5, 5], 0.45), symbolMap)}</g> : null}
@@ -1575,7 +1585,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         const size = 15 * portScale;
         const x = bounds.x2 - size * 0.8;
         const y = bounds.y1 - size * 0.2;
-        return <g key={`element-lock-${element.id}`} className="element-lock-badge" pointerEvents="none">
+        return <g key={`element-lock-${element.id}`} data-testid="element-lock-badge" data-element-id={element.id} className="element-lock-badge" pointerEvents="none">
           <rect x={x} y={y + size * 0.35} width={size} height={size * 0.75} rx={size * 0.16} />
           <path d={`M ${x + size * 0.25} ${y + size * 0.42} V ${y + size * 0.23} A ${size * 0.25} ${size * 0.25} 0 0 1 ${x + size * 0.75} ${y + size * 0.23} V ${y + size * 0.42}`} />
         </g>;
@@ -1586,7 +1596,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         if (element.type === "junction") {
           const hit: ConnectionHit = { element, port: { id: "node", name: "连接节点" }, point: element.position };
           const active = draft?.activeConnection?.element.id === element.id || endpointDrag?.activeConnection?.element.id === element.id;
-          return <g key={`port-${element.id}`}><circle className="port-hit-target" cx={element.position.x} cy={element.position.y} r={portRadius * 2.5} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onPortPointerDown(event, hit)} /><circle cx={element.position.x} cy={element.position.y} r={active ? portRadius * 1.6 : portRadius * 1.15} fill={active ? "#f97316" : "#ffffff"} stroke={active ? "#c2410c" : "#2563eb"} strokeWidth={2 * portScale} vectorEffect="non-scaling-stroke" pointerEvents="none" /></g>;
+          return <g key={`port-${element.id}`}><circle className="port-hit-target" data-port-element-id={element.id} data-port-id="node" cx={element.position.x} cy={element.position.y} r={portRadius * 2.5} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onPortPointerDown(event, hit)} /><circle cx={element.position.x} cy={element.position.y} r={active ? portRadius * 1.6 : portRadius * 1.15} fill={active ? "#f97316" : "#ffffff"} stroke={active ? "#c2410c" : "#2563eb"} strokeWidth={2 * portScale} vectorEffect="non-scaling-stroke" pointerEvents="none" /></g>;
         }
         if (element.type !== "symbol") return null;
         const definition = symbolMap.get(element.symbol_key);
@@ -1596,7 +1606,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
           const hit: ConnectionHit = { element, port, point };
           const active = (draft?.activeConnection?.element.id === element.id && draft.activeConnection.port.id === port.id)
             || (endpointDrag?.activeConnection?.element.id === element.id && endpointDrag.activeConnection.port.id === port.id);
-          return <g key={port.id}><circle className="port-hit-target" cx={point.x} cy={point.y} r={portRadius * 2.5} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onPortPointerDown(event, hit)} /><circle cx={point.x} cy={point.y} r={active ? portRadius * 1.45 : portRadius} fill={active ? "#f97316" : "#ffffff"} stroke={active ? "#c2410c" : "#2563eb"} strokeWidth={2 * portScale} vectorEffect="non-scaling-stroke" pointerEvents="none" />{selectedSet.has(element.id) ? <text x={point.x + portRadius * 1.8} y={point.y - portRadius * 1.2} fontSize={11 * portScale} fill="#1d4ed8" pointerEvents="none">{port.name}</text> : null}</g>;
+          return <g key={port.id}><circle className="port-hit-target" data-port-element-id={element.id} data-port-id={port.id} cx={point.x} cy={point.y} r={portRadius * 2.5} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onPortPointerDown(event, hit)} /><circle cx={point.x} cy={point.y} r={active ? portRadius * 1.45 : portRadius} fill={active ? "#f97316" : "#ffffff"} stroke={active ? "#c2410c" : "#2563eb"} strokeWidth={2 * portScale} vectorEffect="non-scaling-stroke" pointerEvents="none" />{selectedSet.has(element.id) ? <text x={point.x + portRadius * 1.8} y={point.y - portRadius * 1.2} fontSize={11 * portScale} fill="#1d4ed8" pointerEvents="none">{port.name}</text> : null}</g>;
         })}</g>;
       })}
       {activeElements.map((element) => {
@@ -1614,6 +1624,8 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
             const size = (locked ? 8 : 6.5) * portScale;
             return <rect
               key={`anchor-${element.id}-${pointIndex}`}
+              data-connector-id={element.id}
+              data-point-index={pointIndex}
               className={`connector-route-anchor ${locked ? "locked" : "unlocked"}`}
               x={point.x - size / 2}
               y={point.y - size / 2}
@@ -1631,14 +1643,14 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
             const next = element.points[segmentIndex + 1];
             const middle = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
             const locked = segmentTouchesLockedPoint(element, segmentIndex);
-            return <rect key={`segment-${element.id}-${segmentIndex}`} className={`connector-segment-handle ${locked ? "locked" : ""} ${segmentDrag?.connector.id === element.id && segmentDrag.segmentIndex === segmentIndex ? "active" : ""}`} x={middle.x - 5 * portScale} y={middle.y - 5 * portScale} width={10 * portScale} height={10 * portScale} rx={2 * portScale} onPointerDown={(event: React.PointerEvent<SVGRectElement>) => onSegmentHandlePointerDown(event, element, segmentIndex)} />;
+            return <rect key={`segment-${element.id}-${segmentIndex}`} data-connector-id={element.id} data-segment-index={segmentIndex} className={`connector-segment-handle ${locked ? "locked" : ""} ${segmentDrag?.connector.id === element.id && segmentDrag.segmentIndex === segmentIndex ? "active" : ""}`} x={middle.x - 5 * portScale} y={middle.y - 5 * portScale} width={10 * portScale} height={10 * portScale} rx={2 * portScale} onPointerDown={(event: React.PointerEvent<SVGRectElement>) => onSegmentHandlePointerDown(event, element, segmentIndex)} />;
           })}
         </g>;
       })}
       {draft ? <DraftPreview tool={quickConnector.current || draft.branch ? "connector" : tool} start={draft.start} current={draft.current} branch={Boolean(draft.branch)} /> : null}
       {boxSelection ? <SelectionBox start={boxSelection.start} current={boxSelection.current} /> : null}
     </svg>
-    {minimapTransform && minimapViewport ? <div className="canvas-minimap" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
+    {minimapTransform && minimapViewport ? <div data-testid="canvas-minimap" className="canvas-minimap" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <div className="canvas-minimap-heading"><strong>导航</strong><span>{visibleElements.length} elements</span></div>
       <svg
         viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}
@@ -1668,7 +1680,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         <rect className="canvas-minimap-viewport" x={minimapViewport.x1} y={minimapViewport.y1} width={Math.max(3, minimapViewport.x2 - minimapViewport.x1)} height={Math.max(3, minimapViewport.y2 - minimapViewport.y1)} />
       </svg>
     </div> : null}
-    <div className="canvas-status-bar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
+    <div data-testid="canvas-status-bar" className="canvas-status-bar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <div className={`canvas-status-message ${inlinePreview ? inlinePreview.result.ok ? "success" : "warning" : ""}`}>
         {inlineStatus || canvasMessage || `${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"}`}
       </div>

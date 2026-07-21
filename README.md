@@ -221,8 +221,13 @@ GET    /api/v2/agent/tool-schema
 ```bash
 pytest -q
 ruff check backend
-cd frontend && npm run build
+cd frontend
+npm test
+npm run build
+npm run test:e2e
 ```
+
+Playwright 安装、headed 模式、视觉基线更新和 trace 查看方式见 [`docs/browser-e2e-visual-acceptance.md`](docs/browser-e2e-visual-acceptance.md)。
 
 ## 近期路线
 

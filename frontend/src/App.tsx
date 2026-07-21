@@ -15,6 +15,7 @@ import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
 import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
+import { installE2EBridge } from "./e2eBridge";
 import { useWorkspace } from "./store";
 import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
 import "./issue1.css";
@@ -86,6 +87,10 @@ export default function App() {
   const [namedViews, setNamedViews] = useState<NamedCanvasView[]>([]);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
+  useEffect(() => {
+    if (import.meta.env.MODE !== "e2e") return;
+    return installE2EBridge(() => pendingPlan, setPendingPlan);
+  }, [pendingPlan]);
   useEffect(() => { if (state.selectedElementIds.length) setRightPanel("properties"); }, [state.selectedElementIds]);
   useEffect(() => {
     const document = state.document;
@@ -115,9 +120,9 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
-    const documentId = state.document?.id;
-    setNamedViews(documentId ? loadNamedViews(documentId) : []);
-    setCanvasView(null);
+    const document = state.document;
+    setNamedViews(document ? loadNamedViews(document.id) : []);
+    setCanvasView(document ? { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height } : null);
     setCanvasViewportRequest(null);
     setViewNavigatorOpen(false);
   }, [state.document?.id]);
@@ -486,16 +491,16 @@ export default function App() {
   }, [commandPaletteOpen, shortcutMap, state.document, state.selectedElementIds, namedViews, navigationZones, canvasView]);
 
   return (
-    <div className="app-shell" data-theme={resolvedAppearance}>
+    <div className="app-shell" data-testid="app-shell" data-theme={resolvedAppearance} data-document-id={state.document?.id ?? ""} data-revision={state.document?.revision ?? ""}>
       <header className="topbar">
         <div className="brand"><strong>P&amp;ID-Agent</strong><span>轻量 P&amp;ID 人机协同工作区</span></div>
         <div className="toolbar">
           {tools.map((tool) => <button key={tool.id} className={state.tool === tool.id ? "active" : ""} onClick={() => state.setTool(tool.id)} title={`${tool.label} (${shortcutMap[`workspace:tool-${tool.id}`] ?? tool.key})`}>{tool.label}</button>)}
         </div>
         <div className="toolbar-actions">
-          <button type="button" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title={`命令面板 (${shortcutMap["palette:open"]})`}>命令 <kbd>{shortcutMap["palette:open"]}</kbd></button>
-          <button type="button" onClick={() => setViewNavigatorOpen(true)} disabled={!state.document} title={`视图导航 (${shortcutMap["views:open"]})`}>视图</button>
-          <button type="button" onClick={() => setExperienceSettingsOpen(true)} title={`编辑偏好 (${shortcutMap["settings:open"]})`}>{resolvedAppearance === "dark" ? "深色" : "浅色"}</button>
+          <button type="button" data-testid="command-palette-trigger" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title={`命令面板 (${shortcutMap["palette:open"]})`}>命令 <kbd>{shortcutMap["palette:open"]}</kbd></button>
+          <button type="button" data-testid="view-navigator-trigger" onClick={() => setViewNavigatorOpen(true)} disabled={!state.document} title={`视图导航 (${shortcutMap["views:open"]})`}>视图</button>
+          <button type="button" data-testid="experience-settings-trigger" onClick={() => setExperienceSettingsOpen(true)} title={`编辑偏好 (${shortcutMap["settings:open"]})`}>{resolvedAppearance === "dark" ? "深色" : "浅色"}</button>
           <button onClick={() => void state.duplicateSelection()} disabled={!state.selectedElementIds.length}>复制</button>
           <button onClick={() => void state.undo()}>撤销</button>
           <button onClick={() => void state.redo()}>重做</button>
@@ -504,17 +509,17 @@ export default function App() {
       </header>
 
       <main className="workspace">
-        <aside className="sidebar documents-panel">
-          <div className="panel-heading"><h2>文档</h2><button onClick={() => void state.createDocument()}>新建</button></div>
+        <aside className="sidebar documents-panel" data-testid="documents-panel">
+          <div className="panel-heading"><h2>文档</h2><button data-testid="create-document" onClick={() => void state.createDocument()}>新建</button></div>
           <div className="document-list">
-            {state.documents.map((document) => <button key={document.id} className={state.document?.id === document.id ? "active" : ""} onClick={() => void state.openDocument(document.id)}><strong>{document.name}</strong><span>{document.element_count} 个元素 · r{document.revision}</span></button>)}
+            {state.documents.map((document) => <button key={document.id} data-document-id={document.id} className={state.document?.id === document.id ? "active" : ""} onClick={() => void state.openDocument(document.id)}><strong>{document.name}</strong><span>{document.element_count} 个元素 · r{document.revision}</span></button>)}
           </div>
           <div className="divider" />
           <h2>单位图例</h2>
           <SymbolPalette />
         </aside>
 
-        <section className="canvas-stage" onPointerDownCapture={() => setCanvasPointerActive(true)} onPointerUpCapture={() => setCanvasPointerActive(false)} onPointerCancelCapture={() => setCanvasPointerActive(false)}>
+        <section className="canvas-stage" data-testid="canvas-stage" onPointerDownCapture={() => setCanvasPointerActive(true)} onPointerUpCapture={() => setCanvasPointerActive(false)} onPointerCancelCapture={() => setCanvasPointerActive(false)}>
           {state.document ? <>
             <div className="document-bar">
               <strong>{state.document.name}</strong>
