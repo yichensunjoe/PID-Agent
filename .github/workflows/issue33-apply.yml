@@ -48,5 +48,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: issue33-apply-diagnostics
-          path: /tmp/issue33-apply.log
+          path: |
+            /tmp/issue33-apply.log
+            .github/issue33-payload-03.b64
           retention-days: 1
