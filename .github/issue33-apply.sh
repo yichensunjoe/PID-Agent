@@ -73,6 +73,21 @@ while IFS= read -r path; do
   install -D "/tmp/issue33-extracted/${path}" "${path}"
 done < /tmp/issue33-text-paths.txt
 
+python - <<'PY_LOCKFILE'
+from pathlib import Path
+
+path = Path("frontend/package-lock.json")
+content = path.read_text(encoding="utf-8")
+internal = "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/"
+public = "https://registry.npmjs.org/"
+if content.count(internal) != 79:
+    raise SystemExit("unexpected package-lock registry URL count")
+content = content.replace(internal, public)
+if internal in content or "applied-caas-gateway" in content:
+    raise SystemExit("internal package registry URL remains")
+path.write_text(content, encoding="utf-8")
+PY_LOCKFILE
+
 sudo apt-get update
 sudo apt-get install --yes libcairo2 fonts-noto-cjk
 python -m pip install --upgrade pip
