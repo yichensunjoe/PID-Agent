@@ -247,3 +247,20 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   color: #bfdbfe;
   background: #1e3a5f;
 }
+
+html[data-e2e="true"] *,
+html[data-e2e="true"] *::before,
+html[data-e2e="true"] *::after {
+  animation: none !important;
+  caret-color: transparent !important;
+  scroll-behavior: auto !important;
+  transition: none !important;
+}
+
+html[data-e2e="true"] body,
+html[data-e2e="true"] button,
+html[data-e2e="true"] input,
+html[data-e2e="true"] select,
+html[data-e2e="true"] textarea {
+  font-family: "Noto Sans CJK SC", "Noto Sans", sans-serif !important;
+}
