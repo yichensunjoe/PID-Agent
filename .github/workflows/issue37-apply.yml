@@ -64,5 +64,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: issue37-apply-diagnostics
-          path: /tmp/issue37-apply.log
+          path: |
+            /tmp/issue37-apply.log
+            .github/issue37-payload-00.b64
+          include-hidden-files: true
           retention-days: 1
