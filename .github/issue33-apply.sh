@@ -162,6 +162,7 @@ from pathlib import Path
 import subprocess
 
 expected = {
+    ".github/workflows/issue33-apply.yml",
     ".gitignore",
     "README.md",
     "docs/browser-e2e-visual-acceptance.md",
