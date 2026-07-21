@@ -1,0 +1,45 @@
+name: Issue 35 source snapshot
+
+on:
+  push:
+    branches: [agent/issue-35-project-json-import]
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: >-
+      github.ref_name == 'agent/issue-35-project-json-import' ||
+      github.event.pull_request.head.ref == 'agent/issue-35-project-json-import'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/issue-35-project-json-import
+          fetch-depth: 0
+
+      - name: Verify base and package source
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA=fcb77d51120ca47a542dd15844f4d205391e70db
+          git merge-base --is-ancestor "$BASE_SHA" HEAD
+          git rev-parse HEAD > issue35-source-commit.txt
+          tar --exclude=.git --exclude=issue35-source.tar.gz --exclude=issue35-source-sha256.txt -czf issue35-source.tar.gz .
+          sha256sum issue35-source.tar.gz > issue35-source-sha256.txt
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue35-source-${{ github.sha }}
+          path: |
+            issue35-source.tar.gz
+            issue35-source-commit.txt
+            issue35-source-sha256.txt
+          retention-days: 1
+          if-no-files-found: error
