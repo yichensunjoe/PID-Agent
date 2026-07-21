@@ -127,6 +127,12 @@ export async function openDocument(page: Page, id: string): Promise<void> {
   await page.evaluate(async (documentId) => window.__PID_AGENT_E2E__!.openDocument(documentId), id);
   await expect(page.getByTestId("app-shell")).toHaveAttribute("data-document-id", id);
   await expect(page.getByTestId("editor-canvas")).toBeVisible();
+  // The project bootstrap runs independently from the document bridge. Wait for the
+  // deterministic E2E project settings and workspace controls so visual captures do
+  // not race an intermediate shell state.
+  await expect(page.getByTestId("project-summary")).toContainText("E2E Project");
+  await expect(page.getByTestId("import-document-json")).toBeVisible();
+  await expect(page.getByTestId("export-project-package")).toBeVisible();
 }
 
 export async function workspaceSnapshot(page: Page): Promise<any> {
