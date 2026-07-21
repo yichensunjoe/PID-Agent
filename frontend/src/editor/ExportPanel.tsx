@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildDxfQuery, type DxfExportSettings, type DxfUnits } from "../dxfExport";
 import {
   buildPdfQuery,
   type ExportRange,
@@ -9,7 +10,7 @@ import {
 } from "../pdfExport";
 import { useWorkspace } from "../store";
 
-type ExportFormat = "svg" | "png" | "pdf";
+type ExportFormat = "svg" | "png" | "pdf" | "dxf";
 
 function currentViewport() {
   const svg = document.querySelector<SVGSVGElement>("svg.editor-canvas");
@@ -56,6 +57,8 @@ export function ExportPanel() {
   const [drawingNumber, setDrawingNumber] = useState("");
   const [revision, setRevision] = useState("");
   const [drawingDate, setDrawingDate] = useState("");
+  const [dxfUnits, setDxfUnits] = useState<DxfUnits>("mm");
+  const [dxfScale, setDxfScale] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -79,11 +82,14 @@ export function ExportPanel() {
     projectName, drawingNumber, revision, drawingDate,
   });
 
+  const dxfSettings = (): DxfExportSettings => ({ units: dxfUnits, scale: dxfScale });
+
   const viewportForRange = () => range === "viewport" ? currentViewport() : null;
 
   const queryForFormat = () => {
     const viewport = viewportForRange();
     if (format === "pdf") return buildPdfQuery(range, padding, pdfSettings(), viewport);
+    if (format === "dxf") return buildDxfQuery(range, padding, dxfSettings(), viewport);
     const query = new URLSearchParams({ range, padding: String(padding) });
     if (format === "png") query.set("scale", String(scale));
     if (range === "viewport") {
@@ -157,7 +163,7 @@ export function ExportPanel() {
         </label>
         <label>格式
           <select data-testid="export-format" value={format} onChange={(event) => setFormat(event.target.value as ExportFormat)} disabled={busy}>
-            <option value="svg">SVG</option><option value="png">PNG</option><option value="pdf">PDF</option>
+            <option value="svg">SVG</option><option value="png">PNG</option><option value="pdf">PDF</option><option value="dxf">DXF</option>
           </select>
         </label>
         <label>内容边距
@@ -167,6 +173,23 @@ export function ExportPanel() {
           <input type="number" min={0.1} max={8} step={0.1} value={scale} onChange={(event) => setScale(Math.min(8, Math.max(0.1, Number(event.target.value) || 1)))} disabled={busy || format !== "png"} />
         </label>
       </div>
+
+      {format === "dxf" ? (
+        <div className="pdf-export-options" data-testid="dxf-export-options">
+          <div className="export-grid">
+            <label>CAD 单位
+              <select data-testid="dxf-units" value={dxfUnits} onChange={(event) => setDxfUnits(event.target.value as DxfUnits)} disabled={busy}>
+                <option value="unitless">无单位</option><option value="mm">毫米</option><option value="cm">厘米</option>
+                <option value="m">米</option><option value="in">英寸</option><option value="ft">英尺</option>
+              </select>
+            </label>
+            <label>坐标比例
+              <input data-testid="dxf-scale" type="number" min={0.000001} max={1000} step="any" value={dxfScale} onChange={(event) => setDxfScale(Number(event.target.value))} disabled={busy} />
+            </label>
+          </div>
+          <p className="group-hint">DXF 使用 AC1027，保留可见图层、工程实体和 PID_AGENT 元数据。屏幕 Y 轴会转换为 CAD 向上坐标。</p>
+        </div>
+      ) : null}
 
       {format === "pdf" ? (
         <div className="pdf-export-options" data-testid="pdf-export-options">
@@ -192,7 +215,7 @@ export function ExportPanel() {
         </div>
       ) : null}
 
-      <p className="group-hint">{explanation} 超大 PNG 按像素限制拒绝；PDF 分页按服务端页数上限拒绝。</p>
+      <p className="group-hint">{explanation} 超大 PNG 按像素限制拒绝；PDF 分页按服务端页数上限拒绝；DXF 按实体数量上限拒绝。</p>
       <button className="primary" data-testid="export-submit" type="button" disabled={busy} onClick={() => void startExport()}>{exporting ? "正在生成…" : `导出 ${format.toUpperCase()}`}</button>
       {error ? <div className="inspector-hint" data-testid="export-error">{error}</div> : null}
     </section>
