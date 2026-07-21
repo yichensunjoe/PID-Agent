@@ -49,8 +49,8 @@ jobs:
 
           path = Path('.github/issue33-payload-03.b64')
           payload = path.read_text(encoding='ascii').replace('\r', '').replace('\n', '')
-          damaged_sha256 = 'effa3c86999c8c360d35ab1cf7647a7377db0be554d2a0c8037b8a1bf5b8faca'
-          repaired_sha256 = '89bbb0608d4128dd209de2cc072b1edc009b1b0814a8bb37378cfa10ce7181ec'
+          damaged_sha256 = 'f30550defcb0058f28dcacd9517bc9f6d0c0b8767d18b9135d9b2b9b454d8635'
+          repaired_sha256 = '8e2a534c9d6f7c84b6d3cb0ee25a7478537d44c2169c43821d09b42237912858'
           if len(payload) != 14067 or sha256(payload.encode('ascii')).hexdigest() != damaged_sha256:
               raise SystemExit('unexpected issue33 transport segment')
           payload = payload[:10072] + 'n' + payload[10072:]
