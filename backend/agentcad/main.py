@@ -54,7 +54,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "If-Match"],
-        expose_headers=["X-PID-Agent-Request-ID", "Content-Disposition"],
+        expose_headers=[
+            "X-PID-Agent-Request-ID",
+            "Content-Disposition",
+            "X-PID-Agent-PDF-Page-Count",
+            "X-PID-Agent-PDF-Page-Number",
+            "X-PID-Agent-PDF-Paper-Size",
+            "X-PID-Agent-PDF-Orientation",
+            "X-PID-Agent-PDF-Layout",
+        ],
     )
 
     @app.middleware("http")

@@ -184,10 +184,58 @@ class AgentCADClient:
         )
         return AgentGenerateResult.model_validate(response.json())
 
+
+    def export_pdf(
+        self,
+        document_id: str,
+        destination: str | Path,
+        *,
+        export_range: str = "content",
+        paper_size: str = "A3",
+        orientation: str = "landscape",
+        layout: str = "fit",
+        margin_mm: float = 10,
+        frame: bool = True,
+        title_block: bool = True,
+        tile_scale: float = 1,
+        project_name: str | None = None,
+        drawing_number: str | None = None,
+        revision: str | None = None,
+        drawing_date: str | None = None,
+    ) -> Path:
+        params = {
+            "range": export_range,
+            "paper_size": paper_size,
+            "orientation": orientation,
+            "layout": layout,
+            "margin_mm": margin_mm,
+            "frame": frame,
+            "title_block": title_block,
+            "tile_scale": tile_scale,
+        }
+        optional = {
+            "project_name": project_name,
+            "drawing_number": drawing_number,
+            "revision": revision,
+            "drawing_date": drawing_date,
+        }
+        params.update({key: value for key, value in optional.items() if value is not None})
+        response = self._request(
+            "GET",
+            f"/documents/{document_id}/export-v2.pdf",
+            params=params,
+        )
+        path = Path(destination)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(response.content)
+        return path
+
     def export(self, document_id: str, format: str, destination: str | Path) -> Path:
         normalized = format.lower().lstrip(".")
+        if normalized == "pdf":
+            return self.export_pdf(document_id, destination)
         if normalized not in {"json", "svg", "png"}:
-            raise ValueError("format must be json, svg, or png")
+            raise ValueError("format must be json, svg, png, or pdf")
         response = self._request("GET", f"/documents/{document_id}/export.{normalized}")
         path = Path(destination)
         path.parent.mkdir(parents=True, exist_ok=True)
