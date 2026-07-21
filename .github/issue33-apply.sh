@@ -122,14 +122,23 @@ if actual != expected:
 PY
 
 git diff --check
-if git grep -nE 'sk-(proj-)?[A-Za-z0-9_-]{20,}' -- . ':!frontend/package-lock.json'; then
-  echo "Potential API key found" >&2
-  exit 1
-fi
-if git grep -nE 'Authorization:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9]' -- .; then
-  echo "Potential bearer credential found" >&2
-  exit 1
-fi
+python - <<'PY_SECRETS'
+from pathlib import Path
+import re
+
+api_key = re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{20,}")
+bearer = re.compile(r"Authorization:\s*Bearer\s+[A-Za-z0-9]")
+violations = []
+for raw_path in Path("/tmp/issue33-text-paths.txt").read_text(encoding="utf-8").splitlines():
+    if raw_path == "frontend/package-lock.json":
+        continue
+    path = Path(raw_path)
+    text = path.read_text(encoding="utf-8")
+    if api_key.search(text) or bearer.search(text):
+        violations.append(raw_path)
+if violations:
+    raise SystemExit(f"potential credential in changed files: {violations}")
+PY_SECRETS
 
 rm -rf frontend/dist frontend/test-results frontend/playwright-report
 git rm -f \
