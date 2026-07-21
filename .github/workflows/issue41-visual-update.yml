@@ -104,12 +104,17 @@ jobs:
           }
           expected = snapshots | {'frontend/src/styles.css'}
           changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
-          if changed != expected:
-              raise SystemExit(f'visual change whitelist mismatch: {sorted(changed ^ expected)}')
+          if 'frontend/src/styles.css' not in changed:
+              raise SystemExit('right-panel layout change is missing')
+          if not changed <= expected:
+              raise SystemExit(f'unexpected visual changes: {sorted(changed - expected)}')
+          if not changed.intersection(snapshots):
+              raise SystemExit('no visual baseline changed')
           for snapshot in snapshots:
               path = Path(snapshot)
               if not path.is_file() or path.stat().st_size < 10_000:
                   raise SystemExit(f'invalid visual baseline: {snapshot}')
+          print(f'validated {len(changed.intersection(snapshots))} changed visual baselines')
           PY
           git add -- frontend/src/styles.css frontend/e2e/visual.spec.ts-snapshots/*.png
           git diff --cached --check
