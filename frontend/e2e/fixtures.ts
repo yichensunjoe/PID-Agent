@@ -130,7 +130,8 @@ export async function openDocument(page: Page, id: string): Promise<void> {
   // The project bootstrap runs independently from the document bridge. Wait for the
   // deterministic E2E project settings and workspace controls so visual captures do
   // not race an intermediate shell state.
-  await expect(page.getByTestId("project-summary")).toContainText("E2E Project");
+  await expect(page.locator(".sync-badge.sync-synced")).toBeVisible();
+  await expect(page.getByTestId("project-summary")).toBeVisible();
   await expect(page.getByTestId("import-document-json")).toBeVisible();
   await expect(page.getByTestId("export-project-package")).toBeVisible();
 }
