@@ -1,15 +1,17 @@
 name: Issue 43 source snapshot
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/issue-43-kimi-temperature
+      - main
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
 
 jobs:
   snapshot:
+    if: github.event.pull_request.head.ref == 'agent/issue-43-kimi-temperature'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
