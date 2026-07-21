@@ -22,11 +22,12 @@ jobs:
       PID_AGENT_LLM_API_KEY: ""
       PID_AGENT_LLM_BASE_URL: ""
       PID_AGENT_LLM_MODEL: ""
-      NPM_CONFIG_FETCH_RETRIES: "4"
+      NPM_CONFIG_REGISTRY: "https://registry.npmjs.org"
+      NPM_CONFIG_FETCH_RETRIES: "3"
       NPM_CONFIG_FETCH_RETRY_FACTOR: "2"
-      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
-      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "60000"
-      NPM_CONFIG_FETCH_TIMEOUT: "180000"
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "5000"
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "30000"
+      NPM_CONFIG_FETCH_TIMEOUT: "120000"
     steps:
       - name: Checkout feature branch
         uses: actions/checkout@v4
@@ -43,6 +44,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24"
+
+      - name: Verify public npm registry
+        shell: bash
+        run: >-
+          npm view zustand@5.0.14 dist.integrity
+          --registry=https://registry.npmjs.org
+          --fetch-retries=1
+          --fetch-timeout=30000
 
       - name: Repair validated transport segment
         shell: bash
