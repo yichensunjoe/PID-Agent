@@ -23,6 +23,7 @@ from .llm import (
     ProviderTimeoutError,
 )
 from .models import AgentGenerateRequest, Document, ProviderConfig
+from .provider_compat import completion_temperature
 from .service import DocumentService
 from .symbols import SymbolRegistry
 
@@ -247,7 +248,7 @@ class SemanticAgentPlanner:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": temperature,
+            "temperature": completion_temperature(provider, temperature),
             "response_format": {"type": "json_object"},
         }
         headers = OpenAICompatiblePlanner._headers(provider)

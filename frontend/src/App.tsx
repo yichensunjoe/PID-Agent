@@ -142,7 +142,10 @@ export default function App() {
   const selectProviderPreset = (presetId: string) => {
     setProviderPreset(presetId);
     const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
-    if (preset && preset.id !== "custom") setBaseUrl(preset.baseUrl);
+    if (preset && preset.id !== "custom") {
+      setBaseUrl(preset.baseUrl);
+      if (preset.defaultModel) setModel(preset.defaultModel);
+    }
     if (presetId === "custom") setBaseUrl((current) => current);
     setAvailableModels([]);
     setModelDiscoveryError("");
@@ -603,7 +606,7 @@ export default function App() {
               {modelDiscoveryError ? <div className="provider-test provider-test-error">{modelDiscoveryError}</div> : null}
               {providerTest ? <div className={`provider-test provider-test-${providerTest.model_available === false ? "warning" : "success"}`}><strong>{providerTest.message}</strong><span>{providerTest.model} · {providerTest.latency_ms} ms · {providerTest.method}</span></div> : null}
               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
-              <p>预设只填写公开 Base URL。API Key 仅保存在当前页面内存，并随模型列表、测试或生成请求发送，不写入数据库或浏览器存储。</p>
+              <p>{PROVIDER_PRESETS.find((preset) => preset.id === providerPreset)?.note}。预设只填写公开 Base URL。API Key 仅保存在当前页面内存，并随模型列表、测试或生成请求发送，不写入数据库或浏览器存储。</p>
             </details>
 
             {pendingPlan ? <details className={`agent-result-drawer agent-preview ${pendingPlan.assessment.valid ? "agent-preview-valid" : "agent-preview-invalid"}`} open>

@@ -23,6 +23,16 @@ API Key:  sk-...
 Model:    provider-model-name
 ```
 
+Kimi Code 示例：
+
+```text
+Base URL: https://api.kimi.com/coding/v1
+API Key:  从 Kimi Code 控制台创建的 Key
+Model:    kimi-for-coding
+```
+
+也可以输入 `https://api.kimi.com/coding/`，后端会将其规范化为 OpenAI-compatible `/coding/v1` 地址。`k3`、`kimi-for-coding` 和 `kimi-for-coding-highspeed` 会自动使用 Kimi 要求的 `temperature=1`；其他 OpenAI-compatible 模型继续使用原有采样值。不要将 Kimi Code Key 与 `api.moonshot.cn` 的开放平台 Key 混用。
+
 ## 连接测试
 
 点击 **测试连接** 后，后端优先请求：

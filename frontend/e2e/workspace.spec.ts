@@ -160,3 +160,18 @@ test("uses minimap and automatic zones to navigate a large diagram", async ({ pa
   await page.getByTestId("canvas-status-bar").getByRole("button", { name: "适应选择" }).click();
   await expect(page.getByTestId("canvas-status-bar")).toContainText("1 selected");
 });
+
+test("configures the Kimi Code preset with compatible defaults", async ({ page, request }) => {
+  const seeded = await createDocument(request, "E2E Kimi provider preset");
+  await openDocument(page, seeded.id);
+  const revisionBefore = (await workspaceSnapshot(page)).document.revision;
+
+  await page.getByRole("tab", { name: "Agent" }).click();
+  await page.locator(".agent-provider-settings").getByText(/模型服务与高级设置/).click();
+  await page.getByRole("combobox", { name: "服务预设" }).selectOption("kimi-code");
+
+  await expect(page.getByRole("textbox", { name: "Base URL" })).toHaveValue("https://api.kimi.com/coding/v1");
+  await expect(page.getByRole("textbox", { name: /Model name/ })).toHaveValue("kimi-for-coding");
+  await expect(page.locator(".agent-provider-settings")).toContainText("temperature=1");
+  expect((await workspaceSnapshot(page)).document.revision).toBe(revisionBefore);
+});
