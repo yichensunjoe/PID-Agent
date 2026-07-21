@@ -2,7 +2,7 @@ name: Issue 33 validated apply
 
 on:
   pull_request:
-    types: [reopened]
+    types: [reopened, synchronize]
 
 permissions:
   contents: write
