@@ -1,0 +1,107 @@
+--- a/backend/agentcad/semantic_planner.py
++++ b/backend/agentcad/semantic_planner.py
+@@ -23,6 +23,7 @@ from .llm import (
+     ProviderTimeoutError,
+ )
+ from .models import AgentGenerateRequest, Document, ProviderConfig
++from .provider_compat import completion_temperature
+ from .service import DocumentService
+ from .symbols import SymbolRegistry
+ 
+@@ -247,7 +248,7 @@ class SemanticAgentPlanner:
+                 {"role": "system", "content": system_prompt},
+                 {"role": "user", "content": user_prompt},
+             ],
+-            "temperature": temperature,
++            "temperature": completion_temperature(provider, temperature),
+             "response_format": {"type": "json_object"},
+         }
+         headers = OpenAICompatiblePlanner._headers(provider)
+diff --git a/backend/tests/test_provider_compat.py b/backend/tests/test_provider_compat.py
+new file mode 100644
+index 0000000..c6f5f9f
+--- /dev/null
++++ b/backend/tests/test_provider_compat.py
+@@ -0,0 +1,177 @@
++from __future__ import annotations
++
++import httpx
++import pytest
++
++from agentcad.llm import LLMResponseError, OpenAICompatiblePlanner
++from agentcad.models import AgentGenerateRequest, Document, ProviderConfig
++from agentcad.provider_compat import (
++    KIMI_CODING_BASE_URL,
++    completion_temperature,
++    is_kimi_coding_provider,
++    normalize_openai_base_url,
++)
++from agentcad.semantic_planner import SemanticAgentPlanner
++
++
++class _CompletionResponse:
++    status_code = 200
++    is_error = False
++    text = ""
++
++    @staticmethod
++    def json():
++        return {"choices": [{"message": {"content": '{"ok": true}'}}]}
++
++
++class _RecordingClient:
++    def __init__(self, *, timeout: float = 120):
++        self.timeout = timeout
++        self.requests: list[dict[str, object]] = []
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *_args):
++        return None
++
++    def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]):
++        self.requests.append({"url": url, "headers": headers, "json": json})
++        return _CompletionResponse()
++
++
++class _PlanService:
++    @staticmethod
++    def get_document(document_id: str) -> Document:
++        return Document(id=document_id)
++
++    @staticmethod
++    def scene_summary(_document_id: str) -> dict[str, object]:
++        return {}
++
++
++class _Symbols:
++    @staticmethod
++    def as_prompt_catalog() -> str:
++        return "[]"
++
++
++class _PlanResponse(_CompletionResponse):
++    @staticmethod
++    def json():
++        return {
++            "choices": [
++                {
++                    "message": {
++                        "content": (
++                            '{"explanation":"ok","transaction":'
++                            '{"operations":[{"op":"clear_document"}]}}'
++                        )
++                    }
++                }
++            ]
++        }
++
++
++class _PlanClient(_RecordingClient):
++    def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]):
++        self.requests.append({"url": url, "headers": headers, "json": json})
++        return _PlanResponse()
++
++
++def test_kimi_coding_base_url_and_model_detection():
