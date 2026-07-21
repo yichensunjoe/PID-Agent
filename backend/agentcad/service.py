@@ -33,7 +33,23 @@ from .models import (
     UpdateLayerOperation,
     UpdateSystemOperation,
 )
-from .store import SQLiteDocumentStore, StoredDocument, StoreRevisionConflictError
+from .project_io import (
+    ImportConflictPolicy,
+    ImportResult,
+    ProjectIOError,
+    ProjectSettings,
+    document_envelope,
+    parse_document_payload,
+    parse_project_payload,
+    project_package,
+    remap_conflicting_document_ids,
+)
+from .store import (
+    SQLiteDocumentStore,
+    StoredDocument,
+    StoreDocumentConflictError,
+    StoreRevisionConflictError,
+)
 from .symbols import SymbolRegistry
 
 EDITOR_GROUP_KEY = "editor_group_id"
@@ -130,6 +146,119 @@ class DocumentService:
     def delete_document(self, document_id: str) -> None:
         if not self.store.delete(document_id):
             raise DocumentNotFoundError(document_id)
+
+    def get_project_settings(self) -> ProjectSettings:
+        return self.store.get_project_settings()
+
+    def update_project_settings(self, settings: ProjectSettings) -> ProjectSettings:
+        return self.store.save_project_settings(settings)
+
+    def export_document_envelope(self, document_id: str):
+        return document_envelope(self.get_document(document_id))
+
+    def export_project_package(self):
+        documents = [self.get_document(item.id) for item in self.list_documents()]
+        if not documents:
+            raise ProjectIOError("project package export requires at least one document", code="empty_project")
+        return project_package(self.get_project_settings(), documents)
+
+    def import_document_payload(
+        self,
+        payload: Any,
+        *,
+        conflict_policy: ImportConflictPolicy = "regenerate",
+    ) -> ImportResult:
+        document = parse_document_payload(payload)
+        self._validate_import_document(document)
+        documents, id_map = remap_conflicting_document_ids(
+            [document], self.store.document_ids(), conflict_policy
+        )
+        try:
+            self.store.import_documents_atomic(documents)
+        except StoreDocumentConflictError as exc:
+            raise ProjectIOError(
+                "document id conflict occurred while importing", code="document_id_conflict"
+            ) from exc
+        return ImportResult(documents=documents, document_id_map=id_map)
+
+    def import_project_payload(
+        self,
+        payload: Any,
+        *,
+        conflict_policy: ImportConflictPolicy = "regenerate",
+    ) -> ImportResult:
+        package = parse_project_payload(payload)
+        for document in package.documents:
+            self._validate_import_document(document)
+        documents, id_map = remap_conflicting_document_ids(
+            package.documents, self.store.document_ids(), conflict_policy
+        )
+        try:
+            self.store.import_documents_atomic(documents, project_settings=package.project)
+        except StoreDocumentConflictError as exc:
+            raise ProjectIOError(
+                "document id conflict occurred while importing project package",
+                code="document_id_conflict",
+            ) from exc
+        return ImportResult(documents=documents, document_id_map=id_map, project=package.project)
+
+    def _validate_import_document(self, document: Document) -> None:
+        element_map = {element.id: element for element in document.elements}
+        for element in document.elements:
+            if element.type == "symbol":
+                try:
+                    self.symbols.get(element.symbol_key)
+                except KeyError as exc:
+                    raise ProjectIOError(str(exc), code="unknown_symbol") from exc
+                continue
+            if element.type != "connector":
+                continue
+            points = element.points
+            for endpoint_name, endpoint, point_index in (
+                ("source", element.source, 0),
+                ("target", element.target, -1),
+            ):
+                if endpoint is None:
+                    continue
+                if not self._same_point(endpoint.point, points[point_index]):
+                    raise ProjectIOError(
+                        f"connector {element.id} {endpoint_name} point does not match its route endpoint",
+                        code="endpoint_route_mismatch",
+                    )
+                if endpoint.element_id is None:
+                    continue
+                referenced = element_map.get(endpoint.element_id)
+                if referenced is None:
+                    raise ProjectIOError(
+                        f"connector {element.id} {endpoint_name} references missing element {endpoint.element_id}",
+                        code="missing_endpoint_element",
+                    )
+                try:
+                    normalized = self._normalize_endpoint(document, endpoint, endpoint_name)
+                except InvalidOperationError as exc:
+                    raise ProjectIOError(str(exc), code="invalid_endpoint_binding") from exc
+                if not self._same_point(normalized.point, endpoint.point):
+                    raise ProjectIOError(
+                        f"connector {element.id} {endpoint_name} binding point is stale",
+                        code="stale_endpoint_binding",
+                    )
+
+            if element.routing in {"orthogonal", "manual"}:
+                for first, second in zip(points, points[1:], strict=False):
+                    if first.x != second.x and first.y != second.y:
+                        raise ProjectIOError(
+                            f"connector {element.id} contains a non-orthogonal segment",
+                            code="non_orthogonal_connector",
+                        )
+            if element.routing == "direct" and len(points) != 2:
+                raise ProjectIOError(
+                    f"direct connector {element.id} must contain exactly two points",
+                    code="invalid_direct_connector",
+                )
+
+    @staticmethod
+    def _same_point(first: Point, second: Point, tolerance: float = 1e-6) -> bool:
+        return abs(first.x - second.x) <= tolerance and abs(first.y - second.y) <= tolerance
 
     def apply_transaction(
         self,
