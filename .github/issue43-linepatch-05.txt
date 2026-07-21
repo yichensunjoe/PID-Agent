@@ -1,0 +1,45 @@
++The Kimi Code preset uses the OpenAI-compatible `https://api.kimi.com/coding/v1` endpoint and defaults to `kimi-for-coding`. Requests for `k3`, `kimi-for-coding` and `kimi-for-coding-highspeed` use `temperature=1`, including provider connection tests and schema-repair calls. A manually entered `https://api.kimi.com/coding/` URL is recognized as the same preset and normalized server-side.
+diff --git a/frontend/e2e/workspace.spec.ts b/frontend/e2e/workspace.spec.ts
+index 027f23a..b89111d 100644
+--- a/frontend/e2e/workspace.spec.ts
++++ b/frontend/e2e/workspace.spec.ts
+@@ -160,3 +160,18 @@ test("uses minimap and automatic zones to navigate a large diagram", async ({ pa
+   await page.getByTestId("canvas-status-bar").getByRole("button", { name: "适应选择" }).click();
+   await expect(page.getByTestId("canvas-status-bar")).toContainText("1 selected");
+ });
++
++test("configures the Kimi Code preset with compatible defaults", async ({ page, request }) => {
++  const seeded = await createDocument(request, "E2E Kimi provider preset");
++  await openDocument(page, seeded.id);
++  const revisionBefore = (await workspaceSnapshot(page)).document.revision;
++
++  await page.getByRole("tab", { name: "Agent" }).click();
++  await page.locator(".agent-provider-settings").getByText(/模型服务与高级设置/).click();
++  await page.getByRole("combobox", { name: "服务预设" }).selectOption("kimi-code");
++
++  await expect(page.getByRole("textbox", { name: "Base URL" })).toHaveValue("https://api.kimi.com/coding/v1");
++  await expect(page.getByRole("textbox", { name: /Model name/ })).toHaveValue("kimi-for-coding");
++  await expect(page.locator(".agent-provider-settings")).toContainText("temperature=1");
++  expect((await workspaceSnapshot(page)).document.revision).toBe(revisionBefore);
++});
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 00d2eef..94087e0 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -142,7 +142,10 @@ export default function App() {
+   const selectProviderPreset = (presetId: string) => {
+     setProviderPreset(presetId);
+     const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
+-    if (preset && preset.id !== "custom") setBaseUrl(preset.baseUrl);
++    if (preset && preset.id !== "custom") {
++      setBaseUrl(preset.baseUrl);
++      if (preset.defaultModel) setModel(preset.defaultModel);
++    }
+     if (presetId === "custom") setBaseUrl((current) => current);
+     setAvailableModels([]);
+     setModelDiscoveryError("");
+@@ -603,7 +606,7 @@ export default function App() {
+               {modelDiscoveryError ? <div className="provider-test provider-test-error">{modelDiscoveryError}</div> : null}
+               {providerTest ? <div className={`provider-test provider-test-${providerTest.model_available === false ? "warning" : "success"}`}><strong>{providerTest.message}</strong><span>{providerTest.model} · {providerTest.latency_ms} ms · {providerTest.method}</span></div> : null}
+               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
+-              <p>预设只填写公开 Base URL。API Key 仅保存在当前页面内存，并随模型列表、测试或生成请求发送，不写入数据库或浏览器存储。</p>
