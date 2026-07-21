@@ -41,4 +41,12 @@ jobs:
 
       - name: Validate, test, apply and self-clean
         shell: bash
-        run: bash .github/issue33-apply.sh
+        run: bash -x .github/issue33-apply.sh 2>&1 | tee /tmp/issue33-apply.log
+
+      - name: Upload temporary apply diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue33-apply-diagnostics
+          path: /tmp/issue33-apply.log
+          retention-days: 1
