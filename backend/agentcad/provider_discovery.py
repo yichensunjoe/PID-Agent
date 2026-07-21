@@ -13,13 +13,7 @@ from .llm import (
     ProviderTimeoutError,
 )
 from .models import ProviderConfig
-
-
-def normalize_openai_base_url(base_url: str) -> str:
-    root = base_url.strip().rstrip("/")
-    if not root:
-        raise ProviderNotConfiguredError("provider base_url is required for model discovery")
-    return root if root.endswith("/v1") else root + "/v1"
+from .provider_compat import normalize_openai_base_url
 
 
 def discover_provider_models(request: ProviderConfig) -> dict[str, Any]:
@@ -29,8 +23,15 @@ def discover_provider_models(request: ProviderConfig) -> dict[str, Any]:
             "provider base_url is required for model discovery",
             provider=request,
         )
+    try:
+        normalized_base_url = normalize_openai_base_url(request.base_url)
+    except ValueError as exc:
+        raise ProviderNotConfiguredError(
+            "provider base_url is required for model discovery",
+            provider=request,
+        ) from exc
     provider = request.model_copy(
-        update={"base_url": normalize_openai_base_url(request.base_url)},
+        update={"base_url": normalized_base_url},
         deep=True,
     )
     headers = {"Content-Type": "application/json"}

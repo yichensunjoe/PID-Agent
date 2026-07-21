@@ -4,6 +4,8 @@ export type ProviderPreset = {
   baseUrl: string;
   requiresApiKey: boolean;
   note: string;
+  defaultModel?: string;
+  aliases?: string[];
 };
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -13,6 +15,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: "https://api.openai.com/v1",
     requiresApiKey: true,
     note: "OpenAI 官方 API",
+  },
+  {
+    id: "kimi-code",
+    label: "Kimi Code",
+    baseUrl: "https://api.kimi.com/coding/v1",
+    requiresApiKey: true,
+    note: "Kimi Coding OpenAI-compatible API；Kimi 模型自动使用 temperature=1",
+    defaultModel: "kimi-for-coding",
+    aliases: ["https://api.kimi.com/coding"],
   },
   {
     id: "deepseek",
@@ -58,7 +69,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
 ];
 
+function normalizePresetUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/$/, "");
+}
+
 export function presetForBaseUrl(baseUrl: string): string {
-  const normalized = baseUrl.trim().replace(/\/$/, "");
-  return PROVIDER_PRESETS.find((preset) => preset.baseUrl.replace(/\/$/, "") === normalized)?.id ?? "custom";
+  const normalized = normalizePresetUrl(baseUrl);
+  return PROVIDER_PRESETS.find((preset) =>
+    [preset.baseUrl, ...(preset.aliases ?? [])].some((candidate) => normalizePresetUrl(candidate) === normalized),
+  )?.id ?? "custom";
 }
