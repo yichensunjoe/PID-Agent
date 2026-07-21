@@ -230,12 +230,46 @@ class AgentCADClient:
         path.write_bytes(response.content)
         return path
 
+    def export_dxf(
+        self,
+        document_id: str,
+        destination: str | Path,
+        *,
+        export_range: str = "content",
+        units: str = "mm",
+        scale: float = 1,
+        padding: float = 24,
+        x: float | None = None,
+        y: float | None = None,
+        width: float | None = None,
+        height: float | None = None,
+    ) -> Path:
+        params: dict[str, Any] = {
+            "range": export_range,
+            "units": units,
+            "scale": scale,
+            "padding": padding,
+        }
+        viewport = {"x": x, "y": y, "width": width, "height": height}
+        params.update({key: value for key, value in viewport.items() if value is not None})
+        response = self._request(
+            "GET",
+            f"/documents/{document_id}/export-v2.dxf",
+            params=params,
+        )
+        path = Path(destination)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(response.content)
+        return path
+
     def export(self, document_id: str, format: str, destination: str | Path) -> Path:
         normalized = format.lower().lstrip(".")
         if normalized == "pdf":
             return self.export_pdf(document_id, destination)
+        if normalized == "dxf":
+            return self.export_dxf(document_id, destination)
         if normalized not in {"json", "svg", "png"}:
-            raise ValueError("format must be json, svg, png, or pdf")
+            raise ValueError("format must be json, svg, png, pdf, or dxf")
         response = self._request("GET", f"/documents/{document_id}/export.{normalized}")
         path = Path(destination)
         path.parent.mkdir(parents=True, exist_ok=True)

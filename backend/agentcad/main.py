@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import create_v1_compat_router, create_v2_router
 from .api_acceptance import create_acceptance_router
+from .api_dxf import create_dxf_router
 from .api_export import _max_export_pixels, create_export_router
 from .api_layout import create_layout_router
 from .api_semantic_agent import create_semantic_agent_router
@@ -62,6 +63,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "X-PID-Agent-PDF-Paper-Size",
             "X-PID-Agent-PDF-Orientation",
             "X-PID-Agent-PDF-Layout",
+            "X-PID-Agent-DXF-Version",
+            "X-PID-Agent-DXF-Entity-Count",
+            "X-PID-Agent-DXF-Layer-Count",
+            "X-PID-Agent-DXF-Units",
+            "X-PID-Agent-DXF-Scale",
         ],
     )
 
@@ -162,6 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(create_v2_router(service, planner, diagnostics, VERSION))
     app.include_router(create_acceptance_router(symbols, diagnostics))
     app.include_router(create_export_router(service, diagnostics))
+    app.include_router(create_dxf_router(service, diagnostics))
     app.include_router(create_layout_router(service, diagnostics))
     app.include_router(create_semantic_agent_router(service, semantic_planner, diagnostics))
     app.include_router(create_v1_compat_router(service))

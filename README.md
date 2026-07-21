@@ -28,7 +28,7 @@ P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 - 原子批量事务；
 - document revision 乐观并发，防止 Agent 覆盖人工修改；
 - 完整文档快照撤销和重做；
-- JSON、SVG、PNG、标准图幅 PDF 导出；
+- JSON、SVG、PNG、标准图幅 PDF 与工程 DXF 导出；
 - 版本化单文档 JSON 与原子项目包导入/导出，可在导入后继续编辑、撤销和重做；
 - 场景摘要包含符号端口、连接节点和管线 source/target。
 
@@ -214,6 +214,7 @@ GET    /api/v2/documents/{document_id}/export.svg
 GET    /api/v2/documents/{document_id}/export.png
 GET    /api/v2/documents/{document_id}/print-preview.svg
 GET    /api/v2/documents/{document_id}/export-v2.pdf
+GET    /api/v2/documents/{document_id}/export-v2.dxf
 POST   /api/v2/documents/{document_id}/agent/generate
 GET    /api/v2/symbols
 GET    /api/v2/agent/tool-schema
@@ -223,7 +224,7 @@ GET    /api/v2/agent/tool-schema
 
 JSON 格式、冲突策略、原子失败语义、浏览器操作和 Python Client 示例见 [`docs/project-json-import.md`](docs/project-json-import.md)。
 
-PDF 图幅、分页、标题栏、预览和 Python Client 用法见 [`docs/pdf-print-export.md`](docs/pdf-print-export.md)。
+PDF 图幅、分页、标题栏、预览和 Python Client 用法见 [`docs/pdf-print-export.md`](docs/pdf-print-export.md)。DXF 图层、单位、坐标、XDATA 和 CAD 交换说明见 [`docs/dxf-export.md`](docs/dxf-export.md)。
 
 `/api/v1` 主要旧端点仍由新文档引擎提供兼容。
 
@@ -250,7 +251,7 @@ Playwright 安装、headed 模式、视觉基线更新和 trace 查看方式见 
 4. 让 Agent 按自然语言执行局部移动、替换、删除和重新连接；
 5. 导入单位图例及历史图纸知识；
 6. 自动布局、避让和大型图纸性能优化；
-7. 设备表、管线表、仪表索引、规则检查和 DXF。
+7. 设备表、管线表、仪表索引和规则检查。
 
 ## License
 

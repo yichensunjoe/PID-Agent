@@ -138,4 +138,4 @@ with AgentCADClient("http://127.0.0.1:8000/api/v2") as client:
 
 仓库的普通 CI 不提交生成的 PDF 或光栅化 PNG。它们仅用于本地或 CI 临时检查，完成后必须删除。
 
-DXF 不属于本切片，将在后续独立实现。
+工程 DXF 交换导出已经作为独立切片实现，详见 [`dxf-export.md`](dxf-export.md)。
