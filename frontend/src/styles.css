@@ -273,3 +273,17 @@ html[data-e2e="true"] textarea {
 .document-import-error button { align-self: flex-start; border: 1px solid #fecaca; border-radius: 5px; padding: 3px 7px; color: #991b1b; background: #fff; cursor: pointer; }
 .app-shell[data-theme="dark"] .document-import-actions button,
 .app-shell[data-theme="dark"] .project-summary { border-color: #334155; color: #cbd5e1; background: #1e293b; }
+
+.export-panel { border-top: 1px solid #e2e8f0; margin-top: 12px; padding-top: 12px; }
+.export-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.export-grid label, .pdf-export-options label { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: #64748b; font-size: 10px; }
+.export-grid input, .export-grid select { min-width: 0; width: 100%; box-sizing: border-box; }
+.pdf-export-options { display: flex; flex-direction: column; gap: 8px; margin-top: 9px; border: 1px solid #dbe3ec; border-radius: 8px; padding: 9px; background: #f8fafc; }
+.pdf-toggle-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.pdf-toggle-row label { flex-direction: row; align-items: center; gap: 5px; }
+.pdf-toggle-row input { margin: 0; }
+.pdf-title-fields { padding-top: 2px; }
+.print-preview-card { overflow: hidden; border: 1px solid #cbd5e1; border-radius: 7px; padding: 6px; color: #64748b; background: #fff; font-size: 10px; }
+.print-preview-card img { display: block; width: 100%; max-height: 220px; margin-top: 5px; border: 1px solid #e2e8f0; object-fit: contain; background: #e2e8f0; }
+.app-shell[data-theme="dark"] .pdf-export-options { border-color: #334155; background: #111827; }
+.app-shell[data-theme="dark"] .print-preview-card { border-color: #475569; color: #cbd5e1; background: #0f172a; }

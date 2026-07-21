@@ -10,6 +10,8 @@ from .exporting import ExportBounds, elements_in_bounds, visible_elements
 from .models import ConnectorElement, Document, Element, Point, Style
 from .symbols import SymbolRegistry
 
+SVG_FONT_FAMILY = "Noto Sans CJK SC, Noto Sans CJK, DejaVu Sans, sans-serif"
+
 
 @dataclass(frozen=True)
 class _SegmentRecord:
@@ -274,27 +276,59 @@ def _render_jumps(connectors: list[ConnectorElement], background: str, cell_size
     return "".join(pieces)
 
 
-def render_svg(
+def _render_svg_content(
     document: Document,
     registry: SymbolRegistry,
-    bounds: ExportBounds | None = None,
-) -> str:
-    export_bounds = bounds or ExportBounds(0, 0, document.canvas.width, document.canvas.height)
+    export_bounds: ExportBounds,
+) -> tuple[str, int]:
     visible = visible_elements(document)
     rendered_elements = elements_in_bounds(visible, registry, export_bounds)
     connectors = [element for element in rendered_elements if element.type == "connector"]
     body = "".join(_render_element(element, registry) for element in rendered_elements)
     overlays = _render_jumps(connectors, document.canvas.background)
     arrows = "".join(_render_arrow(connector) for connector in connectors)
+    background = (
+        f'<rect x="{export_bounds.x}" y="{export_bounds.y}" '
+        f'width="{export_bounds.width}" height="{export_bounds.height}" '
+        f'fill="{escape(document.canvas.background, quote=True)}" />'
+    )
+    return f"{background}{body}{overlays}{arrows}", len(rendered_elements)
+
+
+def render_svg_fragment(
+    document: Document,
+    registry: SymbolRegistry,
+    bounds: ExportBounds,
+    *,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    preserve_aspect_ratio: str = "none",
+) -> str:
+    content, rendered_count = _render_svg_content(document, registry, bounds)
+    return (
+        f'<svg x="{x}" y="{y}" width="{width}" height="{height}" '
+        f'viewBox="{bounds.x} {bounds.y} {bounds.width} {bounds.height}" '
+        f'font-family="{SVG_FONT_FAMILY}" preserveAspectRatio="{escape(preserve_aspect_ratio, quote=True)}" overflow="hidden" '
+        f'data-document-id="{escape(document.id, quote=True)}" '
+        f'data-revision="{document.revision}" data-rendered-elements="{rendered_count}">'
+        f"{content}</svg>"
+    )
+
+
+def render_svg(
+    document: Document,
+    registry: SymbolRegistry,
+    bounds: ExportBounds | None = None,
+) -> str:
+    export_bounds = bounds or ExportBounds(0, 0, document.canvas.width, document.canvas.height)
+    content, rendered_count = _render_svg_content(document, registry, export_bounds)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{export_bounds.width}" '
         f'height="{export_bounds.height}" '
         f'viewBox="{export_bounds.x} {export_bounds.y} {export_bounds.width} {export_bounds.height}" '
-        f'data-document-id="{escape(document.id, quote=True)}" data-revision="{document.revision}" '
-        f'data-rendered-elements="{len(rendered_elements)}">'
-        f'<rect x="{export_bounds.x}" y="{export_bounds.y}" '
-        f'width="{export_bounds.width}" height="{export_bounds.height}" '
-        f'fill="{escape(document.canvas.background, quote=True)}" />'
-        f"{body}{overlays}{arrows}</svg>"
+        f'font-family="{SVG_FONT_FAMILY}" data-document-id="{escape(document.id, quote=True)}" data-revision="{document.revision}" '
+        f'data-rendered-elements="{rendered_count}">{content}</svg>'
     )
