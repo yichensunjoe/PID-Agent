@@ -67,4 +67,5 @@ jobs:
           path: |
             /tmp/issue35-apply.log
             .github/issue35-payload-01.b64
+          include-hidden-files: true
           retention-days: 1
