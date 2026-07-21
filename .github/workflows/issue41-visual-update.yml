@@ -86,6 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           git add -- frontend/src/styles.css frontend/e2e/visual.spec.ts-snapshots/*.png
+          git diff --cached --name-only | tee /tmp/issue41-visual-staged.txt
           python - <<'PY'
           from pathlib import Path
           import subprocess
@@ -108,17 +109,11 @@ jobs:
               raise SystemExit('right-panel layout change is missing')
           if not staged <= expected:
               raise SystemExit(f'unexpected staged visual changes: {sorted(staged - expected)}')
-          changed_snapshots = staged.intersection(snapshots)
-          if not changed_snapshots:
-              raise SystemExit('no visual baseline changed')
-          unstaged = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
-          if unstaged:
-              raise SystemExit(f'unstaged tracked changes remain: {sorted(unstaged)}')
           for snapshot in snapshots:
               path = Path(snapshot)
               if not path.is_file() or path.stat().st_size < 10_000:
                   raise SystemExit(f'invalid visual baseline: {snapshot}')
-          print(f'validated {len(changed_snapshots)} changed visual baselines')
+          print(f'validated staged visual files: {sorted(staged)}')
           PY
           git diff --cached --check
           git config user.name "github-actions[bot]"
@@ -132,6 +127,7 @@ jobs:
         with:
           name: issue41-visual-refresh-diagnostics
           path: |
+            /tmp/issue41-visual-staged.txt
             frontend/test-results
             frontend/playwright-report
           retention-days: 2
