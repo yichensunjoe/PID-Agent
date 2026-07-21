@@ -70,7 +70,7 @@ Path("/tmp/issue33-text-paths.txt").write_text(
 )
 PY
 while IFS= read -r path; do
-  install -D "/tmp/issue33-extracted/${path}" "${path}"
+  install -D -m 0644 "/tmp/issue33-extracted/${path}" "${path}"
 done < /tmp/issue33-text-paths.txt
 
 python - <<'PY_LOCKFILE'
@@ -148,11 +148,12 @@ git rm -f \
   .github/issue33-payload-03.b64 \
   .github/issue33-payload-04.b64 \
   .github/issue33-payload-05.b64 \
-  .github/issue33-apply.sh \
-  .github/workflows/issue33-apply.yml
-rm -f .github/workflows/issue33-source-snapshot.yml
+  .github/issue33-apply.sh
+git restore --source=HEAD -- .github/workflows/ci.yml
 while IFS= read -r path; do
-  git add -- "${path}"
+  if [[ "${path}" != ".github/workflows/ci.yml" ]]; then
+    git add -- "${path}"
+  fi
 done < /tmp/issue33-text-paths.txt
 git add -- frontend/e2e/visual.spec.ts-snapshots/*.png
 
@@ -161,7 +162,6 @@ from pathlib import Path
 import subprocess
 
 expected = {
-    ".github/workflows/ci.yml",
     ".gitignore",
     "README.md",
     "docs/browser-e2e-visual-acceptance.md",
@@ -203,9 +203,12 @@ output = subprocess.check_output(
 actual = {line for line in output.splitlines() if line}
 if actual != expected:
     raise SystemExit(f"final diff whitelist mismatch: {sorted(actual ^ expected)}")
-temporary = [path for path in Path(".github").rglob("issue33-*") if path.is_file()]
-if temporary:
-    raise SystemExit(f"temporary files remain: {temporary}")
+temporary = {
+    path.as_posix() for path in Path(".github").rglob("issue33-*") if path.is_file()
+}
+allowed_temporary = {".github/workflows/issue33-apply.yml"}
+if temporary != allowed_temporary:
+    raise SystemExit(f"unexpected temporary files: {sorted(temporary ^ allowed_temporary)}")
 PY
 
 git diff --cached --check
