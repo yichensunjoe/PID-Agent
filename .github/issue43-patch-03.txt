@@ -1,0 +1,74 @@
+emperature(monkeypatch):
++    client = _RecordingClient()
++    monkeypatch.setattr(
++        "agentcad.semantic_planner.httpx.Client",
++        lambda *, timeout: client,
++    )
++    planner = SemanticAgentPlanner(service=object(), symbols=object())  # type: ignore[arg-type]
++    provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="k3")
++
++    result = planner._request_model_json(
++        provider,
++        system_prompt="system",
++        user_prompt="user",
++        temperature=0.1,
++    )
++
++    assert result == {"ok": True}
++    assert client.requests[0]["json"]["temperature"] == 1.0  # type: ignore[index]
++
++
++def test_invalid_temperature_error_is_actionable():
++    provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="k3")
++    response = httpx.Response(
++        400,
++        json={
++            "error": {
++                "message": "invalid temperature: only 1 is allowed for this model"
++            }
++        },
++    )
++
++    with pytest.raises(LLMResponseError, match="temperature=1") as exc_info:
++        OpenAICompatiblePlanner._raise_for_response(response, provider)
++
++    assert KIMI_CODING_BASE_URL in str(exc_info.value)
+diff --git a/docs/custom-model-api.md b/docs/custom-model-api.md
+index a384e7a..e82e09b 100644
+--- a/docs/custom-model-api.md
++++ b/docs/custom-model-api.md
+@@ -23,6 +23,16 @@ API Key:  sk-...
+ Model:    provider-model-name
+ ```
+ 
++Kimi Code 示例：
++
++```text
++Base URL: https://api.kimi.com/coding/v1
++API Key:  从 Kimi Code 控制台创建的 Key
++Model:    kimi-for-coding
++```
++
++也可以输入 `https://api.kimi.com/coding/`，后端会将其规范化为 OpenAI-compatible `/coding/v1` 地址。`k3`、`kimi-for-coding` 和 `kimi-for-coding-highspeed` 会自动使用 Kimi 要求的 `temperature=1`；其他 OpenAI-compatible 模型继续使用原有采样值。不要将 Kimi Code Key 与 `api.moonshot.cn` 的开放平台 Key 混用。
++
+ ## 连接测试
+ 
+ 点击 **测试连接** 后，后端优先请求：
+diff --git a/docs/provider-selection-and-agent-runs.md b/docs/provider-selection-and-agent-runs.md
+index c686512..98e8738 100644
+--- a/docs/provider-selection-and-agent-runs.md
++++ b/docs/provider-selection-and-agent-runs.md
+@@ -1,9 +1,12 @@
+ # Provider selection and persistent Agent runs
+ 
+-The Agent panel supports preset OpenAI-compatible Base URLs and a custom mode. Included presets are OpenAI, DeepSeek, OpenRouter, Groq, Ollama and LM Studio. After a provider is selected and any required API key is entered, the web client requests the provider's `/models` endpoint through the P&ID-Agent backend and populates the model selector. Base URL and model-name fields remain editable for custom services.
++The Agent panel supports preset OpenAI-compatible Base URLs and a custom mode. Included presets are OpenAI, Kimi Code, DeepSeek, OpenRouter, Groq, Ollama and LM Studio. After a provider is selected and any required API key is entered, the web client requests the provider's `/models` endpoint through the P&ID-Agent backend and populates the model selector. Base URL and model-name fields remain editable for custom services.
+ 
+ API keys remain in page memory only. They are sent with provider discovery, provider tests and generation requests, but are not persisted to the document database or browser storage. Diagnostics record only whether a key was present.
+ 
+ Automatic Agent execution remains mounted while the user switches between Properties, Layers/Systems, History and Agent tabs. The active request, retry trace, cancellation request and any high-risk approval remain available when the Agent tab is reopened.
+ 
+ Connector route normalization removes local orthogonal doglegs whose transverse offset is no larger than one document grid interval. Larger intentional detours remain unchanged. Endpoint bindings, junction topology and flow-arrow properties are preserved.
++
++
++The Kimi Code preset uses the OpenAI-compatible `https://api.kimi.com/coding/v1` endpoint and defaults to `kimi-for-coding`. Requests for `k3`, `kimi-for-coding` and `kimi-for-coding-highspeed` use `temperature=1`, including provider connection tests and schema-repair calls. 
