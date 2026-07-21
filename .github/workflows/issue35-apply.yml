@@ -66,4 +66,5 @@ jobs:
           name: issue35-apply-diagnostics
           path: |
             /tmp/issue35-apply.log
+            .github/issue35-payload-01.b64
           retention-days: 1
