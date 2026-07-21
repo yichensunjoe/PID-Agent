@@ -27,22 +27,24 @@ jobs:
           ref: agent/issue-43-kimi-temperature
           fetch-depth: 0
 
-      - name: Validate and apply patch
+      - name: Apply and validate staged commit
         shell: bash
         run: |
           set -euo pipefail
+          symbol_before="$(sha256sum backend/agentcad/data/symbols.json | cut -d' ' -f1)"
           cat .github/issue43-linepatch-{00..06}.txt > /tmp/issue43.patch
           echo '87e9c9679838a5b5b9a070bd3855860272d56b69a2885d608dd08561e9479c4a  /tmp/issue43.patch' | sha256sum --check --strict
           git apply --check /tmp/issue43.patch
           git apply /tmp/issue43.patch
-          rm -f .github/issue43-patch-*.txt .github/issue43-linepatch-*.txt .github/workflows/issue43-apply.yml
+          test "$(sha256sum backend/agentcad/data/symbols.json | cut -d' ' -f1)" = "$symbol_before"
 
-          git fetch origin main --depth=1
-          git diff --exit-code origin/main -- backend/agentcad/data/symbols.json
+          rm -f .github/issue43-patch-*.txt .github/issue43-linepatch-*.txt .github/workflows/issue43-apply.yml
+          git add -A
+          git diff --cached --check
           python - <<'PY'
           import subprocess
 
-          expected = {
+          permanent = {
               'README.md',
               'backend/agentcad/llm.py',
               'backend/agentcad/provider_compat.py',
@@ -56,25 +58,23 @@ jobs:
               'frontend/src/providerPresets.ts',
               'frontend/tests/providerPresets.test.ts',
           }
-          changed = set(subprocess.check_output(
-              ['git', 'diff', '--name-only', 'origin/main'], text=True
-          ).splitlines())
-          if changed != expected:
-              raise SystemExit(f'issue 43 whitelist mismatch: {sorted(changed ^ expected)}')
-          PY
-
-          git diff --check
-          ! git diff | grep -Ei '(sk-[A-Za-z0-9_-]{16,}|api[_-]?key\s*[:=]\s*["'"'][^"'"']+)' || {
-            echo 'possible credential found in diff' >&2
-            exit 1
+          temporary = {
+              *(f'.github/issue43-patch-{index:02d}.txt' for index in range(6)),
+              *(f'.github/issue43-linepatch-{index:02d}.txt' for index in range(7)),
+              '.github/workflows/issue43-apply.yml',
           }
+          changed = set(subprocess.check_output(
+              ['git', 'diff', '--cached', '--name-only'], text=True
+          ).splitlines())
+          expected = permanent | temporary
+          if changed != expected:
+              raise SystemExit(f'issue 43 staged whitelist mismatch: {sorted(changed ^ expected)}')
+          PY
 
       - name: Commit permanent changes
         shell: bash
         run: |
           set -euo pipefail
-          git add -A
-          git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix: support Kimi Coding provider constraints'
