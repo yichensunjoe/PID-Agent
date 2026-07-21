@@ -264,3 +264,27 @@ export type TransactionValidation = {
 };
 
 export type Tool = "select" | "line" | "rectangle" | "circle" | "connector" | "junction" | "text" | "symbol";
+
+export type ProjectSettings = {
+  name: string;
+  metadata: Record<string, unknown>;
+};
+
+export type DocumentEnvelope = {
+  format: "pid-agent.document";
+  version: 1;
+  document: Document;
+};
+
+export type ProjectPackageEnvelope = {
+  format: "pid-agent.project-package";
+  version: 1;
+  project: ProjectSettings;
+  documents: Document[];
+};
+
+export type ImportResult = {
+  documents: Document[];
+  document_id_map: Record<string, string>;
+  project?: ProjectSettings | null;
+};

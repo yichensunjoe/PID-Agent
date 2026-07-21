@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
 import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest, type CanvasViewportRequest } from "./editor/EditorCanvas";
 import { CommandPalette } from "./editor/CommandPalette";
@@ -14,6 +14,7 @@ import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
 import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
+import { parseImportJson } from "./projectImport";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
 import { installE2EBridge } from "./e2eBridge";
 import { useWorkspace } from "./store";
@@ -85,6 +86,9 @@ export default function App() {
   const [canvasView, setCanvasView] = useState<CanvasView | null>(null);
   const [canvasViewportRequest, setCanvasViewportRequest] = useState<CanvasViewportRequest | null>(null);
   const [namedViews, setNamedViews] = useState<NamedCanvasView[]>([]);
+  const [importError, setImportError] = useState("");
+  const documentImportRef = useRef<HTMLInputElement>(null);
+  const projectImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
   useEffect(() => {
@@ -447,6 +451,18 @@ export default function App() {
     } else return false;
     return true;
   };
+  const importJsonFile = async (file: File | undefined, kind: "document" | "project") => {
+    if (!file) return;
+    setImportError("");
+    try {
+      const payload = parseImportJson(await file.text(), kind);
+      if (kind === "document") await state.importDocumentPayload(payload);
+      else await state.importProjectPackagePayload(payload);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const executePaletteCommand = (command: PaletteCommand) => {
     if (command.elementId) {
       focusCanvasElement(command.elementId);
@@ -505,12 +521,22 @@ export default function App() {
           <button onClick={() => void state.undo()}>撤销</button>
           <button onClick={() => void state.redo()}>重做</button>
           {state.document ? <a href={`/api/v2/documents/${state.document.id}/export.svg`} download>导出 SVG</a> : null}
+          {state.document ? <a data-testid="export-document-json" href={`/api/v2/documents/${state.document.id}/export-v1.json`} download>导出 JSON</a> : null}
+          <a data-testid="export-project-package" href="/api/v2/project/export.json" download>导出项目包</a>
         </div>
       </header>
 
       <main className="workspace">
         <aside className="sidebar documents-panel" data-testid="documents-panel">
           <div className="panel-heading"><h2>文档</h2><button data-testid="create-document" onClick={() => void state.createDocument()}>新建</button></div>
+          <div className="document-import-actions">
+            <button type="button" data-testid="import-document-json" disabled={state.importing} onClick={() => documentImportRef.current?.click()}>导入 JSON</button>
+            <button type="button" data-testid="import-project-package" disabled={state.importing} onClick={() => projectImportRef.current?.click()}>导入项目包</button>
+            <input ref={documentImportRef} data-testid="import-document-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "document"); }} />
+            <input ref={projectImportRef} data-testid="import-project-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "project"); }} />
+          </div>
+          {importError || state.error ? <div className="document-import-error" role="alert"><span>{importError || state.error}</span><button type="button" onClick={() => { setImportError(""); state.clearError(); }}>关闭</button></div> : null}
+          <div className="project-summary" data-testid="project-summary"><strong>{state.projectSettings.name}</strong><span>{state.documents.length} 个文档</span></div>
           <div className="document-list">
             {state.documents.map((document) => <button key={document.id} data-document-id={document.id} className={state.document?.id === document.id ? "active" : ""} onClick={() => void state.openDocument(document.id)}><strong>{document.name}</strong><span>{document.element_count} 个元素 · r{document.revision}</span></button>)}
           </div>

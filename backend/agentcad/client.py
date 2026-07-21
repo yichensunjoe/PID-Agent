@@ -15,6 +15,12 @@ from .models import (
     TransactionRequest,
     TransactionResult,
 )
+from .project_io import (
+    DocumentEnvelope,
+    ImportResult,
+    ProjectPackageEnvelope,
+    ProjectSettings,
+)
 
 
 class AgentCADClient:
@@ -89,6 +95,65 @@ class AgentCADClient:
 
     def scene_summary(self, document_id: str) -> dict[str, Any]:
         return self._request("GET", f"/documents/{document_id}/scene-summary").json()
+
+    def export_document_envelope(self, document_id: str) -> DocumentEnvelope:
+        response = self._request("GET", f"/documents/{document_id}/export-v1.json")
+        return DocumentEnvelope.model_validate(response.json())
+
+    def import_document(
+        self,
+        payload: dict[str, Any] | Document,
+        *,
+        conflict_policy: str = "regenerate",
+    ) -> ImportResult:
+        body = payload.model_dump(mode="json") if isinstance(payload, Document) else payload
+        response = self._request(
+            "POST",
+            "/imports/document",
+            params={"conflict_policy": conflict_policy},
+            json=body,
+        )
+        return ImportResult.model_validate(response.json())
+
+    def get_project_settings(self) -> ProjectSettings:
+        response = self._request("GET", "/project/settings")
+        return ProjectSettings.model_validate(response.json())
+
+    def update_project_settings(
+        self, settings: ProjectSettings | dict[str, Any]
+    ) -> ProjectSettings:
+        payload = (
+            settings
+            if isinstance(settings, ProjectSettings)
+            else ProjectSettings.model_validate(settings)
+        )
+        response = self._request(
+            "PUT", "/project/settings", json=payload.model_dump(mode="json")
+        )
+        return ProjectSettings.model_validate(response.json())
+
+    def export_project_package(self) -> ProjectPackageEnvelope:
+        response = self._request("GET", "/project/export.json")
+        return ProjectPackageEnvelope.model_validate(response.json())
+
+    def import_project_package(
+        self,
+        payload: ProjectPackageEnvelope | dict[str, Any],
+        *,
+        conflict_policy: str = "regenerate",
+    ) -> ImportResult:
+        body = (
+            payload.model_dump(mode="json")
+            if isinstance(payload, ProjectPackageEnvelope)
+            else payload
+        )
+        response = self._request(
+            "POST",
+            "/imports/project-package",
+            params={"conflict_policy": conflict_policy},
+            json=body,
+        )
+        return ImportResult.model_validate(response.json())
 
     def undo(self, document_id: str) -> Document:
         response = self._request("POST", f"/documents/{document_id}/undo")

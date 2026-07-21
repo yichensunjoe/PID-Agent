@@ -21,6 +21,12 @@ from .models import (
     TransactionRequest,
     TransactionResult,
 )
+from .project_io import (
+    ImportConflictPolicy,
+    ImportResult,
+    ProjectIOError,
+    ProjectSettings,
+)
 from .provider_discovery import discover_provider_models
 from .service import (
     DocumentNotFoundError,
@@ -308,6 +314,91 @@ def create_v2_router(
             media_type="application/json",
             headers={"Content-Disposition": f'attachment; filename="{document.id}.json"'},
         )
+
+    @router.get("/documents/{document_id}/export-v1.json")
+    def export_versioned_json(document_id: str):
+        envelope = _call(service.export_document_envelope, document_id)
+        return Response(
+            envelope.model_dump_json(indent=2),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{envelope.document.id}.pid.json"'
+            },
+        )
+
+    @router.post(
+        "/imports/document",
+        response_model=ImportResult,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def import_document(
+        payload: dict[str, Any],
+        conflict_policy: ImportConflictPolicy = "regenerate",
+    ):
+        try:
+            result = service.import_document_payload(payload, conflict_policy=conflict_policy)
+        except ProjectIOError as exc:
+            raise HTTPException(
+                status_code=409 if exc.code == "document_id_conflict" else 422,
+                detail={"error": exc.code, "message": str(exc), "retryable": False},
+            ) from exc
+        if diagnostics is not None:
+            diagnostics.emit(
+                "document.import.completed",
+                document_ids=[item.id for item in result.documents],
+                document_id_map=result.document_id_map,
+                source="web",
+            )
+        return result
+
+    @router.get("/project/settings", response_model=ProjectSettings)
+    def get_project_settings():
+        return service.get_project_settings()
+
+    @router.put("/project/settings", response_model=ProjectSettings)
+    def update_project_settings(settings: ProjectSettings):
+        return service.update_project_settings(settings)
+
+    @router.get("/project/export.json")
+    def export_project_package():
+        try:
+            package = service.export_project_package()
+        except ProjectIOError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": exc.code, "message": str(exc), "retryable": False},
+            ) from exc
+        return Response(
+            package.model_dump_json(indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="pid-agent-project.pid.json"'},
+        )
+
+    @router.post(
+        "/imports/project-package",
+        response_model=ImportResult,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def import_project_package(
+        payload: dict[str, Any],
+        conflict_policy: ImportConflictPolicy = "regenerate",
+    ):
+        try:
+            result = service.import_project_payload(payload, conflict_policy=conflict_policy)
+        except ProjectIOError as exc:
+            raise HTTPException(
+                status_code=409 if exc.code == "document_id_conflict" else 422,
+                detail={"error": exc.code, "message": str(exc), "retryable": False},
+            ) from exc
+        if diagnostics is not None:
+            diagnostics.emit(
+                "project.import.completed",
+                document_ids=[item.id for item in result.documents],
+                document_id_map=result.document_id_map,
+                project_name=result.project.name if result.project else None,
+                source="web",
+            )
+        return result
 
     @router.get("/documents/{document_id}/export.png")
     def export_png(document_id: str, scale: float = 1.0):

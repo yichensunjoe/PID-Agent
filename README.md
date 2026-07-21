@@ -29,6 +29,7 @@ P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 - document revision 乐观并发，防止 Agent 覆盖人工修改；
 - 完整文档快照撤销和重做；
 - JSON、SVG、PNG 导出；
+- 版本化单文档 JSON 与原子项目包导入/导出，可在导入后继续编辑、撤销和重做；
 - 场景摘要包含符号端口、连接节点和管线 source/target。
 
 ### 浏览器编辑器
@@ -203,6 +204,12 @@ POST   /api/v2/documents/{document_id}/undo
 POST   /api/v2/documents/{document_id}/redo
 GET    /api/v2/documents/{document_id}/scene-summary
 GET    /api/v2/documents/{document_id}/export.json
+GET    /api/v2/documents/{document_id}/export-v1.json
+POST   /api/v2/imports/document
+GET    /api/v2/project/settings
+PUT    /api/v2/project/settings
+GET    /api/v2/project/export.json
+POST   /api/v2/imports/project-package
 GET    /api/v2/documents/{document_id}/export.svg
 GET    /api/v2/documents/{document_id}/export.png
 POST   /api/v2/documents/{document_id}/agent/generate
@@ -211,6 +218,8 @@ GET    /api/v2/agent/tool-schema
 ```
 
 运行后访问 `/docs` 查看 OpenAPI。
+
+JSON 格式、冲突策略、原子失败语义、浏览器操作和 Python Client 示例见 [`docs/project-json-import.md`](docs/project-json-import.md)。
 
 `/api/v1` 主要旧端点仍由新文档引擎提供兼容。
 

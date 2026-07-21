@@ -264,3 +264,12 @@ html[data-e2e="true"] select,
 html[data-e2e="true"] textarea {
   font-family: "Noto Sans CJK SC", "Noto Sans", sans-serif !important;
 }
+
+.document-import-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.document-import-actions button { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 7px; color: #334155; background: #f8fafc; cursor: pointer; font-size: 11px; }
+.project-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; border-radius: 6px; padding: 7px 8px; color: #475569; background: #e9eef5; font-size: 10px; }
+.project-summary strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-import-error { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; border-radius: 6px; padding: 8px; color: #991b1b; background: #fee2e2; font-size: 10px; line-height: 1.45; }
+.document-import-error button { align-self: flex-start; border: 1px solid #fecaca; border-radius: 5px; padding: 3px 7px; color: #991b1b; background: #fff; cursor: pointer; }
+.app-shell[data-theme="dark"] .document-import-actions button,
+.app-shell[data-theme="dark"] .project-summary { border-color: #334155; color: #cbd5e1; background: #1e293b; }

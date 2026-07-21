@@ -7,6 +7,8 @@ import type {
   DocumentSummary,
   HistoryEntry,
   Operation,
+  ImportResult,
+  ProjectSettings,
   SemanticAgentPlan,
   SemanticAgentPlanResult,
   SymbolDefinition,
@@ -134,6 +136,21 @@ export const api = {
   getDocumentStatus: (id: string) => request<DocumentStatus>(`/documents/${id}/status`),
   getHistory: (id: string, limit = 100) => request<HistoryEntry[]>(`/documents/${id}/history?limit=${limit}`),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+  importDocument: (payload: unknown, conflictPolicy: "reject" | "regenerate" = "regenerate") =>
+    request<ImportResult>(`/imports/document?conflict_policy=${conflictPolicy}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  importProjectPackage: (payload: unknown, conflictPolicy: "reject" | "regenerate" = "regenerate") =>
+    request<ImportResult>(`/imports/project-package?conflict_policy=${conflictPolicy}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getProjectSettings: () => request<ProjectSettings>("/project/settings"),
+  updateProjectSettings: (settings: ProjectSettings) => request<ProjectSettings>("/project/settings", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  }),
   transact: (id: string, revision: number, operations: Operation[], label: string) =>
     request<{ document: Document }>(`/documents/${id}/transactions`, {
       method: "POST",

@@ -33,7 +33,7 @@ export default defineConfig({
     reducedMotion: "reduce",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    video: process.env.PID_AGENT_E2E_NO_VIDEO ? "off" : "retain-on-failure",
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
       : undefined,

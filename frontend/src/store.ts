@@ -18,6 +18,7 @@ import type {
   Element,
   Operation,
   Point,
+  ProjectSettings,
   SymbolDefinition,
   Tool,
 } from "./types";
@@ -99,6 +100,8 @@ type State = {
   selectedElementIds: string[];
   selectedSymbolKey: string | null;
   loading: boolean;
+  importing: boolean;
+  projectSettings: ProjectSettings;
   isMutating: boolean;
   error: string | null;
   syncState: SyncState;
@@ -106,6 +109,9 @@ type State = {
   pendingExternalRevision: number | null;
   loadWorkspace: () => Promise<void>;
   createDocument: () => Promise<void>;
+  importDocumentPayload: (payload: unknown) => Promise<void>;
+  importProjectPackagePayload: (payload: unknown) => Promise<void>;
+  clearError: () => void;
   openDocument: (id: string) => Promise<void>;
   setTool: (tool: Tool) => void;
   setSelection: (ids: string[], options?: { expandGroups?: boolean }) => void;
@@ -139,6 +145,8 @@ export const useWorkspace = create<State>((set, get) => ({
   selectedElementIds: [],
   selectedSymbolKey: null,
   loading: false,
+  importing: false,
+  projectSettings: { name: "P&ID Project", metadata: {} },
   isMutating: false,
   error: null,
   syncState: "idle",
@@ -148,13 +156,18 @@ export const useWorkspace = create<State>((set, get) => ({
   loadWorkspace: async () => {
     set({ loading: true, error: null, syncState: "checking", syncMessage: "正在载入工作区…" });
     try {
-      const [documents, symbols] = await Promise.all([api.listDocuments(), api.listSymbols()]);
+      const [documents, symbols, projectSettings] = await Promise.all([
+        api.listDocuments(),
+        api.listSymbols(),
+        api.getProjectSettings(),
+      ]);
       const document = documents.length === 0
         ? await api.createDocument("新建 P&ID")
         : await api.getDocument(documents[0].id);
       set({
         documents: await api.listDocuments(),
         symbols,
+        projectSettings,
         document,
         selectedElementIds: [],
         loading: false,
@@ -196,6 +209,59 @@ export const useWorkspace = create<State>((set, get) => ({
       });
     }
   },
+
+  importDocumentPayload: async (payload) => {
+    set({ importing: true, error: null, syncState: "checking", syncMessage: "正在导入文档…" });
+    try {
+      const result = await api.importDocument(payload);
+      const document = result.documents[0];
+      set({
+        document,
+        documents: await api.listDocuments(),
+        selectedElementIds: [],
+        importing: false,
+        syncState: "synced",
+        syncMessage: `已导入 ${document.name} · r${document.revision}`,
+        pendingExternalRevision: null,
+      });
+    } catch (error) {
+      set({
+        error: messageFromError(error),
+        importing: false,
+        syncState: "error",
+        syncMessage: "文档导入失败，现有工程未修改",
+      });
+      throw error;
+    }
+  },
+
+  importProjectPackagePayload: async (payload) => {
+    set({ importing: true, error: null, syncState: "checking", syncMessage: "正在导入项目包…" });
+    try {
+      const result = await api.importProjectPackage(payload);
+      const document = result.documents[0];
+      set({
+        document,
+        documents: await api.listDocuments(),
+        projectSettings: result.project ?? get().projectSettings,
+        selectedElementIds: [],
+        importing: false,
+        syncState: "synced",
+        syncMessage: `已导入项目包 · ${result.documents.length} 个文档`,
+        pendingExternalRevision: null,
+      });
+    } catch (error) {
+      set({
+        error: messageFromError(error),
+        importing: false,
+        syncState: "error",
+        syncMessage: "项目包导入失败，现有工程未修改",
+      });
+      throw error;
+    }
+  },
+
+  clearError: () => set({ error: null }),
 
   openDocument: async (id) => {
     set({

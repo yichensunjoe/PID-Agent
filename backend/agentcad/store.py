@@ -4,14 +4,20 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 from typing import Any
 
 from .models import Document, DocumentSummary, HistoryEntry
+from .project_io import ProjectSettings
 
 
 class StoreRevisionConflictError(RuntimeError):
+    pass
+
+
+class StoreDocumentConflictError(RuntimeError):
     pass
 
 
@@ -89,6 +95,15 @@ class SQLiteDocumentStore:
                 "CREATE INDEX IF NOT EXISTS idx_history_document_revision "
                 "ON document_history(document_id, revision DESC, id DESC)"
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_settings (
+                    singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+                    data_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     @staticmethod
     def _encode(value: Any) -> str:
@@ -165,6 +180,89 @@ class SQLiteDocumentStore:
                         "{}",
                     ),
                 )
+
+    def document_ids(self) -> set[str]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute("SELECT id FROM documents").fetchall()
+        return {str(row["id"]) for row in rows}
+
+    def get_project_settings(self) -> ProjectSettings:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT data_json FROM project_settings WHERE singleton_id = 1"
+            ).fetchone()
+        if row is None:
+            return ProjectSettings()
+        return ProjectSettings.model_validate_json(row["data_json"])
+
+    def save_project_settings(self, settings: ProjectSettings) -> ProjectSettings:
+        normalized = ProjectSettings.model_validate(settings.model_dump(mode="python"))
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO project_settings (singleton_id, data_json, updated_at)
+                VALUES (1, ?, ?)
+                ON CONFLICT(singleton_id) DO UPDATE SET
+                    data_json=excluded.data_json, updated_at=excluded.updated_at
+                """,
+                (self._encode(normalized.model_dump(mode="json")), datetime.now(UTC).isoformat()),
+            )
+        return normalized
+
+    def import_documents_atomic(
+        self,
+        documents: list[Document],
+        *,
+        project_settings: ProjectSettings | None = None,
+    ) -> None:
+        with self._lock, self._connect() as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                for document in documents:
+                    connection.execute(
+                        """
+                        INSERT INTO documents (
+                            id, name, revision, data_json, undo_json, redo_json, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, '[]', '[]', ?, ?)
+                        """,
+                        (
+                            document.id,
+                            document.name,
+                            document.revision,
+                            self._encode(document.model_dump(mode="json")),
+                            document.created_at.isoformat(),
+                            document.updated_at.isoformat(),
+                        ),
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO document_history (
+                            document_id, revision, timestamp, source, action, label,
+                            operation_count, details_json
+                        ) VALUES (?, ?, ?, 'system', 'create', 'Import document', 0, '{}')
+                        """,
+                        (document.id, document.revision, datetime.now(UTC).isoformat()),
+                    )
+                if project_settings is not None:
+                    connection.execute(
+                        """
+                        INSERT INTO project_settings (singleton_id, data_json, updated_at)
+                        VALUES (1, ?, ?)
+                        ON CONFLICT(singleton_id) DO UPDATE SET
+                            data_json=excluded.data_json, updated_at=excluded.updated_at
+                        """,
+                        (
+                            self._encode(project_settings.model_dump(mode="json")),
+                            datetime.now(UTC).isoformat(),
+                        ),
+                    )
+                connection.commit()
+            except sqlite3.IntegrityError as exc:
+                connection.rollback()
+                raise StoreDocumentConflictError(str(exc)) from exc
+            except Exception:
+                connection.rollback()
+                raise
 
     def update_history_details(
         self,
