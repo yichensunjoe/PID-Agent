@@ -14,6 +14,7 @@ from .api_acceptance import create_acceptance_router
 from .api_dxf import create_dxf_router
 from .api_export import _max_export_pixels, create_export_router
 from .api_layout import create_layout_router
+from .api_reports import create_reports_router
 from .api_semantic_agent import create_semantic_agent_router
 from .config import Settings
 from .diagnostics import DiagnosticLogger
@@ -68,6 +69,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "X-PID-Agent-DXF-Layer-Count",
             "X-PID-Agent-DXF-Units",
             "X-PID-Agent-DXF-Scale",
+            "X-PID-Agent-Report-Revision",
+            "X-PID-Agent-Report-Scope",
+            "X-PID-Agent-Report-Row-Count",
         ],
     )
 
@@ -170,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(create_export_router(service, diagnostics))
     app.include_router(create_dxf_router(service, diagnostics))
     app.include_router(create_layout_router(service, diagnostics))
+    app.include_router(create_reports_router(service))
     app.include_router(create_semantic_agent_router(service, semantic_planner, diagnostics))
     app.include_router(create_v1_compat_router(service))
 

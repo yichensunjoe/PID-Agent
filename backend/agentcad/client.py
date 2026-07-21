@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from .engineering_reports import EngineeringReport, ReportScope
 from .models import (
     AgentGenerateRequest,
     AgentGenerateResult,
@@ -256,6 +257,34 @@ class AgentCADClient:
             "GET",
             f"/documents/{document_id}/export-v2.dxf",
             params=params,
+        )
+        path = Path(destination)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(response.content)
+        return path
+
+    def engineering_report(
+        self, document_id: str, *, scope: ReportScope = "visible"
+    ) -> EngineeringReport:
+        response = self._request(
+            "GET", f"/documents/{document_id}/engineering-report", params={"scope": scope}
+        )
+        return EngineeringReport.model_validate(response.json())
+
+    def export_engineering_report_csv(
+        self,
+        document_id: str,
+        kind: str,
+        destination: str | Path,
+        *,
+        scope: ReportScope = "visible",
+    ) -> Path:
+        if kind not in {"equipment", "lines", "instruments", "rules"}:
+            raise ValueError("kind must be equipment, lines, instruments, or rules")
+        response = self._request(
+            "GET",
+            f"/documents/{document_id}/engineering-report/{kind}.csv",
+            params={"scope": scope},
         )
         path = Path(destination)
         path.parent.mkdir(parents=True, exist_ok=True)
