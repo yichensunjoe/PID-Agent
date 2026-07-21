@@ -1,0 +1,68 @@
+name: Issue 37 validated apply
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue37-validated-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/issue-37-pdf-print-titleblock'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      PID_AGENT_LLM_API_KEY: ""
+      PID_AGENT_LLM_BASE_URL: ""
+      PID_AGENT_LLM_MODEL: ""
+      NPM_CONFIG_REGISTRY: "https://registry.npmjs.org"
+      NPM_CONFIG_FETCH_RETRIES: "3"
+      NPM_CONFIG_FETCH_RETRY_FACTOR: "2"
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "5000"
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "30000"
+      NPM_CONFIG_FETCH_TIMEOUT: "120000"
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/issue-37-pdf-print-titleblock
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify public npm registry
+        shell: bash
+        run: >-
+          npm view zustand@5.0.14 dist.integrity
+          --registry=https://registry.npmjs.org
+          --fetch-retries=1
+          --fetch-timeout=30000
+
+      - name: Validate, test, apply and clean payload
+        shell: bash
+        run: bash -x .github/issue37-apply.sh 2>&1 | tee /tmp/issue37-apply.log
+
+      - name: Upload temporary apply diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue37-apply-diagnostics
+          path: /tmp/issue37-apply.log
+          retention-days: 1
