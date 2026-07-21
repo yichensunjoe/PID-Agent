@@ -22,6 +22,11 @@ jobs:
       PID_AGENT_LLM_API_KEY: ""
       PID_AGENT_LLM_BASE_URL: ""
       PID_AGENT_LLM_MODEL: ""
+      NPM_CONFIG_FETCH_RETRIES: "4"
+      NPM_CONFIG_FETCH_RETRY_FACTOR: "2"
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "60000"
+      NPM_CONFIG_FETCH_TIMEOUT: "180000"
     steps:
       - name: Checkout feature branch
         uses: actions/checkout@v4
