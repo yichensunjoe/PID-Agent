@@ -23,14 +23,14 @@ jobs:
           ref: agent/issue-35-project-json-import
           fetch-depth: 0
 
-      - name: Verify base and package source
+      - name: Verify base and package committed source
         shell: bash
         run: |
           set -euo pipefail
           BASE_SHA=fcb77d51120ca47a542dd15844f4d205391e70db
-          git merge-base --is-ancestor "$BASE_SHA" HEAD
+          test "$(git merge-base "$BASE_SHA" HEAD)" = "$BASE_SHA"
           git rev-parse HEAD > issue35-source-commit.txt
-          tar --exclude=.git --exclude=issue35-source.tar.gz --exclude=issue35-source-sha256.txt -czf issue35-source.tar.gz .
+          git archive --format=tar.gz --output=issue35-source.tar.gz HEAD
           sha256sum issue35-source.tar.gz > issue35-source-sha256.txt
 
       - name: Upload source snapshot
