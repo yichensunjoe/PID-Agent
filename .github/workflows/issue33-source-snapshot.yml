@@ -1,0 +1,34 @@
+name: Issue 33 source snapshot
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify expected base and pack repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ github.event.pull_request.base.sha }}" = "875227cd824685b536f16a4cbdd2b50619b940a9"
+          git rev-parse HEAD > /tmp/pid-agent-source.commit
+          tar --exclude=.git -czf /tmp/pid-agent-source.tar.gz .
+          sha256sum /tmp/pid-agent-source.tar.gz > /tmp/pid-agent-source.tar.gz.sha256
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue33-source
+          path: |
+            /tmp/pid-agent-source.tar.gz
+            /tmp/pid-agent-source.tar.gz.sha256
+            /tmp/pid-agent-source.commit
+          retention-days: 1
