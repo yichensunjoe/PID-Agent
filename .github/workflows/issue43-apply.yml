@@ -1,0 +1,81 @@
+name: Issue 43 validated apply
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue43-validated-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/issue-43-kimi-temperature'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/issue-43-kimi-temperature
+          fetch-depth: 0
+
+      - name: Validate and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/issue43-linepatch-{00..06}.txt > /tmp/issue43.patch
+          echo '87e9c9679838a5b5b9a070bd3855860272d56b69a2885d608dd08561e9479c4a  /tmp/issue43.patch' | sha256sum --check --strict
+          git apply --check /tmp/issue43.patch
+          git apply /tmp/issue43.patch
+          rm -f .github/issue43-patch-*.txt .github/issue43-linepatch-*.txt .github/workflows/issue43-apply.yml
+
+          git fetch origin main --depth=1
+          git diff --exit-code origin/main -- backend/agentcad/data/symbols.json
+          python - <<'PY'
+          import subprocess
+
+          expected = {
+              'README.md',
+              'backend/agentcad/llm.py',
+              'backend/agentcad/provider_compat.py',
+              'backend/agentcad/provider_discovery.py',
+              'backend/agentcad/semantic_planner.py',
+              'backend/tests/test_provider_compat.py',
+              'docs/custom-model-api.md',
+              'docs/provider-selection-and-agent-runs.md',
+              'frontend/e2e/workspace.spec.ts',
+              'frontend/src/App.tsx',
+              'frontend/src/providerPresets.ts',
+              'frontend/tests/providerPresets.test.ts',
+          }
+          changed = set(subprocess.check_output(
+              ['git', 'diff', '--name-only', 'origin/main'], text=True
+          ).splitlines())
+          if changed != expected:
+              raise SystemExit(f'issue 43 whitelist mismatch: {sorted(changed ^ expected)}')
+          PY
+
+          git diff --check
+          ! git diff | grep -Ei '(sk-[A-Za-z0-9_-]{16,}|api[_-]?key\s*[:=]\s*["'"'][^"'"']+)' || {
+            echo 'possible credential found in diff' >&2
+            exit 1
+          }
+
+      - name: Commit permanent changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: support Kimi Coding provider constraints'
+          git push origin HEAD:agent/issue-43-kimi-temperature
