@@ -288,3 +288,72 @@ export type ImportResult = {
   document_id_map: Record<string, string>;
   project?: ProjectSettings | null;
 };
+
+export type ReportScope = "visible" | "all";
+export type RuleSeverity = "info" | "warning" | "error";
+
+export type EquipmentScheduleRow = {
+  element_id: string;
+  tag: string;
+  name: string;
+  symbol_key: string;
+  symbol_name: string;
+  category: string;
+  layer_id: string;
+  layer_name: string;
+  system_id: string;
+  system_name: string;
+  required_port_count: number;
+  connected_port_count: number;
+  properties: Record<string, unknown>;
+};
+
+export type LineScheduleRow = {
+  element_id: string;
+  line_tag: string;
+  name: string;
+  medium: string;
+  nominal_diameter: string;
+  routing: string;
+  flow_direction: string;
+  layer_id: string;
+  layer_name: string;
+  system_id: string;
+  system_name: string;
+  source: string;
+  target: string;
+  metadata: Record<string, unknown>;
+};
+
+export type InstrumentScheduleRow = EquipmentScheduleRow;
+
+export type RuleFinding = {
+  severity: RuleSeverity;
+  code: string;
+  message: string;
+  element_ids: string[];
+  details: Record<string, unknown>;
+};
+
+export type EngineeringReportCounts = {
+  equipment: number;
+  lines: number;
+  instruments: number;
+  errors: number;
+  warnings: number;
+  info: number;
+};
+
+export type EngineeringReport = {
+  schema: "pid-agent.engineering-report";
+  version: 1;
+  document_id: string;
+  document_name: string;
+  revision: number;
+  scope: ReportScope;
+  counts: EngineeringReportCounts;
+  equipment: EquipmentScheduleRow[];
+  lines: LineScheduleRow[];
+  instruments: InstrumentScheduleRow[];
+  findings: RuleFinding[];
+};

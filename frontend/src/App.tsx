@@ -3,6 +3,7 @@ import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
 import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest, type CanvasViewportRequest } from "./editor/EditorCanvas";
 import { CommandPalette } from "./editor/CommandPalette";
 import { ExperienceSettings } from "./editor/ExperienceSettings";
+import { EngineeringReportPanel } from "./editor/EngineeringReportPanel";
 import { ViewNavigator } from "./editor/ViewNavigator";
 import { elementPaletteCommands, type PaletteCommand } from "./editor/commandPalette";
 import { currentNavigationZone, deriveNavigationZones, loadNamedViews, persistNamedViews, sanitizeNamedViews, type CanvasView, type NamedCanvasView, type NavigationZone } from "./editor/navigationViews";
@@ -31,7 +32,7 @@ const tools: Array<{ id: Tool; label: string; key: string }> = [
   { id: "text", label: "文字", key: "T" },
 ];
 
-type RightPanel = "properties" | "groups" | "history" | "agent";
+type RightPanel = "properties" | "groups" | "history" | "reports" | "agent";
 
 function operationDescription(operation: SemanticOperation): string {
   switch (operation.op) {
@@ -320,6 +321,7 @@ export default function App() {
     { id: "properties", label: "属性" },
     { id: "groups", label: "图层/系统" },
     { id: "history", label: "历史" },
+    { id: "reports", label: "报表/检查" },
     { id: "agent", label: "Agent" },
   ];
   const busyAgent = planningAgent || repairingAgent || applyingAgent;
@@ -567,6 +569,7 @@ export default function App() {
           {rightPanel === "properties" ? <section className="inspector-panel" role="tabpanel"><h2>元素属性</h2><PropertyInspector /></section> : null}
           {rightPanel === "groups" ? <section className="inspector-panel" role="tabpanel"><h2>图层与工艺系统</h2><LayerSystemPanel /></section> : null}
           {rightPanel === "history" ? <section className="inspector-panel" role="tabpanel"><h2>Revision 历史</h2><HistoryPanel /></section> : null}
+          {rightPanel === "reports" ? <section className="inspector-panel" role="tabpanel"><h2>工程报表与规则检查</h2><EngineeringReportPanel /></section> : null}
           <section className="agent-panel" role="tabpanel" hidden={rightPanel !== "agent"}>
             <h2>P&amp;ID Agent</h2>
             <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门替换为球阀，并保持原有管线连接。" rows={5} /></label>

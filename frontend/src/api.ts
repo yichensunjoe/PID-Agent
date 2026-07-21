@@ -9,6 +9,8 @@ import type {
   Operation,
   ImportResult,
   ProjectSettings,
+  EngineeringReport,
+  ReportScope,
   SemanticAgentPlan,
   SemanticAgentPlanResult,
   SymbolDefinition,
@@ -134,6 +136,13 @@ export const api = {
   createDocument: (name: string) => request<Document>("/documents", { method: "POST", body: JSON.stringify({ name }) }),
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getDocumentStatus: (id: string) => request<DocumentStatus>(`/documents/${id}/status`),
+  getEngineeringReport: (id: string, scope: ReportScope = "visible") =>
+    request<EngineeringReport>(`/documents/${id}/engineering-report?scope=${encodeURIComponent(scope)}`),
+  engineeringReportCsvUrl: (
+    id: string,
+    kind: "equipment" | "lines" | "instruments" | "rules",
+    scope: ReportScope = "visible",
+  ) => `${API_ROOT}/documents/${encodeURIComponent(id)}/engineering-report/${kind}.csv?scope=${encodeURIComponent(scope)}`,
   getHistory: (id: string, limit = 100) => request<HistoryEntry[]>(`/documents/${id}/history?limit=${limit}`),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
   importDocument: (payload: unknown, conflictPolicy: "reject" | "regenerate" = "regenerate") =>
