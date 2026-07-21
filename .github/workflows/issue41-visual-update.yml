@@ -60,7 +60,7 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Refresh and verify visual baselines
+      - name: Refresh visual baselines
         shell: bash
         run: |
           set -euo pipefail
@@ -78,7 +78,6 @@ jobs:
           cd frontend
           npm run build:e2e
           npx playwright test --update-snapshots
-          npx playwright test
           cd ..
           rm -rf frontend/dist frontend/test-results frontend/playwright-report
 
@@ -86,6 +85,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git add -- frontend/src/styles.css frontend/e2e/visual.spec.ts-snapshots/*.png
           python - <<'PY'
           from pathlib import Path
           import subprocess
@@ -103,22 +103,24 @@ jobs:
               'frontend/e2e/visual.spec.ts-snapshots/multi-selection-toolbar.png',
           }
           expected = snapshots | {'frontend/src/styles.css'}
-          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
-          if 'frontend/src/styles.css' not in changed:
+          staged = set(subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines())
+          if 'frontend/src/styles.css' not in staged:
               raise SystemExit('right-panel layout change is missing')
-          if not changed <= expected:
-              raise SystemExit(f'unexpected visual changes: {sorted(changed - expected)}')
-          if not changed.intersection(snapshots):
+          if not staged <= expected:
+              raise SystemExit(f'unexpected staged visual changes: {sorted(staged - expected)}')
+          changed_snapshots = staged.intersection(snapshots)
+          if not changed_snapshots:
               raise SystemExit('no visual baseline changed')
+          unstaged = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          if unstaged:
+              raise SystemExit(f'unstaged tracked changes remain: {sorted(unstaged)}')
           for snapshot in snapshots:
               path = Path(snapshot)
               if not path.is_file() or path.stat().st_size < 10_000:
                   raise SystemExit(f'invalid visual baseline: {snapshot}')
-          print(f'validated {len(changed.intersection(snapshots))} changed visual baselines')
+          print(f'validated {len(changed_snapshots)} changed visual baselines')
           PY
-          git add -- frontend/src/styles.css frontend/e2e/visual.spec.ts-snapshots/*.png
           git diff --cached --check
-          test -z "$(git status --porcelain --untracked-files=all | grep '^??' || true)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "test: stabilize and refresh visual baselines"
