@@ -20,11 +20,16 @@ from .llm import (
     LLMResponseError,
     OpenAICompatiblePlanner,
     ProviderConnectionError,
+    ProviderNetworkPolicyError,
     ProviderTimeoutError,
 )
 from .models import AgentGenerateRequest, Document, ProviderConfig
 from .provider_compat import completion_temperature
-from .provider_security import ProviderNetworkPolicy, provider_http_transport
+from .provider_security import (
+    ProviderNetworkPolicy,
+    ProviderURLPolicyError,
+    provider_http_transport,
+)
 from .service import DocumentService
 from .symbols import SymbolRegistry
 
