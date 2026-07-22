@@ -124,6 +124,23 @@ export PID_AGENT_CORS_ORIGINS="https://pid.example.com"
 
 共享模式缺少 token 或使用不安全 CORS 时会拒绝启动，并默认阻止 Provider 访问回环、私网、链路本地和云元数据地址。企业内网模型必须通过 hostname/CIDR allowlist 显式开放。认证、Provider 网络策略、请求上限、反向代理和诊断脱敏说明见 [`docs/shared-deployment-security.md`](docs/shared-deployment-security.md)。
 
+## SQLite 备份与恢复
+
+数据库在启动时按顺序执行版本化 migration，并使用与文件路径无关的持久实例 ID。可在服务运行期间创建一致备份：
+
+```bash
+pid-agent db info --database /data/pid-agent.db
+pid-agent db backup --database /data/pid-agent.db --output /backup/pid-agent.pidbak
+```
+
+恢复前应停止所有应用进程；备份包会在原子替换前校验格式、SHA-256、schema version、实例身份、SQLite 完整性和 foreign key：
+
+```bash
+pid-agent db restore --database /data/pid-agent.db --input /backup/pid-agent.pidbak
+```
+
+缺失、损坏或跨实例目标需要显式 `instance_id` 确认。Docker volume、灾难恢复流程和错误处理见 [`docs/sqlite-backup-restore.md`](docs/sqlite-backup-restore.md)。
+
 ## 单位图例
 
 内置占位图例：
