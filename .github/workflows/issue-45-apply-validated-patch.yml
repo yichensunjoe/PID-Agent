@@ -18,12 +18,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: agent/issue-45-shared-security
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
       - name: Validate and apply patch
         env:
           BRANCH: agent/issue-45-shared-security
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          git fetch --quiet --depth=1 origin main:refs/remotes/origin/main
           test "$(git branch --show-current)" = "$BRANCH"
           test "$(git status --porcelain | wc -l)" -eq 0
 
@@ -76,17 +78,15 @@ jobs:
           git apply --numstat /tmp/issue-45.patch | awk '{print $3}' | LC_ALL=C sort -u > /tmp/actual-paths
           LC_ALL=C sort -u /tmp/expected-paths -o /tmp/expected-paths
           diff -u /tmp/expected-paths /tmp/actual-paths
-
           git apply --check /tmp/issue-45.patch
           git apply /tmp/issue-45.patch
+
           rm -f .github/issue-45.patch.gz.b64.*
           rm -f .github/workflows/issue-45-apply-validated-patch.yml
-
           test ! -e .github/workflows/issue-45-source-snapshot.yml
-          test ! -e .github/workflows/issue-45-apply-validated-patch.yml
           test -z "$(find .github -maxdepth 2 -type f -name 'issue-45.patch*' -print -quit)"
           git diff --check
-          python -m compileall -q backend
+          PYTHONDONTWRITEBYTECODE=1 python -m compileall -q backend
           git diff --exit-code origin/main -- backend/agentcad/data/symbols.json
 
           git add -A
