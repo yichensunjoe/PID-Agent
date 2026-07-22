@@ -46,6 +46,15 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Upload staged chunk for diagnosis
+        if: steps.apply.outputs.status != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-47-staged-chunk-${{ github.run_id }}
+          path: .github/issue-47.patch.gz.b64.02
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Propagate apply failure
         if: steps.apply.outputs.status != '0'
         run: exit 1
