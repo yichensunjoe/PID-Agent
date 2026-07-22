@@ -1,9 +1,9 @@
 name: Issue 45 source snapshot
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/issue-45-shared-security
+      - main
     paths:
       - .github/workflows/issue-45-source-snapshot.yml
 
