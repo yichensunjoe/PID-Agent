@@ -9,10 +9,22 @@ test "$(git branch --show-current)" = "$BRANCH"
 test "$(git rev-parse refs/remotes/origin/main)" = "$BASE_SHA"
 test -z "$(git status --porcelain)"
 
+# The connector-transmitted third chunk contains one verified adjacent-character transposition.
+# Assert the exact bad sequence occurs once, repair it, and then require the original SHA256.
+python - <<'PY'
+from pathlib import Path
+
+path = Path('.github/issue-47.patch.gz.b64.02')
+text = path.read_text()
+bad = 'YiWruidV0l'
+good = 'YiWuridV0l'
+if text.count(bad) != 1 or good in text:
+    raise SystemExit('unexpected staged chunk content')
+path.write_text(text.replace(bad, good))
+PY
+
 echo 'ee8425b20467cff9bda1b50f58ce7a756a7fca9a9de792393b4e94ef87ef81a6  .github/issue-47.patch.gz.b64.00' | sha256sum -c -
 echo '3ea3af59fca57e7d8dd0355280f72cac0594331cab67a417067fee0d0c552b16  .github/issue-47.patch.gz.b64.01' | sha256sum -c -
-wc -c .github/issue-47.patch.gz.b64.02
-sha256sum .github/issue-47.patch.gz.b64.02
 echo '4fc45a37d7acd1bdbd909c870b8b6d8d2ea2c7836526d620ab330df0bfa1c99e  .github/issue-47.patch.gz.b64.02' | sha256sum -c -
 echo 'c7df0606e000ad47cabe164cbe7c2bb8f5a91c92574b89cf8b06623eb70d10d0  .github/issue-47.patch.gz.b64.03' | sha256sum -c -
 
