@@ -22,4 +22,9 @@ jobs:
           fetch-depth: 1
           show-progress: false
       - name: Validate and apply patch
-        run: bash .github/issue-45-apply.sh
+        run: |
+          if ! bash .github/issue-45-apply.sh > /tmp/issue-45-apply.log 2>&1; then
+            tail -n 100 /tmp/issue-45-apply.log
+            exit 1
+          fi
+          tail -n 30 /tmp/issue-45-apply.log
