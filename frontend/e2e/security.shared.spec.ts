@@ -55,7 +55,7 @@ test("shared provider policy blocks localhost, permits an allowlisted target, an
   await page.locator(".service-access-settings").getByText("共享部署访问令牌").click();
   await page.getByTestId("service-token-input").fill(TOKEN);
   await page.getByTestId("service-token-apply").click();
-  await page.locator(`[data-document-id="${document.id}"]`).click();
+  await page.locator(`button[data-document-id="${document.id}"]`).click();
   await page.waitForFunction(() => Boolean(window.__PID_AGENT_E2E__?.snapshot().document));
 
   await page.getByRole("tab", { name: "Agent" }).click();
