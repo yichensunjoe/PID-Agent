@@ -123,9 +123,17 @@ jobs:
         working-directory: frontend
         run: npm run build:e2e
 
-      - name: Run browser acceptance
+      - name: Run local-mode browser acceptance
         working-directory: frontend
         run: npx playwright test
+
+      - name: Run shared-mode security acceptance
+        working-directory: frontend
+        run: npx playwright test --config playwright.shared.config.ts
+
+      - name: Verify browser artifacts contain no test credentials
+        working-directory: frontend
+        run: npm run test:e2e:secrets
 
       - name: Upload Playwright failure artifacts
         if: failure()
@@ -135,6 +143,8 @@ jobs:
           path: |
             frontend/test-results/playwright
             frontend/test-results/playwright-report
+            frontend/test-results/shared-playwright
+            frontend/test-results/shared-playwright-report
             frontend/test-results/*.diagnostics.jsonl
           if-no-files-found: ignore
           retention-days: 7

@@ -20,10 +20,16 @@ from .llm import (
     LLMResponseError,
     OpenAICompatiblePlanner,
     ProviderConnectionError,
+    ProviderNetworkPolicyError,
     ProviderTimeoutError,
 )
 from .models import AgentGenerateRequest, Document, ProviderConfig
 from .provider_compat import completion_temperature
+from .provider_security import (
+    ProviderNetworkPolicy,
+    ProviderURLPolicyError,
+    provider_http_transport,
+)
 from .service import DocumentService
 from .symbols import SymbolRegistry
 
@@ -63,13 +69,28 @@ class SemanticAgentPlanner:
         service: DocumentService,
         symbols: SymbolRegistry,
         diagnostics: DiagnosticLogger | None = None,
+        *,
+        provider_policy: ProviderNetworkPolicy | None = None,
+        max_response_bytes: int = 4 * 1024 * 1024,
+        max_timeout_seconds: float = 180,
     ):
         self.service = service
         self.symbols = symbols
         self.diagnostics = diagnostics
+        self.provider_transport = OpenAICompatiblePlanner(
+            service=service,
+            symbols=symbols,
+            provider_policy=provider_policy,
+            max_response_bytes=max_response_bytes,
+            max_timeout_seconds=max_timeout_seconds,
+        )
 
     def plan(self, document_id: str, request: AgentGenerateRequest) -> SemanticAgentPlan:
-        provider = OpenAICompatiblePlanner._resolve_provider(request.provider)
+        provider = self.provider_transport._resolve_provider(
+            request.provider,
+            self.provider_transport.provider_policy,
+            self.provider_transport.max_timeout_seconds,
+        )
         document = self.service.get_document(document_id)
         scene = self.service.scene_summary(document_id)
         user_prompt = (
@@ -95,7 +116,11 @@ class SemanticAgentPlanner:
         request: SemanticAgentReplanRequest,
         failure: AgentTransactionAssessment,
     ) -> SemanticAgentPlan:
-        provider = OpenAICompatiblePlanner._resolve_provider(request.provider)
+        provider = self.provider_transport._resolve_provider(
+            request.provider,
+            self.provider_transport.provider_policy,
+            self.provider_transport.max_timeout_seconds,
+        )
         document = self.service.get_document(document_id)
         scene = self.service.scene_summary(document_id)
         user_prompt = (
@@ -254,12 +279,22 @@ class SemanticAgentPlanner:
         headers = OpenAICompatiblePlanner._headers(provider)
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
         try:
-            with httpx.Client(timeout=provider.timeout_seconds) as client:
+            with httpx.Client(
+                timeout=provider.timeout_seconds,
+                follow_redirects=False,
+                transport=provider_http_transport(self.provider_transport.provider_policy),
+            ) as client:
                 response = client.post(endpoint, json=payload, headers=headers)
+                self.provider_transport._inspect_response(response, provider, endpoint)
                 if response.status_code in {400, 404, 422} and "response_format" in payload:
                     fallback_payload = dict(payload)
                     fallback_payload.pop("response_format", None)
                     response = client.post(endpoint, json=fallback_payload, headers=headers)
+                    self.provider_transport._inspect_response(response, provider, endpoint)
+        except ProviderURLPolicyError as exc:
+            raise ProviderNetworkPolicyError(
+                str(exc), category=exc.category, provider=provider
+            ) from exc
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
                 f"model did not finish within {provider.timeout_seconds:g} seconds",
@@ -268,7 +303,7 @@ class SemanticAgentPlanner:
             ) from exc
         except httpx.RequestError as exc:
             raise ProviderConnectionError(
-                f"could not connect to model provider: {exc}",
+                "could not connect to model provider",
                 provider=provider,
             ) from exc
 

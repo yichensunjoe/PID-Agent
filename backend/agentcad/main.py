@@ -19,6 +19,8 @@ from .api_semantic_agent import create_semantic_agent_router
 from .config import Settings
 from .diagnostics import DiagnosticLogger
 from .llm import OpenAICompatiblePlanner
+from .provider_security import ProviderNetworkPolicy
+from .security import RequestBoundary, redact_query_string
 from .semantic_planner import SemanticAgentPlanner
 from .service import DocumentService
 from .store import SQLiteDocumentStore
@@ -29,10 +31,22 @@ VERSION = "2.1.0-alpha.1"
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    settings.validate()
     symbols = SymbolRegistry()
     store = SQLiteDocumentStore(settings.database_path)
     service = DocumentService(store=store, symbols=symbols)
-    planner = OpenAICompatiblePlanner(service=service, symbols=symbols)
+    provider_policy = ProviderNetworkPolicy(
+        mode=settings.deployment_mode,
+        allow_hosts=settings.provider_allow_hosts,
+        allow_cidrs=settings.provider_allow_cidrs,
+    )
+    planner = OpenAICompatiblePlanner(
+        service=service,
+        symbols=symbols,
+        provider_policy=provider_policy,
+        max_response_bytes=settings.provider_max_response_bytes,
+        max_timeout_seconds=settings.agent_timeout_seconds,
+    )
     diagnostics_path = settings.diagnostics_path or settings.database_path.with_suffix(
         ".diagnostics.jsonl"
     )
@@ -41,20 +55,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service=service,
         symbols=symbols,
         diagnostics=diagnostics,
+        provider_policy=provider_policy,
+        max_response_bytes=settings.provider_max_response_bytes,
+        max_timeout_seconds=settings.agent_timeout_seconds,
     )
 
+    shared = settings.deployment_mode == "shared"
     app = FastAPI(
         title="P&ID-Agent",
         version=VERSION,
         description="Lightweight, editable and agent-ready P&ID workspace",
+        docs_url=None if shared else "/docs",
+        redoc_url=None if shared else "/redoc",
+        openapi_url=None if shared else "/openapi.json",
     )
     app.state.service = service
     app.state.diagnostics = diagnostics
+    app.state.settings = settings
+    app.state.provider_policy = provider_policy
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "If-Match"],
         expose_headers=[
             "X-PID-Agent-Request-ID",
@@ -87,7 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request_id=request_id,
             method=request.method,
             path=request.url.path,
-            query=request.url.query,
+            query=redact_query_string(request.url.query),
             client=request.client.host if request.client else None,
         )
         response = None
@@ -169,6 +192,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return response
 
+    request_boundary = RequestBoundary(settings)
+
+    @app.middleware("http")
+    async def enforce_request_boundaries(request: Request, call_next):
+        return await request_boundary(request, call_next)
+
     app.include_router(create_v2_router(service, planner, diagnostics, VERSION))
     app.include_router(create_acceptance_router(symbols, diagnostics))
     app.include_router(create_export_router(service, diagnostics))
@@ -188,6 +217,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         database_instance_id=store.database_instance_id,
         diagnostics_path=diagnostics_path,
         symbol_count=len(symbols.list()),
+        deployment_mode=settings.deployment_mode,
+        api_auth_enabled=bool(settings.api_token),
     )
 
     if settings.frontend_dist.exists():

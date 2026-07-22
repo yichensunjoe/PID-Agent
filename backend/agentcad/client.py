@@ -33,11 +33,15 @@ class AgentCADClient:
         *,
         timeout: float = 120,
         headers: dict[str, str] | None = None,
+        token: str | None = None,
     ):
+        request_headers = dict(headers or {})
+        if token:
+            request_headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.Client(
             base_url=base_url.rstrip("/") + "/api/v2",
             timeout=timeout,
-            headers=headers,
+            headers=request_headers,
         )
 
     def __enter__(self) -> AgentCADClient:

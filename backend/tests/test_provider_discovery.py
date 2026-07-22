@@ -21,7 +21,8 @@ class _Response:
 
 
 class _Client:
-    def __init__(self, *, timeout: float):
+    def __init__(self, *, timeout: float, follow_redirects: bool = False, transport=None):
+        assert follow_redirects is False
         self.timeout = timeout
         self.url = ""
         self.headers: dict[str, str] = {}

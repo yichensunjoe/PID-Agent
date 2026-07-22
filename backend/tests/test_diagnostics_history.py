@@ -168,11 +168,22 @@ def test_diagnostic_export_redacts_api_key_and_prompt(tmp_path: Path, monkeypatc
     assert exported.status_code == 200
     assert secret not in exported.text
     assert prompt not in exported.text
-    assert exported.json()["privacy"] == {
+    payload = exported.json()
+    assert payload["privacy"] == {
         "api_keys_recorded": False,
         "authorization_headers_recorded": False,
         "full_prompts_recorded": False,
         "full_context_recorded": False,
+        "project_content_recorded": False,
+        "upload_bodies_recorded": False,
+    }
+    assert "snapshot" not in payload
+    assert payload["document"] == {
+        "id": document["id"],
+        "revision": 0,
+        "element_count": 0,
+        "layer_count": 1,
+        "system_count": 1,
     }
 
 
