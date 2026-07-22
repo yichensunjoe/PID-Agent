@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -9,6 +8,10 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from .database_recovery import (
+    database_instance_id as read_database_instance_id,
+    initialize_database,
+)
 from .models import Document, DocumentSummary, HistoryEntry
 from .project_io import ProjectSettings
 
@@ -37,8 +40,7 @@ class SQLiteDocumentStore:
 
     @property
     def database_instance_id(self) -> str:
-        resolved = str(self.database_path.expanduser().resolve())
-        return hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:16]
+        return read_database_instance_id(self.database_path)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=30)
@@ -48,62 +50,8 @@ class SQLiteDocumentStore:
         return connection
 
     def _initialize(self) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS documents (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    revision INTEGER NOT NULL,
-                    data_json TEXT NOT NULL,
-                    undo_json TEXT NOT NULL,
-                    redo_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS document_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    document_id TEXT NOT NULL,
-                    revision INTEGER NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    action TEXT NOT NULL,
-                    label TEXT NOT NULL,
-                    operation_count INTEGER NOT NULL,
-                    details_json TEXT NOT NULL DEFAULT '{}',
-                    FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
-                )
-                """
-            )
-            columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(document_history)").fetchall()
-            }
-            if "details_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE document_history "
-                    "ADD COLUMN details_json TEXT NOT NULL DEFAULT '{}'"
-                )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_history_document_revision "
-                "ON document_history(document_id, revision DESC, id DESC)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS project_settings (
-                    singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
-                    data_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
+        with self._lock:
+            initialize_database(self.database_path)
 
     @staticmethod
     def _encode(value: Any) -> str:
