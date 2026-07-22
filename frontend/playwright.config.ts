@@ -6,6 +6,7 @@ const diagnosticsPath = path.resolve("test-results", `pid-agent-e2e-${process.pi
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "security.shared.spec.ts",
   outputDir: "test-results/playwright",
   snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}{ext}",
   fullyParallel: false,
