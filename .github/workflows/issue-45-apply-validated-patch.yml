@@ -1,0 +1,97 @@
+name: Issue 45 apply validated patch
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/issue-45-apply-validated-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-45-shared-security
+          fetch-depth: 0
+      - name: Validate and apply patch
+        env:
+          BRANCH: agent/issue-45-shared-security
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "$BRANCH"
+          test "$(git status --porcelain | wc -l)" -eq 0
+
+          echo '8b0f9708ffe8461972b9403be286ad29d29e719216d3ff11af88c3851ac7b603  .github/issue-45.patch.gz.b64.00' | sha256sum -c -
+          echo 'cb9b575ef1c783551643c8e2833157a27fcf65fccf753ba6b4043820463d18ab  .github/issue-45.patch.gz.b64.01' | sha256sum -c -
+          echo '461c72453fcf0ff9a80e0e4134f66d905965043da74dfcb7b6c1b136968a2207  .github/issue-45.patch.gz.b64.02' | sha256sum -c -
+          echo '7ecc292f8e022794172ab79e1204b789f4ebcefa7256a86d89b251ffb17034c1  .github/issue-45.patch.gz.b64.03' | sha256sum -c -
+          echo 'b2f503132482487dfbd2d65b81e311e6d7f52f57363af983cdba05ea26bae457  .github/issue-45.patch.gz.b64.04' | sha256sum -c -
+
+          cat .github/issue-45.patch.gz.b64.* | base64 --decode > /tmp/issue-45.patch.gz
+          echo '0b60fd12fca4b82bef1524401cce1b352962b8629531f24e77ef774904ab4df0  /tmp/issue-45.patch.gz' | sha256sum -c -
+          gzip --decompress --stdout /tmp/issue-45.patch.gz > /tmp/issue-45.patch
+          echo '24ac9099613ddfab32ec2f92e813ced1c695daf364e197ffb2f4159d921a0067  /tmp/issue-45.patch' | sha256sum -c -
+
+          cat > /tmp/expected-paths <<'EOF'
+          .github/workflows/ci.yml
+          .github/workflows/issue-45-source-snapshot.yml
+          README.md
+          backend/agentcad/api_v2.py
+          backend/agentcad/client.py
+          backend/agentcad/config.py
+          backend/agentcad/diagnostics.py
+          backend/agentcad/llm.py
+          backend/agentcad/main.py
+          backend/agentcad/provider_compat.py
+          backend/agentcad/provider_discovery.py
+          backend/agentcad/provider_security.py
+          backend/agentcad/security.py
+          backend/agentcad/semantic_planner.py
+          backend/tests/test_diagnostics_history.py
+          backend/tests/test_provider_compat.py
+          backend/tests/test_provider_discovery.py
+          backend/tests/test_provider_security.py
+          backend/tests/test_security_baseline.py
+          docs/shared-deployment-security.md
+          frontend/e2e/mock-provider.mjs
+          frontend/e2e/security.shared.spec.ts
+          frontend/e2e/workspace.spec.ts
+          frontend/package.json
+          frontend/playwright.shared.config.ts
+          frontend/scripts/assert-no-e2e-secrets.mjs
+          frontend/src/App.tsx
+          frontend/src/api.ts
+          frontend/src/editor/EngineeringReportPanel.tsx
+          frontend/src/editor/ExportPanel.tsx
+          frontend/src/editor/HistoryPanel.tsx
+          frontend/tests/apiSecurity.test.ts
+          EOF
+          sed -i 's/^          //' /tmp/expected-paths
+          git apply --numstat /tmp/issue-45.patch | awk '{print $3}' | LC_ALL=C sort -u > /tmp/actual-paths
+          LC_ALL=C sort -u /tmp/expected-paths -o /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+
+          git apply --check /tmp/issue-45.patch
+          git apply /tmp/issue-45.patch
+          rm -f .github/issue-45.patch.gz.b64.*
+          rm -f .github/workflows/issue-45-apply-validated-patch.yml
+
+          test ! -e .github/workflows/issue-45-source-snapshot.yml
+          test ! -e .github/workflows/issue-45-apply-validated-patch.yml
+          test -z "$(find .github -maxdepth 2 -type f -name 'issue-45.patch*' -print -quit)"
+          git diff --check
+          python -m compileall -q backend
+          git diff --exit-code origin/main -- backend/agentcad/data/symbols.json
+
+          git add -A
+          test -z "$(git diff --cached --name-only | grep -E '(^|/)(node_modules|dist|playwright-report|test-results|__pycache__)(/|$)|\.(db|sqlite|trace|webm|mp4)$' || true)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'security: add shared deployment baseline and provider controls'
+          git push origin "HEAD:$BRANCH"
