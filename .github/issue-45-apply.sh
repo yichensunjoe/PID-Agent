@@ -57,10 +57,15 @@ diff -u /tmp/expected-paths /tmp/actual-paths
 git apply --check /tmp/issue-45.patch
 git apply /tmp/issue-45.patch
 
+# The Actions token cannot update workflow files. Restore those paths for this push;
+# the GitHub connector updates the permanent CI workflow and deletes temporary workflows.
+git checkout HEAD -- .github/workflows/ci.yml
+git checkout HEAD -- .github/workflows/issue-45-source-snapshot.yml
+git checkout HEAD -- .github/workflows/issue-45-apply-validated-patch.yml
 rm -f .github/issue-45.patch.gz.b64.*
 rm -f .github/issue-45-apply.sh
-rm -f .github/workflows/issue-45-apply-validated-patch.yml
-test ! -e .github/workflows/issue-45-source-snapshot.yml
+test -e .github/workflows/issue-45-source-snapshot.yml
+test -e .github/workflows/issue-45-apply-validated-patch.yml
 test -z "$(find .github -maxdepth 2 -type f -name 'issue-45.patch*' -print -quit)"
 git diff --check
 PYTHONDONTWRITEBYTECODE=1 python -m compileall -q backend
