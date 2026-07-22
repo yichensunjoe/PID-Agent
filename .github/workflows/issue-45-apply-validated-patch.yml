@@ -25,7 +25,7 @@ jobs:
         id: apply
         run: |
           set +e
-          bash .github/issue-45-apply.sh > issue-45-apply.log 2>&1
+          bash .github/issue-45-apply.sh > /tmp/issue-45-apply.log 2>&1
           status=$?
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
@@ -34,7 +34,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: issue-45-apply-log
-          path: issue-45-apply.log
+          path: /tmp/issue-45-apply.log
           if-no-files-found: error
           retention-days: 1
       - name: Propagate apply failure
