@@ -175,3 +175,12 @@ test("configures the Kimi Code preset with compatible defaults", async ({ page, 
   await expect(page.locator(".agent-provider-settings")).toContainText("temperature=1");
   expect((await workspaceSnapshot(page)).document.revision).toBe(revisionBefore);
 });
+
+test("local deployment loads without a service token", async ({ page, request }) => {
+  const seeded = await createDocument(request, "E2E local security baseline");
+  await openDocument(page, seeded.id);
+
+  await expect(page.getByTestId("project-summary")).toContainText("1 个文档");
+  expect(await page.evaluate(() => window.sessionStorage.getItem("pid-agent-service-token"))).toBeNull();
+  expect(page.url()).not.toContain("token=");
+});

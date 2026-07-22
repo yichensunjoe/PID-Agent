@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from .models import ProviderConfig
 
@@ -16,14 +16,18 @@ KIMI_CODING_MODEL_IDS = frozenset(
 
 def normalize_openai_base_url(base_url: str) -> str:
     """Normalize a provider URL to an OpenAI-compatible v1 base URL."""
-    root = base_url.strip().rstrip("/")
-    if not root:
+    raw = base_url.strip()
+    if not raw:
         raise ValueError("provider base_url is required")
+    parsed = urlsplit(raw)
+    path = parsed.path.rstrip("/")
     for suffix in ("/chat/completions", "/models"):
-        if root.endswith(suffix):
-            root = root[: -len(suffix)].rstrip("/")
+        if path.endswith(suffix):
+            path = path[: -len(suffix)].rstrip("/")
             break
-    return root if root.endswith("/v1") else root + "/v1"
+    if not path.endswith("/v1"):
+        path = f"{path}/v1" if path else "/v1"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
 
 
 def is_kimi_coding_provider(provider: ProviderConfig) -> bool:

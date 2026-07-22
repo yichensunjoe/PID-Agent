@@ -9,7 +9,7 @@ from threading import RLock
 from typing import Any
 from uuid import uuid4
 
-_SECRET_KEY_PARTS = ("api_key", "apikey", "authorization", "secret", "token", "password")
+_SECRET_KEY_PARTS = ("api_key", "apikey", "authorization", "cookie", "secret", "token", "password")
 _TEXT_KEYS = {"prompt", "context", "user_prompt", "system_prompt", "messages"}
 _SAFE_METADATA_KEYS = {
     "api_key_present",
@@ -21,7 +21,8 @@ _SAFE_METADATA_KEYS = {
 _SECRET_PATTERNS = (
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
-    re.compile(r"(?i)(api[_-]?key|token|secret|password)=([^&\s]+)"),
+    re.compile(r"(?i)(api[_-]?key|access[_-]?token|authorization|token|secret|password)=([^&\s]+)"),
+    re.compile(r"(?i)(https?://)([^/@\s]+)@"),
 )
 
 
@@ -36,7 +37,7 @@ def _redact_string(value: str) -> str:
 
 
 def _redact(value: Any, key: str = "") -> Any:
-    lowered = key.lower()
+    lowered = key.lower().replace("-", "_")
     if lowered in _SAFE_METADATA_KEYS:
         return value
     if any(part in lowered for part in _SECRET_KEY_PARTS):

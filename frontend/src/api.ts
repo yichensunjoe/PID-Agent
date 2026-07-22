@@ -17,7 +17,59 @@ import type {
   TransactionValidation,
 } from "./types";
 
-const API_ROOT = import.meta.env.VITE_API_ROOT ?? "/api/v2";
+const API_ROOT = (import.meta as ImportMeta & { env?: { VITE_API_ROOT?: string } }).env?.VITE_API_ROOT ?? "/api/v2";
+export const SERVICE_TOKEN_SESSION_KEY = "pid-agent-service-token";
+
+let serviceAccessToken = "";
+try {
+  serviceAccessToken = window.sessionStorage.getItem(SERVICE_TOKEN_SESSION_KEY) ?? "";
+} catch {
+  serviceAccessToken = "";
+}
+
+export function getServiceAccessToken(): string {
+  return serviceAccessToken;
+}
+
+export function setServiceAccessToken(token: string, persistForSession = true): void {
+  serviceAccessToken = token.trim();
+  try {
+    if (persistForSession && serviceAccessToken) {
+      window.sessionStorage.setItem(SERVICE_TOKEN_SESSION_KEY, serviceAccessToken);
+    } else {
+      window.sessionStorage.removeItem(SERVICE_TOKEN_SESSION_KEY);
+    }
+  } catch {
+    // Memory-only token use remains available when sessionStorage is blocked.
+  }
+}
+
+export function clearServiceAccessToken(): void {
+  setServiceAccessToken("", false);
+}
+
+function withAuthorization(headers?: HeadersInit): Headers {
+  const next = new Headers(headers);
+  if (serviceAccessToken) next.set("Authorization", `Bearer ${serviceAccessToken}`);
+  return next;
+}
+
+export function authorizedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return fetch(input, { ...init, headers: withAuthorization(init?.headers) });
+}
+
+export async function downloadApiResource(path: string, fallbackFilename: string): Promise<void> {
+  const response = await authorizedFetch(path);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = match?.[1] ?? fallbackFilename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
 
 export type ProviderConfig = {
   base_url?: string;
@@ -85,6 +137,10 @@ function errorMessage(detail: unknown, fallback: string): string {
       return seconds ? `模型在 ${seconds} 秒内未完成响应` : "模型未在规定时间内完成响应";
     }
     if (structured.error === "provider_connection_failed") return `无法连接模型服务：${message}`;
+    if (structured.error === "provider_url_blocked") return `模型服务地址被网络安全策略阻止：${message}`;
+    if (structured.error === "provider_response_too_large") return "模型服务响应超过服务器允许的大小。";
+    if (structured.error === "authentication_required") return "此共享部署需要服务访问令牌。";
+    if (structured.error === "invalid_access_token") return "服务访问令牌错误，请重新输入。";
     if (structured.error === "provider_authentication_failed") return "API Key 无效，或当前账号没有访问该模型的权限";
     if (structured.error === "provider_not_configured") return "尚未配置模型服务地址和模型名称";
     if (structured.error === "invalid_agent_plan") return `模型返回的事务未通过校验：${message}`;
@@ -94,7 +150,7 @@ function errorMessage(detail: unknown, fallback: string): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_ROOT}${path}`, {
+  const response = await authorizedFetch(`${API_ROOT}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });

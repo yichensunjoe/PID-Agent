@@ -8,6 +8,7 @@ import {
   type PdfOrientation,
   type PdfPaperSize,
 } from "../pdfExport";
+import { authorizedFetch } from "../api";
 import { useWorkspace } from "../store";
 
 type ExportFormat = "svg" | "png" | "pdf" | "dxf";
@@ -108,7 +109,7 @@ export function ExportPanel() {
     try {
       const query = buildPdfQuery(range, padding, pdfSettings(), viewportForRange());
       query.set("page", "1");
-      const response = await checkedResponse(await fetch(
+      const response = await checkedResponse(await authorizedFetch(
         `/api/v2/documents/${documentModel.id}/print-preview.svg?${query.toString()}`,
       ));
       const pages = Number(response.headers.get("X-PID-Agent-PDF-Page-Count") || "1");
@@ -131,7 +132,7 @@ export function ExportPanel() {
     try {
       const query = queryForFormat();
       const url = `/api/v2/documents/${documentModel.id}/export-v2.${format}?${query.toString()}`;
-      const response = await checkedResponse(await fetch(url));
+      const response = await checkedResponse(await authorizedFetch(url));
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") ?? "";
       const match = disposition.match(/filename="?([^";]+)"?/i);

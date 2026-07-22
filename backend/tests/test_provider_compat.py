@@ -110,7 +110,7 @@ def test_kimi_coding_temperature_is_forced_to_one():
 
 def test_classic_plan_uses_kimi_compatible_temperature(monkeypatch):
     client = _PlanClient()
-    monkeypatch.setattr("agentcad.llm.httpx.Client", lambda *, timeout: client)
+    monkeypatch.setattr("agentcad.llm.httpx.Client", lambda *, timeout, follow_redirects=False, transport=None: client)
     planner = OpenAICompatiblePlanner(service=_PlanService(), symbols=_Symbols())  # type: ignore[arg-type]
 
     plan = planner.plan(
@@ -144,7 +144,7 @@ def test_semantic_request_uses_kimi_compatible_temperature(monkeypatch):
     client = _RecordingClient()
     monkeypatch.setattr(
         "agentcad.semantic_planner.httpx.Client",
-        lambda *, timeout: client,
+        lambda *, timeout, follow_redirects=False, transport=None: client,
     )
     planner = SemanticAgentPlanner(service=object(), symbols=object())  # type: ignore[arg-type]
     provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="k3")

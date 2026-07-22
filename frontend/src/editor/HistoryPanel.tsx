@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, downloadApiResource } from "../api";
 import { useWorkspace } from "../store";
 import type { HistoryChange, HistoryEntry, HistoryOperationSummary } from "../types";
 import "../historyDiagnostics.css";
@@ -92,10 +92,17 @@ export function HistoryPanel() {
         <button onClick={() => void refresh()} disabled={loading}>{loading ? "刷新中…" : "刷新"}</button>
         <button onClick={() => clearSelection()}>清除高亮</button>
       </div>
-      <a className="diagnostics-download" href={`/api/v2/diagnostics/export?document_id=${encodeURIComponent(document.id)}&limit=1000`} download>
+      <button
+        type="button"
+        className="diagnostics-download"
+        onClick={() => void downloadApiResource(
+          `/api/v2/diagnostics/export?document_id=${encodeURIComponent(document.id)}&limit=1000`,
+          `pid-agent-diagnostics-${document.id}.json`,
+        )}
+      >
         下载诊断日志包
-      </a>
-      <p className="diagnostics-note">包含当前文档快照、详细 revision 差异和脱敏服务事件；不包含 API Key、Authorization 或完整 Prompt。</p>
+      </button>
+      <p className="diagnostics-note">包含文档计数、revision、元素数量和脱敏服务事件；不包含图纸正文、API Key、Authorization 或完整 Prompt。</p>
       {error ? <div className="inspector-error">{error}</div> : null}
       <div className="history-list detailed-history-list">
         {entries.map((entry) => {

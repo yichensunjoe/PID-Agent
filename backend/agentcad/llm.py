@@ -5,14 +5,35 @@ import os
 import re
 from time import perf_counter
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from pydantic import ValidationError
 
 from .models import AgentGenerateRequest, AgentPlan, ProviderConfig, TransactionRequest
-from .provider_compat import completion_temperature, normalize_openai_base_url
+from .provider_compat import completion_temperature
+from .provider_security import (
+    ProviderNetworkPolicy,
+    ProviderURLPolicyError,
+    ensure_response_within_limit,
+    provider_http_transport,
+)
 from .service import DocumentService
 from .symbols import SymbolRegistry
+
+
+def _safe_provider_url(value: str | None) -> str | None:
+    if not value:
+        return value
+    parsed = urlsplit(value)
+    host = parsed.hostname or ""
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port:
+        host = f"{host}:{port}"
+    return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
 
 
 class PlannerError(RuntimeError):
@@ -41,7 +62,7 @@ class PlannerError(RuntimeError):
         }
         if self.provider is not None:
             payload["provider"] = {
-                "base_url": self.provider.base_url,
+                "base_url": _safe_provider_url(self.provider.base_url),
                 "model": self.provider.model,
             }
         if self.timeout_seconds is not None:
@@ -68,6 +89,25 @@ class ProviderConnectionError(PlannerError):
     retryable = True
 
 
+class ProviderNetworkPolicyError(PlannerError):
+    code = "provider_url_blocked"
+    status_code = 403
+
+    def __init__(self, message: str, *, category: str, provider: ProviderConfig | None = None):
+        super().__init__(message, provider=provider)
+        self.category = category
+
+    def detail(self) -> dict[str, Any]:
+        payload = super().detail()
+        payload["blocked_category"] = self.category
+        return payload
+
+
+class ProviderResponseTooLargeError(PlannerError):
+    code = "provider_response_too_large"
+    status_code = 502
+
+
 class ProviderAuthenticationError(PlannerError):
     code = "provider_authentication_failed"
     status_code = 401
@@ -88,24 +128,44 @@ def _env(primary: str, legacy: str) -> str | None:
 
 
 class OpenAICompatiblePlanner:
-    def __init__(self, service: DocumentService, symbols: SymbolRegistry):
+    def __init__(
+        self,
+        service: DocumentService,
+        symbols: SymbolRegistry,
+        *,
+        provider_policy: ProviderNetworkPolicy | None = None,
+        max_response_bytes: int = 4 * 1024 * 1024,
+        max_timeout_seconds: float = 180,
+    ):
         self.service = service
         self.symbols = symbols
+        self.provider_policy = provider_policy or ProviderNetworkPolicy()
+        self.max_response_bytes = max_response_bytes
+        self.max_timeout_seconds = max_timeout_seconds
 
     def test_provider(self, override: ProviderConfig | None) -> dict[str, Any]:
         """Verify an OpenAI-compatible provider without persisting credentials."""
-        provider = self._resolve_provider(override)
+        provider = self._resolve_provider(override, self.provider_policy, self.max_timeout_seconds)
         headers = self._headers(provider)
         started = perf_counter()
         models_endpoint = provider.base_url.rstrip("/") + "/models"
 
         try:
-            with httpx.Client(timeout=provider.timeout_seconds) as client:
+            with httpx.Client(
+                timeout=provider.timeout_seconds,
+                follow_redirects=False,
+                transport=provider_http_transport(self.provider_policy),
+            ) as client:
                 response = client.get(models_endpoint, headers=headers)
+                self._inspect_response(response, provider, models_endpoint)
                 if response.status_code in {404, 405}:
                     result = self._test_with_minimal_completion(client, provider, headers)
                     result["latency_ms"] = round((perf_counter() - started) * 1000)
                     return result
+        except ProviderURLPolicyError as exc:
+            raise ProviderNetworkPolicyError(
+                str(exc), category=exc.category, provider=provider
+            ) from exc
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
                 f"model provider did not respond within {provider.timeout_seconds:g} seconds",
@@ -114,7 +174,7 @@ class OpenAICompatiblePlanner:
             ) from exc
         except httpx.RequestError as exc:
             raise ProviderConnectionError(
-                f"could not connect to model provider: {exc}",
+                "could not connect to model provider",
                 provider=provider,
             ) from exc
 
@@ -150,7 +210,7 @@ class OpenAICompatiblePlanner:
         }
 
     def plan(self, document_id: str, request: AgentGenerateRequest) -> AgentPlan:
-        provider = self._resolve_provider(request.provider)
+        provider = self._resolve_provider(request.provider, self.provider_policy, self.max_timeout_seconds)
         document = self.service.get_document(document_id)
         schema = TransactionRequest.model_json_schema()
         system_prompt = self._system_prompt(schema)
@@ -174,12 +234,22 @@ class OpenAICompatiblePlanner:
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
 
         try:
-            with httpx.Client(timeout=provider.timeout_seconds) as client:
+            with httpx.Client(
+                timeout=provider.timeout_seconds,
+                follow_redirects=False,
+                transport=provider_http_transport(self.provider_policy),
+            ) as client:
                 response = client.post(endpoint, json=payload, headers=headers)
+                self._inspect_response(response, provider, endpoint)
                 if response.status_code in {400, 404, 422} and "response_format" in payload:
                     fallback_payload = dict(payload)
                     fallback_payload.pop("response_format", None)
                     response = client.post(endpoint, json=fallback_payload, headers=headers)
+                    self._inspect_response(response, provider, endpoint)
+        except ProviderURLPolicyError as exc:
+            raise ProviderNetworkPolicyError(
+                str(exc), category=exc.category, provider=provider
+            ) from exc
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
                 f"model did not finish within {provider.timeout_seconds:g} seconds",
@@ -188,7 +258,7 @@ class OpenAICompatiblePlanner:
             ) from exc
         except httpx.RequestError as exc:
             raise ProviderConnectionError(
-                f"could not connect to model provider: {exc}",
+                "could not connect to model provider",
                 provider=provider,
             ) from exc
 
@@ -248,6 +318,7 @@ class OpenAICompatiblePlanner:
                 "stream": False,
             },
         )
+        self._inspect_response(response, provider, endpoint)
         self._raise_for_response(response, provider)
         try:
             payload = response.json()
@@ -267,6 +338,19 @@ class OpenAICompatiblePlanner:
             "message": "连接成功，模型完成了最小测试请求",
         }
 
+    def _inspect_response(
+        self, response: httpx.Response, provider: ProviderConfig, request_url: str
+    ) -> None:
+        try:
+            self.provider_policy.validate_redirect(request_url, response)
+            ensure_response_within_limit(response, self.max_response_bytes)
+        except ProviderURLPolicyError as exc:
+            if exc.category == "response size":
+                raise ProviderResponseTooLargeError(str(exc), provider=provider) from exc
+            raise ProviderNetworkPolicyError(
+                str(exc), category=exc.category, provider=provider
+            ) from exc
+
     @staticmethod
     def _raise_for_response(response: httpx.Response, provider: ProviderConfig) -> None:
         if response.status_code in {401, 403}:
@@ -281,13 +365,12 @@ class OpenAICompatiblePlanner:
                 raise LLMResponseError(
                     "模型拒绝了 temperature 参数。Kimi Coding 模型要求 temperature=1；"
                     "请使用 OpenAI 兼容 Base URL https://api.kimi.com/coding/v1，"
-                    "并选择 k3、kimi-for-coding 或 kimi-for-coding-highspeed。"
-                    f" Provider response: {body}",
+                    "并选择 k3、kimi-for-coding 或 kimi-for-coding-highspeed。",
                     provider=provider,
                     provider_status=response.status_code,
                 )
             raise LLMResponseError(
-                f"model provider returned HTTP {response.status_code}: {body}",
+                f"model provider returned HTTP {response.status_code}",
                 provider=provider,
                 provider_status=response.status_code,
             )
@@ -306,7 +389,11 @@ class OpenAICompatiblePlanner:
         )
 
     @staticmethod
-    def _resolve_provider(override: ProviderConfig | None) -> ProviderConfig:
+    def _resolve_provider(
+        override: ProviderConfig | None,
+        policy: ProviderNetworkPolicy | None = None,
+        max_timeout_seconds: float = 180,
+    ) -> ProviderConfig:
         provider = override or ProviderConfig()
         custom_connection = bool(
             override is not None
@@ -325,12 +412,23 @@ class OpenAICompatiblePlanner:
                 "configure PID_AGENT_LLM_BASE_URL and PID_AGENT_LLM_MODEL, "
                 "or pass provider.base_url and provider.model"
             )
-        normalized = normalize_openai_base_url(base_url)
+        active_policy = policy or ProviderNetworkPolicy()
+        try:
+            normalized = active_policy.normalize_and_validate(base_url)
+        except ProviderURLPolicyError as exc:
+            unsafe_provider = ProviderConfig(
+                base_url=_safe_provider_url(base_url),
+                model=model,
+                timeout_seconds=min(provider.timeout_seconds, max_timeout_seconds),
+            )
+            raise ProviderNetworkPolicyError(
+                str(exc), category=exc.category, provider=unsafe_provider
+            ) from exc
         return ProviderConfig(
             base_url=normalized,
             model=model,
             api_key=api_key,
-            timeout_seconds=provider.timeout_seconds,
+            timeout_seconds=min(provider.timeout_seconds, max_timeout_seconds),
         )
 
     @staticmethod

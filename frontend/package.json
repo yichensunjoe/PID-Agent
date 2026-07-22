@@ -11,7 +11,9 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:e2e": "npm run build:e2e && playwright test",
     "test:e2e:headed": "npm run build:e2e && playwright test --headed",
-    "test:e2e:update": "npm run build:e2e && playwright test e2e/visual.spec.ts --update-snapshots"
+    "test:e2e:update": "npm run build:e2e && playwright test e2e/visual.spec.ts --update-snapshots",
+    "test:e2e:shared": "playwright test --config playwright.shared.config.ts",
+    "test:e2e:secrets": "node scripts/assert-no-e2e-secrets.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.0.3",

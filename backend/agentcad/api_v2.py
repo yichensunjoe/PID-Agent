@@ -201,7 +201,14 @@ def create_v2_router(
                 "path": str(service.store.database_path.expanduser().resolve()),
                 "instance_id": service.store.database_instance_id,
             },
-            "documents": [item.model_dump(mode="json") for item in service.list_documents()],
+            "documents": [
+                {
+                    "id": item.id,
+                    "revision": item.revision,
+                    "updated_at": item.updated_at,
+                }
+                for item in service.list_documents()
+            ],
             "diagnostics": {
                 "log": diagnostics.info() if diagnostics is not None else None,
                 "events": diagnostics.recent(safe_limit) if diagnostics is not None else [],
@@ -211,14 +218,18 @@ def create_v2_router(
                 "authorization_headers_recorded": False,
                 "full_prompts_recorded": False,
                 "full_context_recorded": False,
+                "project_content_recorded": False,
+                "upload_bodies_recorded": False,
             },
         }
         if document_id:
             document = _call(service.get_document, document_id)
             payload["document"] = {
-                "snapshot": document.model_dump(mode="json"),
-                "scene_summary": service.scene_summary(document_id),
-                "history": service.store.list_history_detailed(document_id, 500),
+                "id": document.id,
+                "revision": document.revision,
+                "element_count": len(document.elements),
+                "layer_count": len(document.layers),
+                "system_count": len(document.systems),
             }
         body = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
         suffix = f"-{document_id}" if document_id else ""
@@ -441,7 +452,12 @@ def create_v2_router(
                 api_key_present=bool(request.api_key),
             )
         try:
-            result = discover_provider_models(request)
+            result = discover_provider_models(
+                request,
+                provider_policy=planner.provider_policy,
+                max_response_bytes=planner.max_response_bytes,
+                max_timeout_seconds=planner.max_timeout_seconds,
+            )
         except PlannerError as exc:
             if diagnostics is not None:
                 diagnostics.emit(

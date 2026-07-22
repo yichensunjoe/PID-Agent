@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, authorizedFetch } from "../api";
 import {
   filterReportRows,
   reportRowElementIds,
@@ -86,7 +86,7 @@ export function EngineeringReportPanel() {
     setDownloading(true);
     setError("");
     try {
-      const response = await fetch(api.engineeringReportCsvUrl(document.id, tab, scope));
+      const response = await authorizedFetch(api.engineeringReportCsvUrl(document.id, tab, scope));
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

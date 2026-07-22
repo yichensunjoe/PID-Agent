@@ -111,6 +111,19 @@ Kimi Code 使用 OpenAI-compatible 地址 `https://api.kimi.com/coding/v1`，模
 4. 后端重新验证图例 key、端口、连接节点、图层和 revision；
 5. 整个事务一次成功，或完全不写入。
 
+
+## 共享部署安全
+
+默认 `local` 模式保持现有单机行为。多人、容器或反向代理部署应配置：
+
+```bash
+export PID_AGENT_DEPLOYMENT_MODE=shared
+export PID_AGENT_API_TOKEN="replace-with-a-long-random-token"
+export PID_AGENT_CORS_ORIGINS="https://pid.example.com"
+```
+
+共享模式缺少 token 或使用不安全 CORS 时会拒绝启动，并默认阻止 Provider 访问回环、私网、链路本地和云元数据地址。企业内网模型必须通过 hostname/CIDR allowlist 显式开放。认证、Provider 网络策略、请求上限、反向代理和诊断脱敏说明见 [`docs/shared-deployment-security.md`](docs/shared-deployment-security.md)。
+
 ## 单位图例
 
 内置占位图例：

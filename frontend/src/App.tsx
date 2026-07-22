@@ -13,7 +13,7 @@ import { HistoryPanel } from "./editor/HistoryPanel";
 import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
-import { api, ApiError, type ProviderConfig, type ProviderTestResult } from "./api";
+import { api, ApiError, clearServiceAccessToken, downloadApiResource, getServiceAccessToken, setServiceAccessToken, type ProviderConfig, type ProviderTestResult } from "./api";
 import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
 import { parseImportJson } from "./projectImport";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
@@ -64,6 +64,8 @@ export default function App() {
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [serviceToken, setServiceToken] = useState(() => getServiceAccessToken());
+  const [showServiceToken, setShowServiceToken] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [testingProvider, setTestingProvider] = useState(false);
   const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
@@ -131,6 +133,19 @@ export default function App() {
     setCanvasViewportRequest(null);
     setViewNavigatorOpen(false);
   }, [state.document?.id]);
+
+  const applyServiceToken = () => {
+    setServiceAccessToken(serviceToken, true);
+    state.clearError();
+    void state.loadWorkspace();
+  };
+
+  const clearServiceToken = () => {
+    clearServiceAccessToken();
+    setServiceToken("");
+    state.clearError();
+    void state.loadWorkspace();
+  };
 
   const providerConfig = (): ProviderConfig => ({
     base_url: baseUrl.trim() || undefined,
@@ -525,9 +540,9 @@ export default function App() {
           <button onClick={() => void state.duplicateSelection()} disabled={!state.selectedElementIds.length}>复制</button>
           <button onClick={() => void state.undo()}>撤销</button>
           <button onClick={() => void state.redo()}>重做</button>
-          {state.document ? <a href={`/api/v2/documents/${state.document.id}/export.svg`} download>导出 SVG</a> : null}
-          {state.document ? <a data-testid="export-document-json" href={`/api/v2/documents/${state.document.id}/export-v1.json`} download>导出 JSON</a> : null}
-          <a data-testid="export-project-package" href="/api/v2/project/export.json" download>导出项目包</a>
+          {state.document ? <button type="button" onClick={() => void downloadApiResource(`/api/v2/documents/${state.document!.id}/export.svg`, `${state.document!.id}.svg`)}>导出 SVG</button> : null}
+          {state.document ? <button type="button" data-testid="export-document-json" onClick={() => void downloadApiResource(`/api/v2/documents/${state.document!.id}/export-v1.json`, `${state.document!.id}.pid.json`)}>导出 JSON</button> : null}
+          <button type="button" data-testid="export-project-package" onClick={() => void downloadApiResource("/api/v2/project/export.json", "pid-agent-project.pid.json")}>导出项目包</button>
         </div>
       </header>
 
@@ -541,6 +556,29 @@ export default function App() {
             <input ref={projectImportRef} data-testid="import-project-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "project"); }} />
           </div>
           {importError || state.error ? <div className="document-import-error" role="alert"><span>{importError || state.error}</span><button type="button" onClick={() => { setImportError(""); state.clearError(); }}>关闭</button></div> : null}
+          <details className="service-access-settings">
+            <summary>共享部署访问令牌</summary>
+            <label>Service token
+              <div className="secret-input-row">
+                <input
+                  data-testid="service-token-input"
+                  type={showServiceToken ? "text" : "password"}
+                  value={serviceToken}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setServiceToken(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") applyServiceToken(); }}
+                  placeholder="共享部署要求的 Bearer token"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button type="button" onClick={() => setShowServiceToken(!showServiceToken)}>{showServiceToken ? "隐藏" : "显示"}</button>
+              </div>
+            </label>
+            <div className="provider-actions">
+              <button type="button" data-testid="service-token-apply" onClick={applyServiceToken}>应用并重新连接</button>
+              <button type="button" data-testid="service-token-clear" onClick={clearServiceToken}>清除</button>
+            </div>
+            <p>令牌仅保存在当前浏览器标签页的 sessionStorage；不会写入 URL 或 localStorage，关闭标签页后失效。</p>
+          </details>
           <div className="project-summary" data-testid="project-summary"><strong>{state.projectSettings.name}</strong><span>{state.documents.length} 个文档</span></div>
           <div className="document-list">
             {state.documents.map((document) => <button key={document.id} data-document-id={document.id} className={state.document?.id === document.id ? "active" : ""} onClick={() => void state.openDocument(document.id)}><strong>{document.name}</strong><span>{document.element_count} 个元素 · r{document.revision}</span></button>)}
