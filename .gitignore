@@ -10,6 +10,8 @@ venv/
 
 # Runtime data
 data/
+!backend/agentcad/data/
+!backend/agentcad/data/*.json
 *.db
 *.sqlite
 *.sqlite3

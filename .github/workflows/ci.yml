@@ -41,6 +41,9 @@ jobs:
       - name: Ruff
         run: ruff check backend
 
+      - name: Offline quality harness
+        run: pid-agent quality-harness
+
       - name: Pytest
         run: pytest -q
 

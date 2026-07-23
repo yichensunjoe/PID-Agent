@@ -1,7 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type ProviderConfig } from "../api";
 import { useWorkspace } from "../store";
 import type { SemanticAgentPlanResult, SemanticOperation } from "../types";
+import {
+  automaticAgentApplyResponseError,
+  automaticAgentRunContextError,
+  type AutomaticAgentRunOrigin,
+} from "./automaticAgentRunGuard";
 
 const MAX_REPLANS = 5;
 const HIGH_RISK_OPERATIONS = new Set(["delete_element", "delete_layer", "delete_system", "clear_document"]);
@@ -19,6 +24,12 @@ type Props = {
   provider: ProviderConfig;
   disabled?: boolean;
   onApplied?: () => void;
+  onRunningChange?: (running: boolean) => void;
+};
+
+type PendingApproval = {
+  result: SemanticAgentPlanResult;
+  origin: AutomaticAgentRunOrigin;
 };
 
 function issueSignature(result: SemanticAgentPlanResult): string {
@@ -41,35 +52,105 @@ function traceEntry(result: SemanticAgentPlanResult): TraceEntry {
   };
 }
 
-export function AutomaticAgentRunner({ prompt, context, provider, disabled, onApplied }: Props) {
+export function AutomaticAgentRunner({
+  prompt,
+  context,
+  provider,
+  disabled,
+  onApplied,
+  onRunningChange,
+}: Props) {
   const document = useWorkspace((state) => state.document);
   const [running, setRunning] = useState(false);
   const [phase, setPhase] = useState("");
   const [message, setMessage] = useState("");
   const [trace, setTrace] = useState<TraceEntry[]>([]);
-  const [pendingApproval, setPendingApproval] = useState<SemanticAgentPlanResult | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const cancelRequested = useRef(false);
 
-  const applyResult = async (result: SemanticAgentPlanResult) => {
+  useEffect(() => () => onRunningChange?.(false), [onRunningChange]);
+
+  useEffect(() => {
+    if (!pendingApproval) return;
+    const contextError = automaticAgentRunContextError(
+      pendingApproval.origin,
+      document,
+      pendingApproval.result,
+      true,
+    );
+    if (!contextError) return;
+    setPendingApproval(null);
+    setMessage(`应用失败：${contextError}`);
+  }, [document?.id, document?.revision, pendingApproval]);
+
+  const updateRunning = (next: boolean) => {
+    setRunning(next);
+    onRunningChange?.(next);
+  };
+
+  const assertRunContext = (
+    origin: AutomaticAgentRunOrigin,
+    result: SemanticAgentPlanResult,
+    requireCompiledRevision = false,
+  ) => {
+    const contextError = automaticAgentRunContextError(
+      origin,
+      useWorkspace.getState().document,
+      result,
+      requireCompiledRevision,
+    );
+    if (contextError) throw new Error(contextError);
+  };
+
+  const applyResult = async (
+    result: SemanticAgentPlanResult,
+    origin: AutomaticAgentRunOrigin,
+  ) => {
     const current = useWorkspace.getState().document;
     const compiled = result.compiled_plan;
     if (!current || !compiled || !result.assessment.valid) {
       throw new Error("自动执行没有得到可应用的有效事务");
     }
-    const expectedRevision = compiled.transaction.expected_revision;
-    if (expectedRevision !== null && expectedRevision !== undefined && expectedRevision !== current.revision) {
-      await useWorkspace.getState().refreshDocument();
-      throw new Error(`文档已从 r${expectedRevision} 更新，已刷新到最新 revision，请再次自动生成`);
-    }
+    assertRunContext(origin, result, true);
     setPhase("正在应用有效事务…");
     const applied = await api.applySemanticAgentPlan(
-      current.id,
+      origin.documentId,
       result.plan.plan_id,
       result.parent_plan_id,
       result.attempt,
       compiled.transaction,
     );
     const documents = await api.listDocuments();
+    const afterApply = useWorkspace.getState().document;
+    const responseError = automaticAgentApplyResponseError(
+      origin,
+      afterApply,
+      applied.document,
+      documents,
+    );
+    if (responseError) {
+      const originalStillExists = documents.some(
+        (item) => item.id === origin.documentId,
+      );
+      if (!originalStillExists && afterApply?.id === origin.documentId) {
+        useWorkspace.setState({
+          documents,
+          document: null,
+          selectedElementIds: [],
+          error: null,
+          syncState: "synced",
+          syncMessage: "原文档已删除",
+          pendingExternalRevision: null,
+        });
+      } else {
+        useWorkspace.setState({ documents });
+      }
+      setPendingApproval(null);
+      setMessage(`应用完成但未合并到当前画布：${responseError}`);
+      setPhase("");
+      onApplied?.();
+      return;
+    }
     const existing = new Set(applied.document.elements.map((element) => element.id));
     useWorkspace.setState({
       document: applied.document,
@@ -89,8 +170,12 @@ export function AutomaticAgentRunner({ prompt, context, provider, disabled, onAp
   const run = async () => {
     const initial = useWorkspace.getState().document;
     if (!initial || !prompt.trim() || running) return;
+    const origin: AutomaticAgentRunOrigin = {
+      documentId: initial.id,
+      revision: initial.revision,
+    };
     cancelRequested.current = false;
-    setRunning(true);
+    updateRunning(true);
     setPendingApproval(null);
     setMessage("");
     setTrace([]);
@@ -104,10 +189,12 @@ export function AutomaticAgentRunner({ prompt, context, provider, disabled, onAp
         context,
         provider,
       );
+      assertRunContext(origin, result);
       const entries: TraceEntry[] = [traceEntry(result)];
       setTrace(entries);
 
       while (!result.assessment.valid) {
+        assertRunContext(origin, result);
         if (cancelRequested.current) throw new Error("自动执行已停止");
         const signature = issueSignature(result);
         if (signature && seenFailures.has(signature)) {
@@ -117,52 +204,52 @@ export function AutomaticAgentRunner({ prompt, context, provider, disabled, onAp
         if (result.attempt >= MAX_REPLANS) {
           throw new Error(`达到最大重规划次数 ${MAX_REPLANS}`);
         }
-        const current = useWorkspace.getState().document;
-        if (!current) throw new Error("当前文档已关闭");
         const nextAttempt = result.attempt + 1;
         setPhase(`正在按结构化错误自动重规划（${nextAttempt}/${MAX_REPLANS}）…`);
         result = await api.replanSemanticAgent(
-          current.id,
-          current.revision,
+          origin.documentId,
+          origin.revision,
           prompt.trim(),
           context,
           result.plan,
           nextAttempt,
           provider,
         );
+        assertRunContext(origin, result);
         entries.push(traceEntry(result));
         setTrace([...entries]);
       }
 
+      assertRunContext(origin, result, true);
       if (cancelRequested.current) throw new Error("自动执行已停止");
       if (!result.compiled_plan) throw new Error("有效计划缺少编译事务");
       if (containsHighRiskOperation(result.plan.transaction.operations)) {
-        setPendingApproval(result);
+        setPendingApproval({ result, origin });
         setMessage("计划已通过校验，但包含删除或清空操作，需要确认后应用");
         setPhase("");
         return;
       }
-      await applyResult(result);
+      await applyResult(result, origin);
     } catch (error) {
       const text = error instanceof ApiError ? error.message : String(error instanceof Error ? error.message : error);
       setMessage(`生成失败：${text}`);
       setPhase("");
     } finally {
-      setRunning(false);
+      updateRunning(false);
     }
   };
 
   const confirmHighRisk = async () => {
     if (!pendingApproval || running) return;
-    setRunning(true);
+    updateRunning(true);
     setMessage("");
     try {
-      await applyResult(pendingApproval);
+      await applyResult(pendingApproval.result, pendingApproval.origin);
     } catch (error) {
       const text = error instanceof ApiError ? error.message : String(error instanceof Error ? error.message : error);
       setMessage(`应用失败：${text}`);
     } finally {
-      setRunning(false);
+      updateRunning(false);
     }
   };
 

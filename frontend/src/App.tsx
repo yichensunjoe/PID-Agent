@@ -14,6 +14,7 @@ import { LayerSystemPanel } from "./editor/LayerSystemPanel";
 import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, clearServiceAccessToken, downloadApiResource, getServiceAccessToken, setServiceAccessToken, type ProviderConfig, type ProviderTestResult } from "./api";
+import { documentDeletionConfirmation } from "./documentDeletion";
 import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
 import { parseImportJson } from "./projectImport";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
@@ -79,6 +80,7 @@ export default function App() {
   const [planningAgent, setPlanningAgent] = useState(false);
   const [repairingAgent, setRepairingAgent] = useState(false);
   const [applyingAgent, setApplyingAgent] = useState(false);
+  const [automaticAgentRunning, setAutomaticAgentRunning] = useState(false);
   const [agentError, setAgentError] = useState("");
   const [pendingPlan, setPendingPlan] = useState<SemanticAgentPlanResult | null>(null);
   const [canvasFocusRequest, setCanvasFocusRequest] = useState<CanvasFocusRequest | null>(null);
@@ -101,7 +103,12 @@ export default function App() {
   useEffect(() => { if (state.selectedElementIds.length) setRightPanel("properties"); }, [state.selectedElementIds]);
   useEffect(() => {
     const document = state.document;
-    if (!document || !pendingPlan) return;
+    if (!pendingPlan) return;
+    if (!document) {
+      setPendingPlan(null);
+      setAgentError("当前文档已删除，旧 Agent 预览已自动清除。");
+      return;
+    }
     const expectedRevision = pendingPlan.compiled_plan?.transaction.expected_revision
       ?? pendingPlan.plan.transaction.expected_revision;
     const wrongDocument = pendingPlan.assessment.document_id !== document.id;
@@ -342,7 +349,7 @@ export default function App() {
     { id: "reports", label: "报表/检查" },
     { id: "agent", label: "Agent" },
   ];
-  const busyAgent = planningAgent || repairingAgent || applyingAgent;
+  const busyAgent = planningAgent || repairingAgent || applyingAgent || automaticAgentRunning;
   const agentCanvasPreview: AgentCanvasPreview | null = pendingPlan?.assessment.valid && pendingPlan.compiled_plan
     ? {
         planId: pendingPlan.plan.plan_id,
@@ -581,7 +588,34 @@ export default function App() {
           </details>
           <div className="project-summary" data-testid="project-summary"><strong>{state.projectSettings.name}</strong><span>{state.documents.length} 个文档</span></div>
           <div className="document-list">
-            {state.documents.map((document) => <button key={document.id} data-document-id={document.id} className={state.document?.id === document.id ? "active" : ""} onClick={() => void state.openDocument(document.id)}><strong>{document.name}</strong><span>{document.element_count} 个元素 · r{document.revision}</span></button>)}
+            {state.documents.map((document) => <div key={document.id} className="document-list-item">
+              <button
+                type="button"
+                data-document-id={document.id}
+                className={`document-open${state.document?.id === document.id ? " active" : ""}`}
+                disabled={state.loading || state.importing || state.isMutating || busyAgent}
+                onClick={() => void state.openDocument(document.id)}
+              >
+                <strong>{document.name}</strong>
+                <span>{document.element_count} 个元素 · r{document.revision}</span>
+              </button>
+              <button
+                type="button"
+                className="document-delete"
+                data-testid="delete-document"
+                data-document-id={document.id}
+                aria-label={`删除文档 ${document.name}`}
+                title={`删除 ${document.name}`}
+                disabled={state.loading || state.importing || state.isMutating || busyAgent}
+                onClick={() => {
+                  if (window.confirm(documentDeletionConfirmation(document.name))) {
+                    void state.deleteDocument(document.id);
+                  }
+                }}
+              >
+                删除
+              </button>
+            </div>)}
           </div>
           <div className="divider" />
           <h2>单位图例</h2>
@@ -624,6 +658,7 @@ export default function App() {
               context={scopedContext()}
               provider={providerConfig()}
               disabled={busyAgent}
+              onRunningChange={setAutomaticAgentRunning}
               onApplied={() => {
                 setPendingPlan(null);
                 setAgentError("");

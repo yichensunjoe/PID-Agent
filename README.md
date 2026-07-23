@@ -143,11 +143,16 @@ pid-agent db restore --database /data/pid-agent.db --input /backup/pid-agent.pid
 
 ## 单位图例
 
-内置占位图例：
+内置图例：
 
 ```text
 backend/agentcad/data/symbols.json
+backend/agentcad/data/standard_symbols.json
 ```
+
+前者保留历史 key 兼容，后者提供泵、风机、换热器、容器、过滤器、阀门、安全附件、管件、
+排放边界和仪表等标准化扩展。分类、端口约定和验收方式见
+[`docs/standard-symbol-library.md`](docs/standard-symbol-library.md)。
 
 通过外部路径加载单位图例：
 
@@ -231,7 +236,7 @@ MCP 工具包括：
 GET    /api/v2/documents
 POST   /api/v2/documents
 GET    /api/v2/documents/{document_id}
-DELETE /api/v2/documents/{document_id}
+DELETE /api/v2/documents/{document_id}?expected_revision={revision}
 POST   /api/v2/documents/{document_id}/transactions
 POST   /api/v2/documents/{document_id}/undo
 POST   /api/v2/documents/{document_id}/redo
@@ -265,9 +270,10 @@ PDF 图幅、分页、标题栏、预览和 Python Client 用法见 [`docs/pdf-p
 
 ## 本地验证
 
-本仓库不依赖 GitHub Actions：
+本地可独立运行核心检查，无需依赖 GitHub Actions：
 
 ```bash
+pid-agent quality-harness
 pytest -q
 ruff check backend
 cd frontend
@@ -277,6 +283,7 @@ npm run test:e2e
 ```
 
 Playwright 安装、headed 模式、视觉基线更新和 trace 查看方式见 [`docs/browser-e2e-visual-acceptance.md`](docs/browser-e2e-visual-acceptance.md)。
+无需模型或 API Key 的图例、拓扑和 Agent 事务验收见 [`docs/offline-quality-harness.md`](docs/offline-quality-harness.md)。
 
 ## 近期路线
 

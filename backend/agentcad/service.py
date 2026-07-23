@@ -143,8 +143,15 @@ class DocumentService:
         self._get_stored(document_id)
         return self.store.list_history(document_id, limit)
 
-    def delete_document(self, document_id: str) -> None:
-        if not self.store.delete(document_id):
+    def delete_document(self, document_id: str, expected_revision: int) -> None:
+        try:
+            deleted = self.store.delete(
+                document_id,
+                expected_revision=expected_revision,
+            )
+        except StoreRevisionConflictError as exc:
+            raise RevisionConflictError(str(exc)) from exc
+        if not deleted:
             raise DocumentNotFoundError(document_id)
 
     def get_project_settings(self) -> ProjectSettings:

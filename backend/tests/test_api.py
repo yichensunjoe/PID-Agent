@@ -19,6 +19,59 @@ def make_client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
+def test_delete_document_returns_204_and_preserves_other_documents(tmp_path: Path):
+    client = make_client(tmp_path)
+    target = client.post("/api/v2/documents", json={"name": "Delete me"}).json()
+    survivor = client.post("/api/v2/documents", json={"name": "Keep me"}).json()
+
+    missing_revision = client.delete(f"/api/v2/documents/{target['id']}")
+    assert missing_revision.status_code == 422
+
+    deleted = client.delete(
+        f"/api/v2/documents/{target['id']}",
+        params={"expected_revision": target["revision"]},
+    )
+
+    assert deleted.status_code == 204
+    assert deleted.content == b""
+    assert [item["id"] for item in client.get("/api/v2/documents").json()] == [survivor["id"]]
+    assert client.get(f"/api/v2/documents/{target['id']}").status_code == 404
+    assert (
+        client.delete(
+            f"/api/v2/documents/{target['id']}",
+            params={"expected_revision": target["revision"]},
+        ).status_code
+        == 404
+    )
+
+
+def test_delete_document_rejects_stale_revision_without_removing_document(tmp_path: Path):
+    client = make_client(tmp_path)
+    document = client.post("/api/v2/documents", json={"name": "Keep latest"}).json()
+    changed = client.post(
+        f"/api/v2/documents/{document['id']}/transactions",
+        json={
+            "expected_revision": document["revision"],
+            "operations": [{"op": "clear_document"}],
+        },
+    ).json()["document"]
+
+    stale = client.delete(
+        f"/api/v2/documents/{document['id']}",
+        params={"expected_revision": document["revision"]},
+    )
+
+    assert stale.status_code == 409
+    assert "current revision is 1" in stale.json()["detail"]
+    assert client.get(f"/api/v2/documents/{document['id']}").json()["revision"] == 1
+
+    deleted = client.delete(
+        f"/api/v2/documents/{document['id']}",
+        params={"expected_revision": changed["revision"]},
+    )
+    assert deleted.status_code == 204
+
+
 def test_document_transaction_status_and_svg_export(tmp_path: Path):
     client = make_client(tmp_path)
     created = client.post("/api/v2/documents", json={"name": "Demo"})

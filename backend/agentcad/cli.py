@@ -153,6 +153,19 @@ def main(argv: list[str] | None = None) -> None:
     )
     matrix_parser.add_argument("--output", default="", help="Optional JSON report path")
 
+    quality_parser = subparsers.add_parser(
+        "quality-harness",
+        help="Run deterministic symbol, topology, and Agent-contract checks without a model",
+    )
+    quality_parser.add_argument(
+        "--symbol-path",
+        action="append",
+        type=Path,
+        default=[],
+        help="Additional symbol JSON file or directory; may be repeated",
+    )
+    quality_parser.add_argument("--output", type=Path, default=None, help="Optional JSON report path")
+
     args = parser.parse_args(argv)
     if args.command == "serve":
         import uvicorn
@@ -186,6 +199,19 @@ def main(argv: list[str] | None = None) -> None:
             Path(args.output).write_text(payload + "\n", encoding="utf-8")
         print(payload)
         raise SystemExit(0 if report.accepted else 2)
+    elif args.command == "quality-harness":
+        from .quality_harness import run_quality_harness, symbol_load_failure_report
+        from .symbols import SymbolCatalogLoadError, SymbolRegistry
+
+        try:
+            report = run_quality_harness(SymbolRegistry(search_paths=args.symbol_path))
+        except SymbolCatalogLoadError as exc:
+            report = symbol_load_failure_report(exc)
+        payload = _json_payload(report.model_dump(mode="json", by_alias=True))
+        if args.output:
+            args.output.write_text(payload + "\n", encoding="utf-8")
+        print(payload)
+        raise SystemExit(0 if report.passed else 2)
     else:
         print(_json_payload(TransactionRequest.model_json_schema()))
 

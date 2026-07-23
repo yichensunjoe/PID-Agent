@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import ValidationError
 
 from .diagnostics import DiagnosticLogger
@@ -244,9 +244,12 @@ def create_v2_router(
         )
 
     @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_document(document_id: str):
+    def delete_document(
+        document_id: str,
+        expected_revision: Annotated[int, Query(ge=0)],
+    ):
         before = _call(service.get_document, document_id)
-        _call(service.delete_document, document_id)
+        _call(service.delete_document, document_id, expected_revision)
         if diagnostics is not None:
             diagnostics.emit(
                 "document.deleted",
