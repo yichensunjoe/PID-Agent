@@ -27,6 +27,8 @@ LEGACY_KEYS = {
     "temperature_indicator",
 }
 
+HIDDEN_DUPLICATE_KEYS = {"system_interface", "off_page_connector"}
+
 REQUIRED_STANDARD_KEYS = {
     "agitator",
     "air_cooler",
@@ -43,7 +45,6 @@ REQUIRED_STANDARD_KEYS = {
     "level_gauge",
     "metal_expansion_joint",
     "needle_valve",
-    "off_page_connector",
     "off_page_connector_in",
     "off_page_connector_out",
     "orifice_plate",
@@ -100,12 +101,19 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
     assert all(SymbolDefinition.model_validate(item) for item in all_entries)
 
     registry = SymbolRegistry()
-    assert {item.key for item in registry.list()} == set(all_keys)
+    registry_keys = {item.key for item in registry.list()}
+    assert registry_keys == set(all_keys) - HIDDEN_DUPLICATE_KEYS
+    assert HIDDEN_DUPLICATE_KEYS.isdisjoint(registry_keys)
     library = registry.get("condenser").metadata["library"]
     assert library["name"] == "P&ID-Agent 内置标准图例库"
     assert library["version"] == "2026.1"
-    opc_library = registry.get("off_page_connector_in").metadata["library"]
-    assert opc_library["name"] == "P&ID-Agent 流向与跨图连接图例"
+    opc_in = registry.get("off_page_connector_in")
+    opc_out = registry.get("off_page_connector_out")
+    assert opc_in.metadata["library"]["name"] == "P&ID-Agent 流向与跨图连接图例"
+    assert opc_in.width == opc_out.width == 100
+    assert opc_in.height == opc_out.height == 50
+    assert opc_in.ports[0].x == 100
+    assert opc_out.ports[0].x == 0
 
 
 def test_external_symbol_override_does_not_inherit_builtin_library_metadata(
