@@ -102,25 +102,17 @@ def create_documents_router(service: DocumentService) -> APIRouter:
         )
 
     @router.put("/documents/{document_id}/canvas-grid", response_model=Document)
-    def update_canvas_grid(document_id: str, request: CanvasGridRequest):
-        stored, document = _require_current_document(
+    def project_canvas_grid(document_id: str, request: CanvasGridRequest):
+        _, document = _require_current_document(
             service, document_id, request.expected_revision
         )
         if document.canvas.grid_size == request.grid_size:
             return document
 
-        previous_revision = document.revision
-        stored.undo_stack.append(document.model_dump(mode="json"))
-        if len(stored.undo_stack) > service.history_limit:
-            stored.undo_stack = stored.undo_stack[-service.history_limit :]
-        stored.redo_stack.clear()
-        document.canvas.grid_size = request.grid_size
-        return _save_document_mutation(
-            service,
-            stored,
-            document,
-            previous_revision=previous_revision,
-            label=f"Set canvas grid to {request.grid_size:g}",
-        )
+        # Grid density is an editor interaction preference. Return a projected view
+        # without changing the engineering document, history, or revision.
+        projected = document.model_copy(deep=True)
+        projected.canvas.grid_size = request.grid_size
+        return projected
 
     return router
