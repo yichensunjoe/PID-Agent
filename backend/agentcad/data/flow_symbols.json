@@ -1,7 +1,7 @@
 {
   "library": {
     "name": "P&ID-Agent 流向与跨图连接图例",
-    "version": "2026.1",
+    "version": "2026.2",
     "language": "zh-CN",
     "note": "OPC 表示 off-page connector；IN 表示介质从关联 P&ID 进入当前图，OUT 表示介质离开当前图。"
   },
@@ -11,15 +11,14 @@
       "name": "OPC IN（跨图入口）",
       "category": "边界与跨图连接",
       "description": "介质从另一张 P&ID 进入当前图。properties.target_document_id 保存关联 P&ID，双击可跳转。",
-      "width": 86,
-      "height": 46,
+      "width": 100,
+      "height": 50,
       "ports": [
-        {"id": "process", "name": "当前图工艺接口", "x": 86, "y": 23, "direction": "out", "medium": "process"}
+        {"id": "process", "name": "当前图工艺接口", "x": 100, "y": 25, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 56, "y1": 23, "x2": 86, "y2": 23},
-        {"type": "polyline", "points": [[8, 23], [28, 5], [62, 5], [62, 41], [28, 41]], "closed": true},
-        {"type": "text", "x": 39, "y": 28, "text": "IN", "font_size": 13, "anchor": "middle"}
+        {"type": "polyline", "points": [[100, 5], [25, 5], [0, 25], [25, 45], [100, 45]], "closed": true},
+        {"type": "text", "x": 53, "y": 30, "text": "IN", "font_size": 13, "anchor": "middle"}
       ],
       "metadata": {"capability": "opc", "opc_direction": "in"}
     },
@@ -28,15 +27,14 @@
       "name": "OPC OUT（跨图出口）",
       "category": "边界与跨图连接",
       "description": "介质从当前图流向另一张 P&ID。properties.target_document_id 保存关联 P&ID，双击可跳转。",
-      "width": 86,
-      "height": 46,
+      "width": 100,
+      "height": 50,
       "ports": [
-        {"id": "process", "name": "当前图工艺接口", "x": 0, "y": 23, "direction": "in", "medium": "process"}
+        {"id": "process", "name": "当前图工艺接口", "x": 0, "y": 25, "direction": "in", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 23, "x2": 30, "y2": 23},
-        {"type": "polyline", "points": [[78, 23], [58, 5], [24, 5], [24, 41], [58, 41]], "closed": true},
-        {"type": "text", "x": 47, "y": 28, "text": "OUT", "font_size": 12, "anchor": "middle"}
+        {"type": "polyline", "points": [[0, 5], [75, 5], [100, 25], [75, 45], [0, 45]], "closed": true},
+        {"type": "text", "x": 47, "y": 30, "text": "OUT", "font_size": 12, "anchor": "middle"}
       ],
       "metadata": {"capability": "opc", "opc_direction": "out"}
     }
