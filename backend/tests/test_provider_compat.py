@@ -8,6 +8,7 @@ from agentcad.models import AgentGenerateRequest, Document, ProviderConfig
 from agentcad.provider_compat import (
     KIMI_CODING_BASE_URL,
     completion_temperature,
+    extract_chat_content,
     is_kimi_coding_provider,
     normalize_openai_base_url,
 )
@@ -175,3 +176,109 @@ def test_invalid_temperature_error_is_actionable():
         OpenAICompatiblePlanner._raise_for_response(response, provider)
 
     assert KIMI_CODING_BASE_URL in str(exc_info.value)
+
+
+def test_extract_chat_content_standard_string():
+    data = {"choices": [{"message": {"content": '{"ok": true}'}}]}
+    assert extract_chat_content(data) == '{"ok": true}'
+
+
+def test_extract_chat_content_falls_back_to_reasoning_content():
+    # LongCat-2.0 / DeepSeek-R1 style: content null, answer in reasoning_content
+    data = {
+        "choices": [
+            {"message": {"content": None, "reasoning_content": '{"ok": true}'},
+             "finish_reason": "stop"}
+        ]
+    }
+    assert extract_chat_content(data) == '{"ok": true}'
+
+
+def test_extract_chat_content_falls_back_to_thinking():
+    data = {"choices": [{"message": {"content": "", "thinking": '{"ok": true}'}}]}
+    assert extract_chat_content(data) == '{"ok": true}'
+
+
+def test_extract_chat_content_handles_list_of_parts():
+    data = {
+        "choices": [
+            {
+                "message": {
+                    "content": [
+                        {"type": "text", "text": '{"ok": '},
+                        {"type": "image_url", "image_url": {"url": "ignored"}},
+                        {"type": "text", "text": "true}"},
+                    ]
+                }
+            }
+        ]
+    }
+    assert extract_chat_content(data) == '{"ok": true}'
+
+
+def test_extract_chat_content_raises_on_empty_choices():
+    with pytest.raises(ValueError, match="no choices"):
+        extract_chat_content({"choices": []})
+
+
+def test_extract_chat_content_raises_on_missing_message():
+    with pytest.raises(ValueError, match="no message"):
+        extract_chat_content({"choices": [{}]})
+
+
+def test_extract_chat_content_raises_when_all_fields_empty():
+    with pytest.raises(ValueError, match="no content, reasoning_content, or thinking"):
+        extract_chat_content(
+            {"choices": [{"message": {"content": None, "reasoning_content": None},
+                          "finish_reason": "length"}]}
+        )
+
+
+def test_extract_chat_content_raises_on_error_body_with_200():
+    with pytest.raises(ValueError, match="provider returned error"):
+        extract_chat_content({"error": {"message": "rate limited"}})
+
+
+class _StaleRevisionResponse(_CompletionResponse):
+    @staticmethod
+    def json():
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"explanation":"ok","transaction":'
+                            '{"expected_revision":3,"operations":[{"op":"clear_document"}]}}'
+                        )
+                    }
+                }
+            ]
+        }
+
+
+class _StaleRevisionClient(_RecordingClient):
+    def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]):
+        self.requests.append({"url": url, "headers": headers, "json": json})
+        return _StaleRevisionResponse()
+
+
+def test_plan_overwrites_stale_llm_expected_revision(monkeypatch):
+    """Reasoning models (LongCat/Agnes) echo a stale expected_revision; the
+    planner must trust the system-known revision, not the LLM's value."""
+    client = _StaleRevisionClient()
+    monkeypatch.setattr(
+        "agentcad.llm.httpx.Client",
+        lambda *, timeout, follow_redirects=False, transport=None: client,
+    )
+    planner = OpenAICompatiblePlanner(service=_PlanService(), symbols=_Symbols())  # type: ignore[arg-type]
+
+    plan = planner.plan(
+        "doc_stale",
+        AgentGenerateRequest(
+            prompt="Clear the drawing",
+            expected_revision=7,
+            provider=ProviderConfig(base_url="https://provider.test/v1", model="m"),
+        ),
+    )
+
+    assert plan.transaction.expected_revision == 7  # not the LLM's stale 3

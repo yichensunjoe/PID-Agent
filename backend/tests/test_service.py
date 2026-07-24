@@ -306,26 +306,33 @@ def test_junction_supports_branch_merge_and_follows_move(service: DocumentServic
     ) == 3
 
 
-def test_manual_connector_requires_orthogonal_segments(service: DocumentService):
+def test_manual_connector_diagonal_two_point_is_orthogonalized(service: DocumentService):
     document = service.create_document(CreateDocumentRequest())
-    with pytest.raises(InvalidOperationError, match="orthogonal"):
-        service.apply_transaction(
-            document.id,
-            TransactionRequest.model_validate(
-                {
-                    "operations": [
-                        {
-                            "op": "add_element",
-                            "element": {
-                                "type": "connector",
-                                "points": [{"x": 0, "y": 0}, {"x": 100, "y": 50}],
-                                "routing": "manual",
-                            },
-                        }
-                    ]
-                }
-            ),
-        )
+    updated = service.apply_transaction(
+        document.id,
+        TransactionRequest.model_validate(
+            {
+                "operations": [
+                    {
+                        "op": "add_element",
+                        "element": {
+                            "type": "connector",
+                            "id": "c1",
+                            "points": [{"x": 0, "y": 0}, {"x": 100, "y": 50}],
+                            "routing": "manual",
+                        },
+                    }
+                ]
+            }
+        ),
+    )
+    connector = next(element for element in updated.document.elements if element.type == "connector")
+    pts = [(point.x, point.y) for point in connector.points]
+    # A 2-point diagonal manual route is re-routed through a clean orthogonal elbow
+    # instead of being rejected (forgives LLM/manual input on diagonal port pairs).
+    assert len(pts) == 3
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:], strict=False):
+        assert x1 == x2 or y1 == y2
 
 
 def test_unknown_connector_port_is_rejected_atomically(service: DocumentService):

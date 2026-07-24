@@ -691,11 +691,11 @@ class DocumentService:
         if start.x == end.x or start.y == end.y:
             return DocumentService._dedupe_points([start, end])
         if abs(end.x - start.x) >= abs(end.y - start.y):
-            middle = (start.x + end.x) / 2
-            points = [start, Point(x=middle, y=start.y), Point(x=middle, y=end.y), end]
+            # dominant horizontal: run along the source row, turn at the target column
+            points = [start, Point(x=end.x, y=start.y), end]
         else:
-            middle = (start.y + end.y) / 2
-            points = [start, Point(x=start.x, y=middle), Point(x=end.x, y=middle), end]
+            # dominant vertical: run along the source column, turn at the target row
+            points = [start, Point(x=start.x, y=end.y), end]
         return DocumentService._dedupe_points(points)
 
     @staticmethod
@@ -708,6 +708,10 @@ class DocumentService:
         )
         if len(points) <= 2:
             if endpoints_changed:
+                return DocumentService._orthogonal_route(start, end)
+            # A 2-point manual route that is diagonal cannot be orthogonal; re-route
+            # through a clean elbow instead of rejecting (forgives LLM/manual input).
+            if points[0].x != points[1].x and points[0].y != points[1].y:
                 return DocumentService._orthogonal_route(start, end)
             return DocumentService._validate_manual_route(points)
         original = [Point.model_validate(point.model_dump()) for point in points]

@@ -11,7 +11,7 @@ import httpx
 from pydantic import ValidationError
 
 from .models import AgentGenerateRequest, AgentPlan, ProviderConfig, TransactionRequest
-from .provider_compat import completion_temperature
+from .provider_compat import completion_temperature, extract_chat_content
 from .provider_security import (
     ProviderNetworkPolicy,
     ProviderURLPolicyError,
@@ -265,12 +265,15 @@ class OpenAICompatiblePlanner:
         self._raise_for_response(response, provider)
         try:
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
-        except (ValueError, KeyError, IndexError, TypeError) as exc:
+        except ValueError as exc:
             raise LLMResponseError(
-                "model response did not contain choices[0].message.content",
+                "model response was not valid JSON",
                 provider=provider,
             ) from exc
+        try:
+            content = extract_chat_content(data)
+        except ValueError as exc:
+            raise LLMResponseError(str(exc), provider=provider) from exc
 
         raw_plan = self._parse_json(content, provider)
         if "transaction" not in raw_plan and "operations" in raw_plan:
@@ -289,8 +292,11 @@ class OpenAICompatiblePlanner:
                 f"model returned a transaction that does not match the schema: {exc}",
                 provider=provider,
             ) from exc
-        if plan.transaction.expected_revision is None:
-            plan.transaction.expected_revision = request.expected_revision
+        plan.transaction.expected_revision = (
+            request.expected_revision
+            if request.expected_revision is not None
+            else document.revision
+        )
         return plan
 
     @staticmethod
@@ -434,9 +440,15 @@ class OpenAICompatiblePlanner:
     @staticmethod
     def _parse_json(content: str, provider: ProviderConfig) -> dict[str, Any]:
         text = content.strip()
-        fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
+        fence = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
         if fence:
             text = fence.group(1)
+        else:
+            # some models wrap JSON in prose without a fence; take the outermost object
+            first = text.find("{")
+            last = text.rfind("}")
+            if first != -1 and last != -1 and last > first:
+                text = text[first : last + 1]
         try:
             value = json.loads(text)
         except json.JSONDecodeError as exc:
