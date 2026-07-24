@@ -59,7 +59,7 @@ def create_documents_router(service: DocumentService) -> APIRouter:
                     document_id=document.id,
                     revision=document.revision,
                     source="web",
-                    action="rename",
+                    action="transaction",
                     label=f"Rename document to {request.name}",
                     operation_count=1,
                 ),
