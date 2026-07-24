@@ -1,0 +1,21 @@
+name: Pytest diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone PR branch and run Pytest
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git clone --quiet --depth 1 --branch "$HEAD_REF" "https://github.com/$REPOSITORY.git" repo
+          cd repo
+          python -m pip install --quiet -e '.[mcp,dev]'
+          pytest -q --tb=short
