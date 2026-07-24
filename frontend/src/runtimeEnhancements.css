@@ -1,4 +1,4 @@
-.documents-panel {
+.documents-panel:has(> .runtime-sidebar-switcher) {
   overflow: hidden !important;
   display: flex;
   flex-direction: column;
@@ -29,7 +29,7 @@
   border-color: #64748b;
 }
 
-.documents-panel .document-list {
+.documents-panel:has(> .runtime-sidebar-switcher) .document-list {
   flex: 0 1 34vh;
   min-height: 86px;
   max-height: 34vh;
@@ -37,7 +37,7 @@
   overscroll-behavior: contain;
 }
 
-.documents-panel .symbol-palette {
+.documents-panel:has(> .runtime-sidebar-switcher) .symbol-palette {
   flex: 1 1 280px;
   min-height: 120px;
   overflow: auto;
