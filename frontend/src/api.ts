@@ -19,6 +19,7 @@ import type {
 
 const API_ROOT = (import.meta as ImportMeta & { env?: { VITE_API_ROOT?: string } }).env?.VITE_API_ROOT ?? "/api/v2";
 export const SERVICE_TOKEN_SESSION_KEY = "pid-agent-service-token";
+export const EDITOR_SNAP_GRID_SIZE = 5;
 
 let serviceAccessToken = "";
 try {
@@ -149,6 +150,48 @@ function errorMessage(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+function isDocumentPayload(value: unknown): value is Document {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<Document>;
+  return typeof candidate.id === "string"
+    && typeof candidate.name === "string"
+    && typeof candidate.revision === "number"
+    && Boolean(candidate.canvas && typeof candidate.canvas === "object")
+    && Array.isArray(candidate.layers)
+    && Array.isArray(candidate.systems)
+    && Array.isArray(candidate.elements);
+}
+
+function withEditorSnapGrid(document: Document): Document {
+  if (document.canvas.grid_size <= EDITOR_SNAP_GRID_SIZE) return document;
+  return {
+    ...document,
+    canvas: {
+      ...document.canvas,
+      grid_size: EDITOR_SNAP_GRID_SIZE,
+    },
+  };
+}
+
+function normalizeEditorResponse<T>(payload: T): T {
+  if (isDocumentPayload(payload)) return withEditorSnapGrid(payload) as T;
+  if (Array.isArray(payload)) {
+    return payload.map((item) => isDocumentPayload(item) ? withEditorSnapGrid(item) : item) as T;
+  }
+  if (!payload || typeof payload !== "object") return payload;
+
+  const record = payload as Record<string, unknown>;
+  let normalized: Record<string, unknown> | null = null;
+  if (isDocumentPayload(record.document)) {
+    normalized = { ...record, document: withEditorSnapGrid(record.document) };
+  }
+  if (Array.isArray(record.documents)) {
+    const documents = record.documents.map((item) => isDocumentPayload(item) ? withEditorSnapGrid(item) : item);
+    normalized = { ...(normalized ?? record), documents };
+  }
+  return (normalized ?? payload) as T;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authorizedFetch(`${API_ROOT}${path}`, {
     ...init,
@@ -174,7 +217,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  return normalizeEditorResponse(await response.json() as T);
 }
 
 function providerPayload(provider?: ProviderConfig): ProviderConfig | undefined {
