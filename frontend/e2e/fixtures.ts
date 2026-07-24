@@ -87,10 +87,12 @@ export const junction = (id: string, position: Point, metadata: Record<string, u
 export async function resetDocuments(request: APIRequestContext): Promise<void> {
   const response = await request.get(`${API_ROOT}/documents`);
   expect(response.ok()).toBeTruthy();
-  const documents = await response.json() as Array<{ id: string }>;
+  const documents = await response.json() as Array<{ id: string; revision: number }>;
   for (const document of documents) {
-    const removed = await request.delete(`${API_ROOT}/documents/${document.id}`);
-    expect(removed.ok()).toBeTruthy();
+    const removed = await request.delete(
+      `${API_ROOT}/documents/${document.id}?expected_revision=${encodeURIComponent(document.revision)}`,
+    );
+    expect(removed.ok(), await removed.text()).toBeTruthy();
   }
 }
 
