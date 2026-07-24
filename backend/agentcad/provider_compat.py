@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -70,14 +71,37 @@ def _coerce_message_text(value: Any) -> str:
     return ""
 
 
+def _structured_json_fallback(text: str) -> str:
+    """Return one JSON object embedded in model reasoning, or an empty string.
+
+    Reasoning fields often contain private analysis rather than the final answer.
+    They are therefore accepted only when a complete JSON object can be decoded.
+    The last decodable object wins because many reasoning models place the final
+    answer after examples or intermediate sketches.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    decoder = json.JSONDecoder()
+    candidates: list[str] = []
+    for index, character in enumerate(stripped):
+        if character != "{":
+            continue
+        try:
+            value, consumed = decoder.raw_decode(stripped[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            candidates.append(stripped[index : index + consumed])
+    return candidates[-1] if candidates else ""
+
+
 def extract_chat_content(data: Any) -> str:
     """Extract assistant text from an OpenAI-compatible chat completion body.
 
-    Falls back to ``reasoning_content`` then ``thinking`` when ``content`` is
-    missing, null, or empty - reasoning models (LongCat-2.0, DeepSeek-R1,
-    Qwen QwQ) put the answer there and leave ``content`` empty. Raises
-    ``ValueError`` with a descriptive message if no usable text is present;
-    callers wrap it into an ``LLMResponseError``.
+    Normal ``content`` is authoritative. ``reasoning_content`` and ``thinking``
+    are accepted only when they contain a complete JSON object, preventing raw
+    chain-of-thought prose from being passed to the transaction parser.
     """
     if not isinstance(data, dict):
         raise ValueError("model response was not a JSON object")
@@ -95,13 +119,17 @@ def extract_chat_content(data: Any) -> str:
     if not isinstance(message, dict):
         raise ValueError("choices[0] had no message")
 
-    for field in ("content", "reasoning_content", "thinking"):
-        text = _coerce_message_text(message.get(field))
-        if text:
-            return text
+    content = _coerce_message_text(message.get("content"))
+    if content.strip():
+        return content
+
+    for field in ("reasoning_content", "thinking"):
+        fallback = _structured_json_fallback(_coerce_message_text(message.get(field)))
+        if fallback:
+            return fallback
 
     finish = choices[0].get("finish_reason")
     raise ValueError(
-        "choices[0].message had no content, reasoning_content, or thinking text"
+        "choices[0].message had no usable content or structured JSON fallback"
         + (f" (finish_reason={finish})" if finish else "")
     )
