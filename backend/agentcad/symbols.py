@@ -32,6 +32,7 @@ class SymbolRegistry:
         builtin_paths = [
             package_data / "symbols.json",
             package_data / "standard_symbols.json",
+            package_data / "flow_symbols.json",
         ]
         configured = os.getenv("PID_AGENT_SYMBOL_PATHS", os.getenv("AGENTCAD_SYMBOL_PATHS", ""))
         env_paths = [Path(item) for item in configured.split(os.pathsep) if item]
@@ -137,11 +138,28 @@ class SymbolRegistry:
             raise KeyError(f"unknown symbol: {key}") from exc
 
     def as_prompt_catalog(self) -> str:
-        rows = []
+        rows = [
+            "Harness conventions:",
+            "- Build connectivity with real ports and semantic connectors; never draw decorative pipes or standalone arrow text.",
+            "- Connector medium should be water, gas, or a precise project medium; flow_direction controls direction and animation.",
+            "- Valve properties.valve_state is open or closed; missing means normally open.",
+            "- Use off_page_connector_in/out for cross-drawing boundaries and set properties.target_document_id.",
+            "- Preserve unrelated elements, document identity and expected_revision.",
+            "",
+            "Available symbols:",
+        ]
         for symbol in self.list():
-            ports = ", ".join(f"{p.id}:{p.name}" for p in symbol.ports) or "none"
+            ports = ", ".join(
+                f"{port.id}:{port.name}[{port.direction},{port.medium}]" for port in symbol.ports
+            ) or "none"
+            capabilities = ", ".join(
+                f"{key}={value}"
+                for key, value in symbol.metadata.items()
+                if key in {"capability", "opc_direction"}
+            )
+            suffix = f"; capabilities={capabilities}" if capabilities else ""
             rows.append(
                 f"- {symbol.key}: {symbol.name} / {symbol.category}; "
-                f"size={symbol.width}x{symbol.height}; ports={ports}; {symbol.description}"
+                f"size={symbol.width}x{symbol.height}; ports={ports}{suffix}; {symbol.description}"
             )
         return "\n".join(rows)
