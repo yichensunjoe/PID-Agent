@@ -87,22 +87,15 @@ def _document(state: str | None) -> Document:
     )
 
 
-def test_valves_are_normally_open_and_closed_valves_block_directed_flow() -> None:
+def test_valves_are_normally_open_and_never_generate_flow_errors() -> None:
     registry = SymbolRegistry()
     assert valve_state(_valve()) == "open"
+    assert valve_state(_valve("closed")) == "closed"
     assert flow_rule_findings(_document(None), registry) == []
-
-    findings = flow_rule_findings(_document("closed"), registry)
-    assert len(findings) == 1
-    finding = findings[0]
-    assert finding.code == "VALVE_CLOSED_BLOCKING_FLOW"
-    assert finding.severity == "error"
-    assert set(finding.element_ids) == {"valve_1", "line_in", "line_out"}
-    assert finding.details["incoming_connector_ids"] == ["line_in"]
-    assert finding.details["outgoing_connector_ids"] == ["line_out"]
+    assert flow_rule_findings(_document("closed"), registry) == []
 
 
-def test_agent_harness_context_exposes_topology_state_and_contract() -> None:
+def test_agent_harness_context_exposes_topology_state_without_blockage_findings() -> None:
     registry = SymbolRegistry()
     context = build_agent_harness_context(_document("closed"), registry)
     assert context["schema"] == "pid-agent.agent-harness-context"
@@ -112,8 +105,9 @@ def test_agent_harness_context_exposes_topology_state_and_contract() -> None:
     assert valve["capability"] == "valve"
     assert valve["valve_state"] == "closed"
     assert valve["default_valve_state"] == "open"
-    assert context["flow_findings"][0]["code"] == "VALVE_CLOSED_BLOCKING_FLOW"
+    assert context["flow_findings"] == []
     assert any("real symbol ports" in rule for rule in context["engineering_contract"])
+    assert any("must not block" in rule for rule in context["engineering_contract"])
 
 
 def test_opc_symbols_have_opposite_directions_and_are_loaded() -> None:

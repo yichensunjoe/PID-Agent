@@ -24,7 +24,7 @@ from .llm import (
     ProviderTimeoutError,
 )
 from .models import AgentGenerateRequest, Document, ProviderConfig
-from .provider_compat import completion_temperature
+from .provider_compat import completion_temperature, extract_chat_content
 from .provider_security import (
     ProviderNetworkPolicy,
     ProviderURLPolicyError,
@@ -106,8 +106,11 @@ class SemanticAgentPlanner:
             document_id=document_id,
             document=document,
         )
-        if plan.transaction.expected_revision is None:
-            plan.transaction.expected_revision = request.expected_revision
+        plan.transaction.expected_revision = (
+            request.expected_revision
+            if request.expected_revision is not None
+            else document.revision
+        )
         return plan
 
     def replan(
@@ -310,12 +313,15 @@ class SemanticAgentPlanner:
         OpenAICompatiblePlanner._raise_for_response(response, provider)
         try:
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
-        except (ValueError, KeyError, IndexError, TypeError) as exc:
+        except ValueError as exc:
             raise LLMResponseError(
-                "model response did not contain choices[0].message.content",
+                "model response was not valid JSON",
                 provider=provider,
             ) from exc
+        try:
+            content = extract_chat_content(data)
+        except ValueError as exc:
+            raise LLMResponseError(str(exc), provider=provider) from exc
         return OpenAICompatiblePlanner._parse_json(content, provider)
 
     @staticmethod

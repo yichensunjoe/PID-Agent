@@ -19,7 +19,7 @@ from .diagnostics import DiagnosticLogger
 from .flow_topology import build_agent_harness_context
 from .llm import PlannerError
 from .models import AgentGenerateRequest, AgentPlan, TransactionRequest, TransactionResult
-from .semantic_compiler_engine import SemanticTransactionCompiler
+from .permissive_semantic_compiler import PermissiveSemanticTransactionCompiler
 from .semantic_planner import SemanticAgentPlanner
 from .service import (
     DocumentNotFoundError,
@@ -110,7 +110,7 @@ def create_semantic_agent_router(
     diagnostics: DiagnosticLogger | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v2", tags=["P&ID-Agent semantic planning"])
-    compiler = SemanticTransactionCompiler(service)
+    compiler = PermissiveSemanticTransactionCompiler(service)
 
     @router.get("/agent/semantic-tool-schema")
     def semantic_tool_schema():

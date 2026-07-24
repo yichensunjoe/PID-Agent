@@ -266,6 +266,10 @@ export type TransactionValidation = {
 
 export type Tool = "select" | "line" | "rectangle" | "circle" | "connector" | "junction" | "text" | "symbol";
 
+export type LineVariety = "solid" | "dashed";
+export type RectangleVariety = "solid" | "rounded" | "dashed";
+export type CircleVariety = "solid" | "dashed" | "filled";
+
 export type ProjectSettings = {
   name: string;
   metadata: Record<string, unknown>;

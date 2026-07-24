@@ -8,6 +8,11 @@ from pydantic import ValidationError
 
 from .models import SymbolDefinition
 
+HIDDEN_BUILTIN_SYMBOL_KEYS: dict[str, frozenset[str]] = {
+    "symbols.json": frozenset({"system_interface"}),
+    "standard_symbols.json": frozenset({"off_page_connector"}),
+}
+
 
 class SymbolCatalogLoadError(ValueError):
     def __init__(
@@ -38,10 +43,12 @@ class SymbolRegistry:
         env_paths = [Path(item) for item in configured.split(os.pathsep) if item]
         self._search_paths = [*builtin_paths, *env_paths, *(search_paths or [])]
         self._symbols: dict[str, SymbolDefinition] = {}
+        self._hidden_keys: set[str] = set()
         self.reload()
 
     def reload(self) -> None:
         symbols: dict[str, SymbolDefinition] = {}
+        hidden_keys: set[str] = set()
         for path in self._search_paths:
             if not path.exists():
                 continue
@@ -126,10 +133,18 @@ class SymbolRegistry:
                             }
                         )
                     symbols[symbol.key] = symbol
+                    if symbol.key in HIDDEN_BUILTIN_SYMBOL_KEYS.get(file_path.name, frozenset()):
+                        hidden_keys.add(symbol.key)
+                    else:
+                        hidden_keys.discard(symbol.key)
         self._symbols = symbols
+        self._hidden_keys = hidden_keys
 
     def list(self) -> list[SymbolDefinition]:
-        return sorted(self._symbols.values(), key=lambda item: (item.category, item.name))
+        return sorted(
+            (symbol for key, symbol in self._symbols.items() if key not in self._hidden_keys),
+            key=lambda item: (item.category, item.name),
+        )
 
     def get(self, key: str) -> SymbolDefinition:
         try:

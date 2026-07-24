@@ -14,6 +14,20 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .toolbar button, .toolbar-actions button, .toolbar-actions a { border: 1px solid #39465a; color: #dce5f2; background: #1c2738; border-radius: 6px; padding: 7px 10px; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .toolbar button:hover, .toolbar-actions button:hover, .toolbar-actions a:hover { background: #2b3a50; }
 .toolbar button.active { background: #2563eb; border-color: #60a5fa; color: white; }
+.toolbar .tool-icon { display: inline-flex; align-items: center; gap: 4px; padding: 7px 8px; }
+.toolbar .tool-icon svg { display: block; }
+.toolbar .tool-icon.menu-open { background: #2b3a50; }
+.tool-split { position: relative; }
+.tool-caret { font-size: 9px; opacity: 0.7; }
+.tool-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; min-width: 152px; background: #1c2738; border: 1px solid #39465a; border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 2px; }
+.tool-menu-title { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #9aa8bc; padding: 4px 8px 2px; }
+.tool-menu .tool-menu-item { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: #dce5f2; padding: 6px 8px; border-radius: 6px; cursor: grab; text-align: left; white-space: nowrap; }
+.tool-menu .tool-menu-item:hover { background: #2b3a50; }
+.tool-menu .tool-menu-item:active { cursor: grabbing; }
+.tool-menu .tool-menu-item.active { color: #93c5fd; }
+.tool-menu .tool-menu-item svg { flex: 0 0 auto; }
+.symbol-card { cursor: grab; }
+.symbol-card:active { cursor: grabbing; }
 .workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(600px, 1fr) 360px; }
 .sidebar { min-height: 0; overflow: auto; background: #f8fafc; padding: 14px; border-color: #cbd5e1; }
 .documents-panel { border-right: 1px solid #cbd5e1; }

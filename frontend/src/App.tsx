@@ -5,7 +5,7 @@ import { CommandPalette } from "./editor/CommandPalette";
 import { ExperienceSettings } from "./editor/ExperienceSettings";
 import { EngineeringReportPanel } from "./editor/EngineeringReportPanel";
 import { ViewNavigator } from "./editor/ViewNavigator";
-import { elementPaletteCommands, type PaletteCommand } from "./editor/commandPalette";
+import { elementPaletteCommands, type PaletteCommand } from "./editor/paletteCommands";
 import { currentNavigationZone, deriveNavigationZones, loadNamedViews, persistNamedViews, sanitizeNamedViews, type CanvasView, type NamedCanvasView, type NavigationZone } from "./editor/navigationViews";
 import { rectForElement } from "./editor/editorGeometry";
 import { isElementEditLocked, readEditorGroupId } from "./editor/selectionEditing";
@@ -20,7 +20,8 @@ import { parseImportJson } from "./projectImport";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
 import { installE2EBridge } from "./e2eBridge";
 import { useWorkspace } from "./store";
-import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
+import type { CircleVariety, LineVariety, RectangleVariety, SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
+import { CIRCLE_VARIETIES, LINE_VARIETIES, RECTANGLE_VARIETIES, SHAPE_DRAG_MIME } from "./editor/shapeVarieties";
 import "./issue1.css";
 
 const tools: Array<{ id: Tool; label: string; key: string }> = [
@@ -32,6 +33,88 @@ const tools: Array<{ id: Tool; label: string; key: string }> = [
   { id: "circle", label: "圆", key: "C" },
   { id: "text", label: "文字", key: "T" },
 ];
+
+function ToolIcon({ id }: { id: Tool }) {
+  const c = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (id) {
+    case "select": return (<svg {...c}><path d="M3.5 2.5 L3.5 12 L6.5 9.2 L8.3 13 L9.8 12.4 L8 8.8 L12 8.8 Z" fill="currentColor" stroke="none" /></svg>);
+    case "line": return (<svg {...c}><path d="M3 13 L13 3" /></svg>);
+    case "connector": return (<svg {...c}><path d="M4 3 L4 8 L12 8 L12 13 M10 11 L12 13 L14 11" /></svg>);
+    case "junction": return (<svg {...c}><circle cx="8" cy="8" r="3" fill="currentColor" stroke="none" /></svg>);
+    case "rectangle": return (<svg {...c}><rect x="3" y="4.5" width="10" height="7" /></svg>);
+    case "circle": return (<svg {...c}><circle cx="8" cy="8" r="4.5" /></svg>);
+    case "text": return (<svg {...c}><path d="M3 3.5 L13 3.5 M8 3.5 L8 12.5 M6 12.5 L10 12.5" /></svg>);
+    default: return null;
+  }
+}
+
+function VarietyPreview({ tool, variety }: { tool: "line" | "rectangle" | "circle"; variety: string }) {
+  const dash = variety === "dashed" ? "3 2" : undefined;
+  if (tool === "line") return <svg width={22} height={14} viewBox="0 0 22 14"><path d="M2 7 L20 7" fill="none" stroke="currentColor" strokeWidth={1.6} strokeDasharray={dash} /></svg>;
+  if (tool === "rectangle") return <svg width={22} height={14} viewBox="0 0 22 14"><rect x={2} y={2} width={18} height={10} rx={variety === "rounded" ? 3 : 0} fill="none" stroke="currentColor" strokeWidth={1.6} strokeDasharray={dash} /></svg>;
+  return <svg width={22} height={14} viewBox="0 0 22 14"><circle cx={11} cy={7} r={5.5} fill={variety === "filled" ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.6} strokeDasharray={dash} /></svg>;
+}
+
+function SimpleToolButton({ tool, label, shortcut, active, onSelect }: { tool: Tool; label: string; shortcut: string; active: boolean; onSelect: () => void }) {
+  return (
+    <button type="button" className={`tool-icon ${active ? "active" : ""}`} onClick={onSelect} title={`${label} (${shortcut})`}>
+      <ToolIcon id={tool} />
+    </button>
+  );
+}
+
+function ShapeToolButton({ tool, label, shortcut, active }: { tool: "line" | "rectangle" | "circle"; label: string; shortcut: string; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const lineVariety = useWorkspace((s) => s.lineVariety);
+  const rectangleVariety = useWorkspace((s) => s.rectangleVariety);
+  const circleVariety = useWorkspace((s) => s.circleVariety);
+  const setLineVariety = useWorkspace((s) => s.setLineVariety);
+  const setRectangleVariety = useWorkspace((s) => s.setRectangleVariety);
+  const setCircleVariety = useWorkspace((s) => s.setCircleVariety);
+  const current = tool === "line" ? lineVariety : tool === "rectangle" ? rectangleVariety : circleVariety;
+  const setVariety = tool === "line" ? setLineVariety : tool === "rectangle" ? setRectangleVariety : setCircleVariety;
+  const options = tool === "line" ? LINE_VARIETIES : tool === "rectangle" ? RECTANGLE_VARIETIES : CIRCLE_VARIETIES;
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+  return (
+    <div className="tool-split" ref={ref}>
+      <button
+        type="button"
+        className={`tool-icon ${active ? "active" : ""} ${open ? "menu-open" : ""}`}
+        onClick={() => setOpen((value) => !value)}
+        title={`${label} (${shortcut}) — 点开选种类，种类可拖到画布`}
+      >
+        <ToolIcon id={tool} />
+        <span className="tool-caret" aria-hidden>▾</span>
+      </button>
+      {open ? (
+        <div className="tool-menu" role="menu">
+          <div className="tool-menu-title">{label}种类</div>
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              role="menuitem"
+              className={`tool-menu-item ${current === opt.id ? "active" : ""}`}
+              draggable
+              onDragStart={(event) => { event.dataTransfer.setData(SHAPE_DRAG_MIME, `${tool}:${opt.id}`); event.dataTransfer.effectAllowed = "copy"; }}
+              onClick={() => { setVariety(opt.id as never); setOpen(false); }}
+              title={`${opt.label}（点击选用或拖到画布）`}
+            >
+              <VarietyPreview tool={tool} variety={opt.id} />
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 type RightPanel = "properties" | "groups" | "history" | "reports" | "agent";
 
@@ -538,7 +621,13 @@ export default function App() {
       <header className="topbar">
         <div className="brand"><strong>P&amp;ID-Agent</strong><span>轻量 P&amp;ID 人机协同工作区</span></div>
         <div className="toolbar">
-          {tools.map((tool) => <button key={tool.id} className={state.tool === tool.id ? "active" : ""} onClick={() => state.setTool(tool.id)} title={`${tool.label} (${shortcutMap[`workspace:tool-${tool.id}`] ?? tool.key})`}>{tool.label}</button>)}
+          {tools.map((tool) => {
+            const shortcut = shortcutMap[`workspace:tool-${tool.id}`] ?? tool.key;
+            if (tool.id === "line" || tool.id === "rectangle" || tool.id === "circle") {
+              return <ShapeToolButton key={tool.id} tool={tool.id} label={tool.label} shortcut={shortcut} active={state.tool === tool.id} />;
+            }
+            return <SimpleToolButton key={tool.id} tool={tool.id} label={tool.label} shortcut={shortcut} active={state.tool === tool.id} onSelect={() => state.setTool(tool.id)} />;
+          })}
         </div>
         <div className="toolbar-actions">
           <button type="button" data-testid="command-palette-trigger" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title={`命令面板 (${shortcutMap["palette:open"]})`}>命令 <kbd>{shortcutMap["palette:open"]}</kbd></button>

@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import create_v1_compat_router, create_v2_router
 from .api_acceptance import create_acceptance_router
+from .api_documents import create_documents_router
 from .api_dxf import create_dxf_router
 from .api_export import _max_export_pixels, create_export_router
 from .api_layout import create_layout_router
@@ -199,6 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await request_boundary(request, call_next)
 
     app.include_router(create_v2_router(service, planner, diagnostics, VERSION))
+    app.include_router(create_documents_router(service))
     app.include_router(create_acceptance_router(symbols, diagnostics))
     app.include_router(create_export_router(service, diagnostics))
     app.include_router(create_dxf_router(service, diagnostics))

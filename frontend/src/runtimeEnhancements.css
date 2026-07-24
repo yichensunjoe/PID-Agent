@@ -1,3 +1,32 @@
+.topbar {
+  position: relative !important;
+  z-index: 120 !important;
+  overflow: visible !important;
+}
+
+.topbar .toolbar {
+  position: relative !important;
+  z-index: 122 !important;
+  overflow: visible !important;
+  min-width: 0;
+}
+
+.topbar .tool-split,
+.topbar .tool-menu {
+  z-index: 124 !important;
+}
+
+.topbar .tool-menu {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.workspace,
+.canvas-stage {
+  position: relative;
+  z-index: 1;
+}
+
 .documents-panel:has(> .runtime-sidebar-switcher) {
   overflow: hidden !important;
   display: flex;
@@ -27,6 +56,30 @@
 .runtime-sidebar-switcher button.active {
   font-weight: 650;
   border-color: #64748b;
+}
+
+.documents-panel > .panel-heading {
+  gap: 6px;
+}
+
+.documents-panel > .panel-heading h2 {
+  margin-right: auto;
+}
+
+.runtime-rename-document {
+  border: 1px solid #94a3b8 !important;
+  color: #334155 !important;
+  background: #f8fafc !important;
+}
+
+.runtime-rename-document:hover {
+  border-color: #2563eb !important;
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+}
+
+.runtime-export-png {
+  border-color: #4ade80 !important;
 }
 
 .documents-panel:has(> .runtime-sidebar-switcher) .document-list {
@@ -67,23 +120,31 @@
 .runtime-flow-line {
   fill: none;
   vector-effect: non-scaling-stroke;
+  stroke: #16a34a;
   stroke-linecap: round;
-  stroke-width: 3.2;
-  opacity: 0.56;
-  animation: pid-agent-flow-dash 1.6s linear infinite;
+  stroke-width: 4.2;
+  stroke-dasharray: 4 11;
+  opacity: 0.76;
+  filter: drop-shadow(0 0 1px rgb(22 163 74 / 55%));
+  animation: pid-agent-flow-dash 1.35s linear infinite;
 }
 
 .runtime-flow-line.medium-water {
-  stroke: #0284c7;
-  stroke-dasharray: 2 12;
+  stroke: #16a34a;
+  stroke-dasharray: 3 10;
 }
 
 .runtime-flow-line.medium-gas {
-  stroke: #a16207;
-  stroke-dasharray: 9 11;
-  stroke-width: 2.6;
-  opacity: 0.45;
-  animation-duration: 2.1s;
+  stroke: #22c55e;
+  stroke-dasharray: 9 10;
+  stroke-width: 3.8;
+  opacity: 0.7;
+  animation-duration: 1.7s;
+}
+
+.runtime-flow-line.medium-other {
+  stroke: #15803d;
+  stroke-dasharray: 5 12;
 }
 
 .runtime-flow-line.direction-reverse {
@@ -160,7 +221,7 @@
 
 .runtime-flow-panel-heading span {
   font-size: 11px;
-  color: var(--muted-text, #64748b);
+  color: #15803d;
 }
 
 .runtime-flow-panel section {
@@ -211,28 +272,12 @@
   color: #b91c1c;
 }
 
-.runtime-blockage-findings > button {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  padding: 8px 10px;
-  text-align: left;
-  border-color: #fca5a5;
-  background: #fff7f7;
-  color: #991b1b;
-}
-
-.runtime-blockage-findings > button span {
-  font-size: 11px;
-  color: #b91c1c;
-}
-
 .runtime-flow-message {
   margin-top: 8px;
   padding: 8px 10px;
   border-radius: 6px;
-  background: #fff7ed;
-  color: #9a3412;
+  background: #f0fdf4;
+  color: #166534;
   font-size: 12px;
 }
 

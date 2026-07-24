@@ -45,7 +45,16 @@ jobs:
         run: pid-agent quality-harness
 
       - name: Pytest
-        run: pytest -q
+        run: pytest -q --junitxml=backend/test-results/pytest.xml
+
+      - name: Upload pytest failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/test-results/pytest.xml
+          if-no-files-found: ignore
+          retention-days: 7
 
   frontend:
     name: Frontend · Node 24

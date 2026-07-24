@@ -39,11 +39,12 @@ export function simplifyCollinear(points: Point[]): Point[] {
 export function orthogonalRoute(start: Point, end: Point): Point[] {
   if (isHorizontal(start, end) || isVertical(start, end)) return dedupePoints([start, end]);
   if (Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)) {
-    const middle = (start.x + end.x) / 2;
-    return dedupePoints([start, { x: middle, y: start.y }, { x: middle, y: end.y }, end]);
+    // dominant horizontal: run along the source row, turn at the target column
+    // (matches the server's _orthogonal_route so previews match applied connectors)
+    return dedupePoints([start, { x: end.x, y: start.y }, end]);
   }
-  const middle = (start.y + end.y) / 2;
-  return dedupePoints([start, { x: start.x, y: middle }, { x: end.x, y: middle }, end]);
+  // dominant vertical: run along the source column, turn at the target row
+  return dedupePoints([start, { x: start.x, y: end.y }, end]);
 }
 
 export function shortestOrthogonalRoute(start: Point, end: Point): Point[] {

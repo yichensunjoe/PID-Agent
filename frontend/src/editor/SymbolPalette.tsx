@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { SymbolDefinition, SymbolShape } from "../types";
 import { useWorkspace } from "../store";
+import { SYMBOL_DRAG_MIME } from "./shapeVarieties";
 import { filterSymbolCatalog, orderedSymbolCategories } from "./symbolCatalog";
 
 function Shape({ shape }: { shape: SymbolShape }) {
@@ -31,8 +32,13 @@ function SymbolCard({ symbol }: { symbol: SymbolDefinition }) {
   return (
     <button
       className={`symbol-card ${selected ? "is-selected" : ""}`}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData(SYMBOL_DRAG_MIME, symbol.key);
+        event.dataTransfer.effectAllowed = "copy";
+      }}
       onClick={() => chooseSymbol(symbol.key)}
-      title={symbol.description}
+      title={`${symbol.description}（点击选择或拖到画布）`}
     >
       <svg viewBox={`0 0 ${symbol.width} ${symbol.height}`} aria-hidden="true">
         <g fill="none" stroke="currentColor" strokeWidth="1.5">

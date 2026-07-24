@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { authorizedFetch, downloadApiResource } from "./api";
 import { useWorkspace } from "./store";
-import type { ConnectorElement, SymbolElement } from "./types";
+import type { ConnectorElement, Document, SymbolElement } from "./types";
 import {
   animatedConnector,
-  blockedFlowFindings,
   isOpcDefinition,
   isValveDefinition,
   normalizeFlowMedium,
@@ -35,6 +35,22 @@ function runtimeEnhancementsEnabled(): boolean {
     || sessionStorage.getItem("pid-agent:enable-runtime-e2e") === "true";
 }
 
+function safeFilename(name: string): string {
+  const normalized = name.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ");
+  return normalized || "pid-drawing";
+}
+
+function responseMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return fallback;
+}
+
 export function RuntimeEnhancements() {
   return runtimeEnhancementsEnabled() ? <RuntimeEnhancementsEnabled /> : null;
 }
@@ -43,9 +59,12 @@ function RuntimeEnhancementsEnabled() {
   const workspace = useWorkspace();
   const svg = useDomTarget<SVGSVGElement>('svg[data-testid="editor-canvas"]');
   const sidebar = useDomTarget<HTMLElement>('[data-testid="documents-panel"]');
+  const documentHeading = useDomTarget<HTMLElement>('[data-testid="documents-panel"] > .panel-heading');
+  const toolbarActions = useDomTarget<HTMLElement>(".toolbar-actions");
   const [documentsOpen, setDocumentsOpen] = useState(true);
   const [symbolsOpen, setSymbolsOpen] = useState(true);
   const [runtimeMessage, setRuntimeMessage] = useState("");
+  const [renaming, setRenaming] = useState(false);
 
   const definitionMap = useMemo(
     () => new Map(workspace.symbols.map((definition) => [definition.key, definition])),
@@ -63,10 +82,6 @@ function RuntimeEnhancementsEnabled() {
   const selectedOpc = selectedSymbol && isOpcDefinition(selectedDefinition, selectedSymbol.symbol_key)
     ? selectedSymbol
     : null;
-  const findings = useMemo(
-    () => workspace.document ? blockedFlowFindings(workspace.document, workspace.symbols) : [],
-    [workspace.document, workspace.symbols],
-  );
 
   useEffect(() => {
     if (!sidebar) return;
@@ -107,7 +122,7 @@ function RuntimeEnhancementsEnabled() {
       event.stopPropagation();
       const targetId = targetDocumentId(symbol);
       if (!targetId) {
-        setRuntimeMessage("该 OPC 尚未关联目标 P&ID。请选中它后在流向状态面板设置目标。");
+        setRuntimeMessage("该 OPC 尚未关联目标 P&ID。请选中它后设置关联图纸。");
         return;
       }
       void openDocument(targetId);
@@ -132,6 +147,42 @@ function RuntimeEnhancementsEnabled() {
         patch: { properties: { ...symbol.properties, ...patch } },
       }],
       label,
+    );
+  };
+
+  const renameCurrentDocument = async () => {
+    const current = workspace.document;
+    if (!current || renaming) return;
+    const requested = window.prompt("重命名 P&ID 图纸", current.name)?.trim();
+    if (!requested || requested === current.name) return;
+    setRenaming(true);
+    setRuntimeMessage("");
+    try {
+      const response = await authorizedFetch(`/api/v2/documents/${encodeURIComponent(current.id)}/name`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: requested, expected_revision: current.revision }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        setRuntimeMessage(responseMessage(payload, "图纸名称未更新，请刷新后再试。"));
+        return;
+      }
+      const updated = await response.json() as Document;
+      useWorkspace.setState({ document: updated });
+      await useWorkspace.getState().refreshDocument();
+      setRuntimeMessage(`图纸已重命名为“${updated.name}”。`);
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const exportPng = () => {
+    const current = workspace.document;
+    if (!current) return;
+    void downloadApiResource(
+      `/api/v2/documents/${encodeURIComponent(current.id)}/export.png?scale=1`,
+      `${safeFilename(current.name)}.png`,
     );
   };
 
@@ -160,6 +211,32 @@ function RuntimeEnhancementsEnabled() {
       </button>
     </div>,
     sidebar,
+  ) : null;
+
+  const renameControl = documentHeading ? createPortal(
+    <button
+      type="button"
+      className="runtime-rename-document"
+      disabled={!workspace.document || renaming}
+      onClick={() => void renameCurrentDocument()}
+      title="重命名当前 P&ID 图纸"
+    >
+      {renaming ? "重命名中…" : "重命名"}
+    </button>,
+    documentHeading,
+  ) : null;
+
+  const pngControl = toolbarActions ? createPortal(
+    <button
+      type="button"
+      className="runtime-export-png"
+      disabled={!workspace.document}
+      onClick={exportPng}
+      title="导出当前图纸为 PNG 图片"
+    >
+      导出 PNG
+    </button>,
+    toolbarActions,
   ) : null;
 
   const canvasOverlay = svg && workspace.document ? createPortal(
@@ -233,15 +310,17 @@ function RuntimeEnhancementsEnabled() {
     svg,
   ) : null;
 
-  const panelVisible = Boolean(selectedConnector || selectedValve || selectedOpc || findings.length || runtimeMessage || canReturn);
+  const panelVisible = Boolean(selectedConnector || selectedValve || selectedOpc || runtimeMessage || canReturn);
 
   return <>
     {sidebarControls}
+    {renameControl}
+    {pngControl}
     {canvasOverlay}
     {panelVisible ? <aside className="runtime-flow-panel" aria-label="工艺流向状态">
       <div className="runtime-flow-panel-heading">
         <strong>工艺流向状态</strong>
-        <span>{findings.length ? `${findings.length} 个阻断` : "拓扑正常"}</span>
+        <span>非阻断显示</span>
       </div>
 
       {selectedConnector ? <section>
@@ -272,7 +351,7 @@ function RuntimeEnhancementsEnabled() {
             <option value="reverse">Target → Source</option>
           </select>
         </label>
-        <small>水和气体在指定流向后显示克制的动态流道；工程主线及导出不变。</small>
+        <small>指定流向后以绿色动态流道显示；工程主线及导出保持不变。</small>
       </section> : null}
 
       {selectedValve ? <section>
@@ -289,7 +368,7 @@ function RuntimeEnhancementsEnabled() {
             onClick={() => updateSymbolProperties(selectedValve, { valve_state: "closed" }, "Close valve")}
           >关</button>
         </div>
-        <small>未设置状态的阀门按常开处理。</small>
+        <small>阀门状态仅用于表达工艺状态，不再生成阻断报错。</small>
       </section> : null}
 
       {selectedOpc ? <section>
@@ -321,19 +400,6 @@ function RuntimeEnhancementsEnabled() {
       </section> : null}
 
       {canReturn ? <button type="button" onClick={() => void openDocument(returnDocumentId, false)}>返回上一张 P&amp;ID</button> : null}
-
-      {findings.length ? <section className="runtime-blockage-findings" role="alert">
-        <h3>介质阻断</h3>
-        {findings.map((finding) => <button
-          type="button"
-          key={finding.valveId}
-          onClick={() => workspace.setSelection([finding.valveId, ...finding.connectorIds])}
-        >
-          <strong>{finding.message}</strong>
-          <span>{finding.connectorIds.length} 条相关管线 · 点击定位</span>
-        </button>)}
-      </section> : null}
-
       {runtimeMessage ? <div className="runtime-flow-message" role="status">{runtimeMessage}</div> : null}
     </aside> : null}
   </>;
