@@ -7,14 +7,59 @@ from typing import Literal
 
 from fastapi import APIRouter, Query, Response
 
-from .engineering_reports import EngineeringReport, ReportScope, build_engineering_report
+from .engineering_reports import EngineeringReport, ReportScope, RuleFinding, build_engineering_report
+from .flow_topology import flow_rule_findings
+from .models import Document
 from .service import DocumentService
+from .symbols import SymbolRegistry
 
 ReportCsvKind = Literal["equipment", "lines", "instruments", "rules"]
 
 
 def _json_cell(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _with_flow_findings(
+    report: EngineeringReport,
+    document: Document,
+    registry: SymbolRegistry,
+) -> EngineeringReport:
+    extras = [
+        RuleFinding(
+            severity=item.severity,
+            code=item.code,
+            message=item.message,
+            element_ids=list(item.element_ids),
+            details=item.details,
+        )
+        for item in flow_rule_findings(document, registry)
+    ]
+    if not extras:
+        return report
+    severity_order = {"error": 0, "warning": 1, "info": 2}
+    findings = sorted(
+        [*report.findings, *extras],
+        key=lambda item: (severity_order[item.severity], item.code, tuple(item.element_ids), item.message),
+    )
+    counts = report.counts.model_copy(
+        update={
+            "errors": sum(item.severity == "error" for item in findings),
+            "warnings": sum(item.severity == "warning" for item in findings),
+            "info": sum(item.severity == "info" for item in findings),
+        }
+    )
+    return report.model_copy(update={"findings": findings, "counts": counts})
+
+
+def _build_report(
+    service: DocumentService,
+    document_id: str,
+    scope: ReportScope,
+) -> EngineeringReport:
+    document = service.get_document(document_id)
+    report = build_engineering_report(document, service.symbols, scope=scope)
+    return _with_flow_findings(report, document, service.symbols)
 
 
 def _csv_payload(report: EngineeringReport, kind: ReportCsvKind) -> bytes:
@@ -40,13 +85,16 @@ def create_reports_router(service: DocumentService) -> APIRouter:
 
     @router.get("/documents/{document_id}/engineering-report", response_model=EngineeringReport)
     def engineering_report(document_id: str, scope: ReportScope = Query("visible")) -> EngineeringReport:  # noqa: B008
-        document = service.get_document(document_id)
-        return build_engineering_report(document, service.symbols, scope=scope)
+        return _build_report(service, document_id, scope)
 
     @router.get("/documents/{document_id}/engineering-report/{kind}.csv")
     def engineering_report_csv(document_id: str, kind: ReportCsvKind, scope: ReportScope = Query("visible")) -> Response:  # noqa: B008
         document = service.get_document(document_id)
-        report = build_engineering_report(document, service.symbols, scope=scope)
+        report = _with_flow_findings(
+            build_engineering_report(document, service.symbols, scope=scope),
+            document,
+            service.symbols,
+        )
         rows = len(report.findings) if kind == "rules" else len(getattr(report, kind))
         return Response(
             _csv_payload(report, kind),
