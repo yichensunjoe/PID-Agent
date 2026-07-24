@@ -56,36 +56,38 @@ function reportOperations(): Array<Record<string, unknown>> {
   ];
 }
 
-test("reviews deterministic reports, locates findings and downloads CSV", async ({ page, request }) => {
+test("reviews deterministic schedules, locates rows and downloads CSV", async ({ page, request }) => {
   const document = await createDocument(request, "Engineering report acceptance", reportOperations());
   await openDocument(page, document.id);
 
-  await page.getByRole("tab", { name: "报表/检查" }).click();
+  await page.getByRole("tab", { name: /报表/ }).click();
   await expect(page.getByTestId("engineering-report-panel")).toBeVisible();
   await expect(page.getByTestId("report-revision")).toContainText(`revision ${document.revision}`);
-  await expect(page.getByTestId("report-counts")).toContainText("错误");
-  await expect(page.getByTestId("report-counts")).toContainText("警告");
+  await expect(page.getByTestId("report-counts")).toContainText("设备");
+  await expect(page.getByTestId("report-counts")).toContainText("管线");
+  await expect(page.getByTestId("report-counts")).toContainText("仪表");
+  await expect(page.getByTestId("report-counts")).not.toContainText("错误");
+  await expect(page.getByTestId("report-counts")).not.toContainText("警告");
+  await expect(page.getByTestId("report-tab-rules")).toHaveCount(0);
 
-  await page.getByTestId("report-tab-rules").click();
-  await page.getByTestId("report-severity").selectOption("error");
-  await page.getByTestId("report-filter").fill("TAG_DUPLICATE");
-  const duplicate = page.locator('[data-testid^="report-row-error-TAG_DUPLICATE"]');
-  await expect(duplicate).toContainText("TAG_DUPLICATE");
+  await page.getByTestId("report-tab-equipment").click();
+  await page.getByTestId("report-filter").fill("valve_duplicate");
+  const duplicate = page.getByTestId("report-row-valve_duplicate");
+  await expect(duplicate).toContainText("XV-101");
   await duplicate.getByRole("button", { name: "定位" }).click();
-  await expect.poll(async () => (await workspaceSnapshot(page)).selectedElementIds.sort()).toEqual(["valve", "valve_duplicate"]);
+  await expect.poll(async () => (await workspaceSnapshot(page)).selectedElementIds).toEqual(["valve_duplicate"]);
 
-  await page.getByRole("tab", { name: "报表/检查" }).click();
+  await page.getByRole("tab", { name: /报表/ }).click();
   await page.getByTestId("report-filter").fill("");
-  await page.getByTestId("report-severity").selectOption("all");
   const downloadPromise = page.waitForEvent("download");
   await page.getByTestId("report-download").click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/visible-rules\.csv$/);
+  expect(download.suggestedFilename()).toMatch(/visible-equipment\.csv$/);
   const path = await download.path();
   expect(path).not.toBeNull();
   const csv = await readFile(path!, "utf8");
   expect(csv.charCodeAt(0)).toBe(0xfeff);
-  expect(csv).toContain("TAG_DUPLICATE");
+  expect(csv).toContain("XV-101");
   expect(csv).toContain("valve_duplicate");
 
   await page.getByTestId("report-tab-instruments").click();
