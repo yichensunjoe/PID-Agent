@@ -55,7 +55,7 @@ test("water flow overlay and closed-valve blockage can be located and cleared", 
 
   await openDocument(page, document.id);
 
-  await expect(page.getByRole("group", { name: "左侧工作区分区" })).toBeVisible();
+  await expect(page.locator('[aria-label="左侧工作区分区"]')).toBeVisible();
   await expect(page.locator('[data-flow-for="line-in"]')).toHaveClass(/medium-water/);
   await expect(page.locator('[data-flow-for="line-out"]')).toHaveClass(/medium-water/);
   await expect(page.locator('[data-valve-state-for="valve"]')).toHaveClass(/state-closed/);
