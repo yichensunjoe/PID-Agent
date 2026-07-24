@@ -7,7 +7,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Query, Response
 
-from .engineering_reports import EngineeringReport, ReportScope, RuleFinding, build_engineering_report
+from .engineering_reports import (
+    EngineeringReport,
+    ReportScope,
+    RuleFinding,
+    build_engineering_report,
+)
 from .flow_topology import flow_rule_findings
 from .models import Document
 from .service import DocumentService
