@@ -8,6 +8,11 @@ from pydantic import ValidationError
 
 from .models import SymbolDefinition
 
+HIDDEN_BUILTIN_SYMBOL_KEYS: dict[str, frozenset[str]] = {
+    "symbols.json": frozenset({"system_interface"}),
+    "standard_symbols.json": frozenset({"off_page_connector"}),
+}
+
 
 class SymbolCatalogLoadError(ValueError):
     def __init__(
@@ -116,6 +121,8 @@ class SymbolRegistry:
                             symbol_key=symbol.key,
                         )
                     file_keys.add(symbol.key)
+                    if symbol.key in HIDDEN_BUILTIN_SYMBOL_KEYS.get(file_path.name, frozenset()):
+                        continue
                     if library_metadata:
                         symbol = symbol.model_copy(
                             update={
