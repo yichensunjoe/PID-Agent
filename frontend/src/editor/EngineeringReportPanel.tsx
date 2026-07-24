@@ -7,10 +7,11 @@ import {
   reportTabLabels,
   type ReportRow,
   type ReportTab,
-  type SeverityFilter,
 } from "../engineeringReports";
 import { useWorkspace } from "../store";
 import type { EngineeringReport, ReportScope, RuleFinding } from "../types";
+
+const visibleReportTabs: ReportTab[] = ["equipment", "lines", "instruments"];
 
 function isFinding(row: ReportRow): row is RuleFinding {
   return "element_ids" in row;
@@ -39,9 +40,8 @@ export function EngineeringReportPanel() {
   const document = useWorkspace((state) => state.document);
   const setSelection = useWorkspace((state) => state.setSelection);
   const [scope, setScope] = useState<ReportScope>("visible");
-  const [tab, setTab] = useState<ReportTab>("rules");
+  const [tab, setTab] = useState<ReportTab>("equipment");
   const [filter, setFilter] = useState("");
-  const [severity, setSeverity] = useState<SeverityFilter>("all");
   const [report, setReport] = useState<EngineeringReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -70,8 +70,8 @@ export function EngineeringReportPanel() {
   }, [document?.id, document?.revision, scope, reloadNonce]);
 
   const rows = useMemo(
-    () => report ? filterReportRows(report, tab, filter, severity) : [],
-    [report, tab, filter, severity],
+    () => report ? filterReportRows(report, tab, filter) : [],
+    [report, tab, filter],
   );
 
   const locate = (row: ReportRow) => {
@@ -116,20 +116,18 @@ export function EngineeringReportPanel() {
           </select>
         </label>
         <button type="button" data-testid="report-refresh" onClick={() => setReloadNonce((value) => value + 1)} disabled={loading}>
-          {loading ? "检查中…" : "刷新"}
+          {loading ? "生成中…" : "刷新"}
         </button>
       </div>
 
       {report ? <div className="report-counts" data-testid="report-counts">
-        <span className="report-count-error">错误 <strong>{report.counts.errors}</strong></span>
-        <span className="report-count-warning">警告 <strong>{report.counts.warnings}</strong></span>
         <span>设备 <strong>{report.counts.equipment}</strong></span>
         <span>管线 <strong>{report.counts.lines}</strong></span>
         <span>仪表 <strong>{report.counts.instruments}</strong></span>
       </div> : null}
 
       <div className="report-tabs" role="tablist" aria-label="工程报表">
-        {(Object.keys(reportTabLabels) as ReportTab[]).map((item) => (
+        {visibleReportTabs.map((item) => (
           <button
             key={item}
             type="button"
@@ -150,14 +148,8 @@ export function EngineeringReportPanel() {
           type="search"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="筛选位号、介质、规则代码…"
+          placeholder="筛选位号、介质、设备或管线…"
         />
-        {tab === "rules" ? <select data-testid="report-severity" value={severity} onChange={(event) => setSeverity(event.target.value as SeverityFilter)}>
-          <option value="all">全部级别</option>
-          <option value="error">错误</option>
-          <option value="warning">警告</option>
-          <option value="info">信息</option>
-        </select> : null}
       </div>
 
       <button type="button" className="report-download" data-testid="report-download" onClick={() => void downloadCsv()} disabled={!report || downloading}>
@@ -170,7 +162,7 @@ export function EngineeringReportPanel() {
 
       <div className="report-rows" data-testid="report-rows">
         {rows.map((row) => (
-          <article className={`report-row ${isFinding(row) ? `severity-${row.severity}` : ""}`} data-testid={`report-row-${rowKey(row)}`} key={rowKey(row)}>
+          <article className="report-row" data-testid={`report-row-${rowKey(row)}`} key={rowKey(row)}>
             <div className="report-row-heading">
               <strong>{rowTitle(row)}</strong>
               <button type="button" onClick={() => locate(row)} disabled={!reportRowElementIds(row).some((id) => document.elements.some((element) => element.id === id))}>定位</button>
