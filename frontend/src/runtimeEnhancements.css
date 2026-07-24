@@ -27,17 +27,6 @@
   z-index: 1;
 }
 
-.right-panel-tabs {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-}
-
-.right-panel-tabs button:nth-child(4),
-.agent-repair-issues,
-.error-box,
-.agent-note {
-  display: none !important;
-}
-
 .documents-panel:has(> .runtime-sidebar-switcher) {
   overflow: hidden !important;
   display: flex;
