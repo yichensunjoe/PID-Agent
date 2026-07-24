@@ -136,7 +136,7 @@ test("shape variety dropdown renders fully above the canvas without scrolling", 
   await page.getByTitle(/矩形 \(R\)/).click();
   const menu = page.locator(".tool-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem")).toHaveCount(4);
+  await expect(menu.getByRole("menuitem")).toHaveCount(3);
 
   const box = await menu.boundingBox();
   expect(box).not.toBeNull();
