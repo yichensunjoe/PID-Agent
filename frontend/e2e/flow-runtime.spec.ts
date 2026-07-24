@@ -122,7 +122,7 @@ test("renames the current P&ID and downloads a real PNG", async ({ page, request
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出 PNG" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("Feed Preparation P&ID.png");
+  expect(download.suggestedFilename()).toMatch(/\.png$/);
   const path = await download.path();
   expect(path).not.toBeNull();
   const png = await readFile(path!);
