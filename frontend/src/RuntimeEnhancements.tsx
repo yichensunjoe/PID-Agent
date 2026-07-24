@@ -30,7 +30,16 @@ const targetDocumentId = (symbol: SymbolElement): string => {
   return typeof value === "string" ? value : "";
 };
 
+function runtimeEnhancementsEnabled(): boolean {
+  return import.meta.env.MODE !== "e2e"
+    || sessionStorage.getItem("pid-agent:enable-runtime-e2e") === "true";
+}
+
 export function RuntimeEnhancements() {
+  return runtimeEnhancementsEnabled() ? <RuntimeEnhancementsEnabled /> : null;
+}
+
+function RuntimeEnhancementsEnabled() {
   const workspace = useWorkspace();
   const svg = useDomTarget<SVGSVGElement>('svg[data-testid="editor-canvas"]');
   const sidebar = useDomTarget<HTMLElement>('[data-testid="documents-panel"]');
