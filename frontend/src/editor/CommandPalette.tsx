@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { filterPaletteCommands, type PaletteCommand } from "./commandPalette";
+import { filterPaletteCommands, type PaletteCommand } from "./paletteCommands";
 
 type CommandPaletteProps = {
   open: boolean;

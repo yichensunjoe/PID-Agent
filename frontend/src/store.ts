@@ -17,9 +17,12 @@ import type {
   Document,
   DocumentSummary,
   Element,
+  LineVariety,
+  CircleVariety,
   Operation,
   Point,
   ProjectSettings,
+  RectangleVariety,
   SymbolDefinition,
   Tool,
 } from "./types";
@@ -101,6 +104,9 @@ type State = {
   tool: Tool;
   selectedElementIds: string[];
   selectedSymbolKey: string | null;
+  lineVariety: LineVariety;
+  rectangleVariety: RectangleVariety;
+  circleVariety: CircleVariety;
   loading: boolean;
   importing: boolean;
   projectSettings: ProjectSettings;
@@ -126,6 +132,9 @@ type State = {
   ungroupSelection: () => Promise<void>;
   setSelectionLocked: (locked: boolean) => Promise<void>;
   chooseSymbol: (key: string) => void;
+  setLineVariety: (variety: LineVariety) => void;
+  setRectangleVariety: (variety: RectangleVariety) => void;
+  setCircleVariety: (variety: CircleVariety) => void;
   transact: (operations: Operation[], label: string) => Promise<void>;
   duplicateSelection: () => Promise<void>;
   deleteSelection: () => Promise<void>;
@@ -147,6 +156,9 @@ export const useWorkspace = create<State>((set, get) => ({
   tool: "select",
   selectedElementIds: [],
   selectedSymbolKey: null,
+  lineVariety: "solid",
+  rectangleVariety: "solid",
+  circleVariety: "solid",
   loading: false,
   importing: false,
   projectSettings: { name: "P&ID Project", metadata: {} },
@@ -452,6 +464,9 @@ export const useWorkspace = create<State>((set, get) => ({
     await get().transact(selected.map((element) => ({ op: "update_element", element_id: element.id, patch: { metadata: metadataWithEditorLock(element, locked) } })), `${locked ? "Lock" : "Unlock"} ${selected.length} elements`);
   },
   chooseSymbol: (selectedSymbolKey) => set({ selectedSymbolKey, tool: "symbol", selectedElementIds: [] }),
+  setLineVariety: (lineVariety) => set({ lineVariety, tool: "line", selectedElementIds: [] }),
+  setRectangleVariety: (rectangleVariety) => set({ rectangleVariety, tool: "rectangle", selectedElementIds: [] }),
+  setCircleVariety: (circleVariety) => set({ circleVariety, tool: "circle", selectedElementIds: [] }),
 
   transact: async (operations, label) => {
     const document = get().document;

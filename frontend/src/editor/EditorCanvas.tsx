@@ -6,9 +6,12 @@ import type {
   ConnectorElement,
   ConnectorEndpoint,
   Element,
+  CircleVariety,
   JunctionElement,
+  LineVariety,
   Operation,
   Point,
+  RectangleVariety,
   SymbolDefinition,
   SymbolElement,
   SymbolPort,
@@ -22,6 +25,17 @@ import {
   orthogonalRoute,
   removeLocalDogleg,
 } from "./connectorRouting";
+import {
+  SHAPE_DRAG_MIME,
+  STAMP_CIRCLE_RADIUS,
+  STAMP_LINE_HALF,
+  STAMP_RECT_HEIGHT,
+  STAMP_RECT_WIDTH,
+  SYMBOL_DRAG_MIME,
+  circleStyle,
+  lineStyle,
+  rectangleStyle,
+} from "./shapeVarieties";
 import {
   doglegTouchesLockedPoint,
   inflateObstacle,
@@ -533,6 +547,9 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   const symbols = useWorkspace((state) => state.symbols);
   const tool = useWorkspace((state) => state.tool);
   const selectedSymbolKey = useWorkspace((state) => state.selectedSymbolKey);
+  const lineVariety = useWorkspace((state) => state.lineVariety);
+  const rectangleVariety = useWorkspace((state) => state.rectangleVariety);
+  const circleVariety = useWorkspace((state) => state.circleVariety);
   const selectedElementIds = useWorkspace((state) => state.selectedElementIds);
   const setSelection = useWorkspace((state) => state.setSelection);
   const toggleSelection = useWorkspace((state) => state.toggleSelection);
@@ -1059,6 +1076,38 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     setSelection([junction.id]);
   };
 
+  const onCanvasDragOver = (event: React.DragEvent<SVGSVGElement>) => {
+    if (event.dataTransfer.types.includes(SYMBOL_DRAG_MIME) || event.dataTransfer.types.includes(SHAPE_DRAG_MIME)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  };
+
+  const onCanvasDrop = async (event: React.DragEvent<SVGSVGElement>) => {
+    const symbolKey = event.dataTransfer.getData(SYMBOL_DRAG_MIME);
+    const shapePayload = event.dataTransfer.getData(SHAPE_DRAG_MIME);
+    if (!symbolKey && !shapePayload) return;
+    event.preventDefault();
+    const point = applyGrid(pointFromClient(event.clientX, event.clientY));
+    if (symbolKey) {
+      const definition = symbolMap.get(symbolKey);
+      if (!definition) return;
+      const label = window.prompt("设备位号/标签（可留空）", "") ?? "";
+      await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
+      return;
+    }
+    // shapePayload = "<tool>:<variety>", e.g. "line:dashed" / "rectangle:rounded" / "circle:filled"
+    const [shapeTool, variety] = shapePayload.split(":");
+    if (shapeTool === "line") {
+      await addElement({ type: "line", start: { x: point.x - STAMP_LINE_HALF, y: point.y }, end: { x: point.x + STAMP_LINE_HALF, y: point.y }, style: lineStyle(variety as LineVariety) }, "Stamp line");
+    } else if (shapeTool === "rectangle") {
+      const stamped = rectangleStyle(variety as RectangleVariety);
+      await addElement({ type: "rectangle", x: point.x - STAMP_RECT_WIDTH / 2, y: point.y - STAMP_RECT_HEIGHT / 2, width: STAMP_RECT_WIDTH, height: STAMP_RECT_HEIGHT, style: stamped.style, corner_radius: stamped.corner_radius }, "Stamp rectangle");
+    } else if (shapeTool === "circle") {
+      await addElement({ type: "circle", center: point, radius: STAMP_CIRCLE_RADIUS, style: circleStyle(variety as CircleVariety) }, "Stamp circle");
+    }
+  };
+
   const onCanvasPointerDown = async (event: React.PointerEvent<SVGSVGElement>) => {
     setContextMenu(null);
     if (event.button === 1) {
@@ -1264,16 +1313,17 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       ], "Create branch from process connector");
       setSelection([branch.id]);
     } else if (tool === "line" && !connectorMode && (width || height)) {
-      await addElement({ type: "line", start, end: current }, "Draw line");
+      await addElement({ type: "line", start, end: current, style: lineStyle(lineVariety) }, "Draw line");
     } else if (connectorMode && (width || height)) {
       const sourceElement = draft.source?.element_id ? document.elements.find((item) => item.id === draft.source?.element_id) : undefined;
       const targetElement = target?.element_id ? document.elements.find((item) => item.id === target?.element_id) : undefined;
       await addElement({ type: "connector", points: orthogonalRoute(start, current), source: draft.source, target, routing: "orthogonal", process_tag: "", layer_id: sourceElement?.layer_id ?? targetElement?.layer_id ?? "layer_default", system_id: sourceElement?.system_id ?? targetElement?.system_id ?? "system_default" }, "Draw process connector");
     } else if (tool === "rectangle" && !connectorMode && width > 0 && height > 0) {
-      await addElement({ type: "rectangle", x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width, height }, "Draw rectangle");
+      const variety = rectangleStyle(rectangleVariety);
+      await addElement({ type: "rectangle", x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width, height, style: variety.style, corner_radius: variety.corner_radius }, "Draw rectangle");
     } else if (tool === "circle" && !connectorMode) {
       const radius = Math.hypot(current.x - start.x, current.y - start.y);
-      if (radius > 0) await addElement({ type: "circle", center: start, radius }, "Draw circle");
+      if (radius > 0) await addElement({ type: "circle", center: start, radius, style: circleStyle(circleVariety) }, "Draw circle");
     }
     if (quickConnector.current) {
       quickConnector.current = false;
@@ -1540,6 +1590,8 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onWheel={onWheel}
+      onDragOver={onCanvasDragOver}
+      onDrop={(event: React.DragEvent<SVGSVGElement>) => void onCanvasDrop(event)}
       onContextMenu={(event: React.MouseEvent<SVGSVGElement>) => { event.preventDefault(); setContextMenu(null); }}
     >
       <title>{`${canvasMode === "infinite" ? "无限工作区" : "固定页面"} · ${gridEnabled ? "网格吸附" : "自由坐标"} · 视口渲染 ${activeElements.length}/${visibleElements.length} 个元素；空间索引 ${spatialIndex.cellCount} 个网格`}</title>

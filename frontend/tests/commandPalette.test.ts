@@ -7,7 +7,7 @@ import {
   filterPaletteCommands,
   paletteScore,
   type PaletteCommand,
-} from "../src/editor/commandPalette.ts";
+} from "../src/editor/paletteCommands.ts";
 
 const commands: PaletteCommand[] = [
   { id: "avoid", label: "选中管线避障布线", keywords: ["route", "obstacle"], enabled: true, group: "command" },
