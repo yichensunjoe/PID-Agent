@@ -84,8 +84,9 @@ test("OPC double click opens its linked P&ID and offers return navigation", asyn
   ]);
 
   await openDocument(page, source.id);
-  await expect(page.locator('[data-element-id="opc"]')).toBeVisible();
-  await page.locator('[data-element-id="opc"]').dblclick();
+  const jumpTarget = page.locator('[data-opc-jump-for="opc"]');
+  await expect(jumpTarget).toBeVisible();
+  await jumpTarget.dblclick();
 
   await expect(page.getByTestId("app-shell")).toHaveAttribute("data-document-id", target.id);
   await expect(page.getByRole("button", { name: "返回上一张 P&ID" })).toBeVisible();
