@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agentcad.flow_topology import (
+    blocked_downstream_connectors,
     build_agent_harness_context,
     flow_rule_findings,
     normalize_flow_medium,
@@ -87,27 +88,44 @@ def _document(state: str | None) -> Document:
     )
 
 
-def test_valves_are_normally_open_and_never_generate_flow_errors() -> None:
+def test_closed_valve_stops_only_directed_downstream_flow() -> None:
     registry = SymbolRegistry()
     assert valve_state(_valve()) == "open"
     assert valve_state(_valve("closed")) == "closed"
-    assert flow_rule_findings(_document(None), registry) == []
-    assert flow_rule_findings(_document("closed"), registry) == []
+    assert blocked_downstream_connectors(_document(None), registry) == {}
+    assert blocked_downstream_connectors(_document("closed"), registry) == {
+        "valve_1": ("line_out",)
+    }
+
+    findings = flow_rule_findings(_document("closed"), registry)
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.severity == "info"
+    assert finding.code == "VALVE_CLOSED_FLOW_ISOLATION"
+    assert finding.element_ids == ("valve_1", "line_out")
+    assert finding.details["blocked_connector_ids"] == ["line_out"]
+    assert finding.details["drawing_blocked"] is False
 
 
-def test_agent_harness_context_exposes_topology_state_without_blockage_findings() -> None:
+def test_agent_harness_exposes_blocked_flow_without_rejecting_edits() -> None:
     registry = SymbolRegistry()
     context = build_agent_harness_context(_document("closed"), registry)
     assert context["schema"] == "pid-agent.agent-harness-context"
     assert context["revision"] == 0
-    assert context["connectors"][0]["medium_class"] == "water"
+    connector_map = {item["id"]: item for item in context["connectors"]}
+    assert connector_map["line_in"]["medium_class"] == "water"
+    assert connector_map["line_in"]["flow_blocked"] is False
+    assert connector_map["line_out"]["flow_blocked"] is True
     valve = next(item for item in context["symbols"] if item["id"] == "valve_1")
     assert valve["capability"] == "valve"
     assert valve["valve_state"] == "closed"
     assert valve["default_valve_state"] == "open"
-    assert context["flow_findings"] == []
-    assert any("real symbol ports" in rule for rule in context["engineering_contract"])
-    assert any("must not block" in rule for rule in context["engineering_contract"])
+    assert context["flow_findings"][0]["code"] == "VALVE_CLOSED_FLOW_ISOLATION"
+    assert any("stops directed downstream" in rule for rule in context["engineering_contract"])
+    assert any("never reject or block drawing edits" in rule for rule in context["engineering_contract"])
+    assert any("semantic tees" in rule for rule in context["engineering_contract"])
+    assert any("jump bridge" in rule for rule in context["engineering_contract"])
+    assert any("5-unit" in rule for rule in context["engineering_contract"])
 
 
 def test_opc_symbols_have_opposite_directions_and_are_loaded() -> None:
