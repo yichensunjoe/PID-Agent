@@ -23,23 +23,67 @@ class RenameDocumentRequest(BaseModel):
         return normalized
 
 
+class CanvasGridRequest(BaseModel):
+    grid_size: float = Field(ge=1, le=100)
+    expected_revision: int = Field(ge=0)
+
+
+def _require_current_document(
+    service: DocumentService,
+    document_id: str,
+    expected_revision: int,
+):
+    stored = service.store.get(document_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail=f"document not found: {document_id}")
+    document = stored.document
+    if document.revision != expected_revision:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"expected revision {expected_revision}, "
+                f"current revision is {document.revision}"
+            ),
+        )
+    return stored, document
+
+
+def _save_document_mutation(
+    service: DocumentService,
+    stored,
+    document: Document,
+    *,
+    previous_revision: int,
+    label: str,
+) -> Document:
+    document.revision += 1
+    document.updated_at = datetime.now(UTC)
+    try:
+        service.store.save(
+            stored,
+            expected_revision=previous_revision,
+            history=HistoryEntry(
+                document_id=document.id,
+                revision=document.revision,
+                source="web",
+                action="transaction",
+                label=label,
+                operation_count=1,
+            ),
+        )
+    except StoreRevisionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return document
+
+
 def create_documents_router(service: DocumentService) -> APIRouter:
     router = APIRouter(prefix="/api/v2", tags=["P&ID-Agent documents"])
 
     @router.put("/documents/{document_id}/name", response_model=Document)
     def rename_document(document_id: str, request: RenameDocumentRequest):
-        stored = service.store.get(document_id)
-        if stored is None:
-            raise HTTPException(status_code=404, detail=f"document not found: {document_id}")
-        document = stored.document
-        if document.revision != request.expected_revision:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"expected revision {request.expected_revision}, "
-                    f"current revision is {document.revision}"
-                ),
-            )
+        stored, document = _require_current_document(
+            service, document_id, request.expected_revision
+        )
         if document.name == request.name:
             return document
 
@@ -49,23 +93,34 @@ def create_documents_router(service: DocumentService) -> APIRouter:
             stored.undo_stack = stored.undo_stack[-service.history_limit :]
         stored.redo_stack.clear()
         document.name = request.name
-        document.revision += 1
-        document.updated_at = datetime.now(UTC)
-        try:
-            service.store.save(
-                stored,
-                expected_revision=previous_revision,
-                history=HistoryEntry(
-                    document_id=document.id,
-                    revision=document.revision,
-                    source="web",
-                    action="transaction",
-                    label=f"Rename document to {request.name}",
-                    operation_count=1,
-                ),
-            )
-        except StoreRevisionConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return document
+        return _save_document_mutation(
+            service,
+            stored,
+            document,
+            previous_revision=previous_revision,
+            label=f"Rename document to {request.name}",
+        )
+
+    @router.put("/documents/{document_id}/canvas-grid", response_model=Document)
+    def update_canvas_grid(document_id: str, request: CanvasGridRequest):
+        stored, document = _require_current_document(
+            service, document_id, request.expected_revision
+        )
+        if document.canvas.grid_size == request.grid_size:
+            return document
+
+        previous_revision = document.revision
+        stored.undo_stack.append(document.model_dump(mode="json"))
+        if len(stored.undo_stack) > service.history_limit:
+            stored.undo_stack = stored.undo_stack[-service.history_limit :]
+        stored.redo_stack.clear()
+        document.canvas.grid_size = request.grid_size
+        return _save_document_mutation(
+            service,
+            stored,
+            document,
+            previous_revision=previous_revision,
+            label=f"Set canvas grid to {request.grid_size:g}",
+        )
 
     return router
