@@ -90,14 +90,14 @@ function RuntimeEnhancementsEnabled() {
   };
 
   useEffect(() => {
-    if (!svg) return;
     const onDoubleClick = (event: MouseEvent) => {
       const eventTarget = event.target;
       if (!(eventTarget instanceof Element)) return;
+      if (!eventTarget.closest('svg[data-testid="editor-canvas"]')) return;
       const group = eventTarget.closest("[data-element-id]");
       const elementId = group?.getAttribute("data-element-id");
-      const document = useWorkspace.getState().document;
-      const symbol = document?.elements.find(
+      const currentDocument = useWorkspace.getState().document;
+      const symbol = currentDocument?.elements.find(
         (element): element is SymbolElement => element.id === elementId && element.type === "symbol",
       );
       if (!symbol) return;
@@ -112,9 +112,9 @@ function RuntimeEnhancementsEnabled() {
       }
       void openDocument(targetId);
     };
-    svg.addEventListener("dblclick", onDoubleClick, true);
-    return () => svg.removeEventListener("dblclick", onDoubleClick, true);
-  }, [svg, workspace.document?.id, workspace.documents]);
+    document.addEventListener("dblclick", onDoubleClick, true);
+    return () => document.removeEventListener("dblclick", onDoubleClick, true);
+  }, [workspace.document?.id, workspace.documents]);
 
   const updateConnector = (patch: Record<string, unknown>, label: string) => {
     if (!selectedConnector) return;
