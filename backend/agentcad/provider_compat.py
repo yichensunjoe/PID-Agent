@@ -130,6 +130,7 @@ def extract_chat_content(data: Any) -> str:
 
     finish = choices[0].get("finish_reason")
     raise ValueError(
-        "choices[0].message had no usable content or structured JSON fallback"
+        "choices[0].message had no content, reasoning_content, or thinking text "
+        "containing usable structured JSON"
         + (f" (finish_reason={finish})" if finish else "")
     )
