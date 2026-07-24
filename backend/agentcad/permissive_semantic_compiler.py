@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from .agent_semantic_models import CompiledSemanticTransaction, SemanticOperation, SemanticTransaction
-from .semantic_compiler_engine import SemanticTransactionCompiler as StrictSemanticTransactionCompiler
+from .agent_semantic_models import (
+    CompiledSemanticTransaction,
+    SemanticOperation,
+    SemanticTransaction,
+)
+from .semantic_compiler_engine import (
+    SemanticTransactionCompiler as StrictSemanticTransactionCompiler,
+)
 
 
 class PermissiveSemanticTransactionCompiler(StrictSemanticTransactionCompiler):
