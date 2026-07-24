@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from time import perf_counter
 from typing import Any
 
@@ -15,6 +16,7 @@ from .agent_semantic_models import (
 )
 from .api_v2 import _apply_transaction_with_details
 from .diagnostics import DiagnosticLogger
+from .flow_topology import build_agent_harness_context
 from .llm import PlannerError
 from .models import AgentGenerateRequest, AgentPlan, TransactionRequest, TransactionResult
 from .semantic_compiler_engine import SemanticTransactionCompiler
@@ -83,6 +85,25 @@ def _raise_service_error(exc: Exception):
     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _with_harness_context(
+    service: DocumentService,
+    document_id: str,
+    request: AgentGenerateRequest | SemanticAgentReplanRequest,
+):
+    document = service.get_document(document_id)
+    harness = build_agent_harness_context(document, service.symbols)
+    context = "\n\n".join(
+        part
+        for part in (
+            request.context.strip(),
+            "Automatic P&ID-Agent Harness Context:\n"
+            + json.dumps(harness, ensure_ascii=False, separators=(",", ":")),
+        )
+        if part
+    )
+    return request.model_copy(update={"context": context})
+
+
 def create_semantic_agent_router(
     service: DocumentService,
     planner: SemanticAgentPlanner,
@@ -101,6 +122,13 @@ def create_semantic_agent_router(
             ),
             "input_schema": SemanticTransaction.model_json_schema(),
         }
+
+    @router.get("/documents/{document_id}/agent/harness-context")
+    def agent_harness_context(document_id: str):
+        try:
+            return build_agent_harness_context(service.get_document(document_id), service.symbols)
+        except DocumentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"document not found: {exc.args[0]}") from exc
 
     @router.post(
         "/documents/{document_id}/transactions/analyze",
@@ -128,7 +156,8 @@ def create_semantic_agent_router(
                 **_provider_fields(request),
             )
         try:
-            plan = planner.plan(document_id, request)
+            prepared_request = _with_harness_context(service, document_id, request)
+            plan = planner.plan(document_id, prepared_request)
             compiled = compiler.compile(document_id, plan.transaction)
         except PlannerError as exc:
             if diagnostics is not None:
@@ -184,7 +213,8 @@ def create_semantic_agent_router(
                     context_chars=len(request.context),
                     **_provider_fields(request),
                 )
-            plan = planner.replan(document_id, request, failed.assessment)
+            prepared_request = _with_harness_context(service, document_id, request)
+            plan = planner.replan(document_id, prepared_request, failed.assessment)
             compiled = compiler.compile(document_id, plan.transaction)
         except PlannerError as exc:
             if diagnostics is not None:
