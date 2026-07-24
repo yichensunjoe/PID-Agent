@@ -112,8 +112,8 @@ function RuntimeEnhancementsEnabled() {
       }
       void openDocument(targetId);
     };
-    svg.addEventListener("dblclick", onDoubleClick);
-    return () => svg.removeEventListener("dblclick", onDoubleClick);
+    svg.addEventListener("dblclick", onDoubleClick, true);
+    return () => svg.removeEventListener("dblclick", onDoubleClick, true);
   }, [svg, workspace.document?.id, workspace.documents]);
 
   const updateConnector = (patch: Record<string, unknown>, label: string) => {
