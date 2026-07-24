@@ -149,7 +149,10 @@ def test_versioned_document_conflict_can_be_rejected_or_regenerated(tmp_path: Pa
     assert len(service.list_documents()) == 1
 
     first = service.import_document_payload(envelope, conflict_policy="regenerate")
-    service.delete_document(first.documents[0].id)
+    service.delete_document(
+        first.documents[0].id,
+        expected_revision=first.documents[0].revision,
+    )
     second = service.import_document_payload(envelope, conflict_policy="regenerate")
     assert first.documents[0].id == second.documents[0].id
 
@@ -157,7 +160,7 @@ def test_versioned_document_conflict_can_be_rejected_or_regenerated(tmp_path: Pa
 def test_invalid_binding_and_non_orthogonal_connector_are_rejected_without_writes(tmp_path: Path):
     service = make_service(tmp_path)
     original = seeded_document(service)
-    service.delete_document(original.id)
+    service.delete_document(original.id, expected_revision=original.revision)
     baseline = len(service.list_documents())
 
     stale = original.model_dump(mode="json")

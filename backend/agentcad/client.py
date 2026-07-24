@@ -78,8 +78,12 @@ class AgentCADClient:
         response = self._request("GET", f"/documents/{document_id}")
         return Document.model_validate(response.json())
 
-    def delete_document(self, document_id: str) -> None:
-        self._request("DELETE", f"/documents/{document_id}")
+    def delete_document(self, document_id: str, expected_revision: int) -> None:
+        self._request(
+            "DELETE",
+            f"/documents/{document_id}",
+            params={"expected_revision": expected_revision},
+        )
 
     def apply_transaction(
         self,

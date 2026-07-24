@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from agentcad.models import CreateDocumentRequest, TransactionRequest
-from agentcad.service import DocumentService, InvalidOperationError, RevisionConflictError
+from agentcad.service import (
+    DocumentNotFoundError,
+    DocumentService,
+    InvalidOperationError,
+    RevisionConflictError,
+)
 from agentcad.store import SQLiteDocumentStore
 from agentcad.symbols import SymbolRegistry
 
@@ -11,6 +16,36 @@ from agentcad.symbols import SymbolRegistry
 @pytest.fixture()
 def service(tmp_path: Path) -> DocumentService:
     return DocumentService(SQLiteDocumentStore(tmp_path / "pid-agent.db"), SymbolRegistry())
+
+
+def test_delete_document_removes_only_target_and_cascades_history(service: DocumentService):
+    target = service.create_document(CreateDocumentRequest(name="Delete me"))
+    survivor = service.create_document(CreateDocumentRequest(name="Keep me"))
+    service.apply_transaction(
+        target.id,
+        TransactionRequest.model_validate(
+            {
+                "expected_revision": 0,
+                "operations": [{"op": "clear_document"}],
+            }
+        ),
+    )
+    assert len(service.store.list_history(target.id)) == 2
+
+    with pytest.raises(RevisionConflictError, match="current revision is 1"):
+        service.delete_document(target.id, expected_revision=0)
+    assert service.get_document(target.id).revision == 1
+    assert len(service.store.list_history(target.id)) == 2
+
+    service.delete_document(target.id, expected_revision=1)
+
+    assert [document.id for document in service.list_documents()] == [survivor.id]
+    assert service.store.list_history(target.id) == []
+    assert len(service.store.list_history(survivor.id)) == 1
+    with pytest.raises(DocumentNotFoundError):
+        service.get_document(target.id)
+    with pytest.raises(DocumentNotFoundError):
+        service.delete_document(target.id, expected_revision=1)
 
 
 def test_transaction_is_persisted_and_undoable(service: DocumentService):

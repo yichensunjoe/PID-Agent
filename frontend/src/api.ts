@@ -200,7 +200,11 @@ export const api = {
     scope: ReportScope = "visible",
   ) => `${API_ROOT}/documents/${encodeURIComponent(id)}/engineering-report/${kind}.csv?scope=${encodeURIComponent(scope)}`,
   getHistory: (id: string, limit = 100) => request<HistoryEntry[]>(`/documents/${id}/history?limit=${limit}`),
-  deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+  deleteDocument: (id: string, expectedRevision: number) =>
+    request<void>(
+      `/documents/${id}?expected_revision=${encodeURIComponent(expectedRevision)}`,
+      { method: "DELETE" },
+    ),
   importDocument: (payload: unknown, conflictPolicy: "reject" | "regenerate" = "regenerate") =>
     request<ImportResult>(`/imports/document?conflict_policy=${conflictPolicy}`, {
       method: "POST",

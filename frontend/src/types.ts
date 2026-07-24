@@ -150,6 +150,7 @@ export type SymbolDefinition = {
   height: number;
   ports: SymbolPort[];
   shapes: SymbolShape[];
+  metadata?: Record<string, unknown>;
 };
 
 export type Operation =

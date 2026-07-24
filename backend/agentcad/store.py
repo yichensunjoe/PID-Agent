@@ -252,10 +252,26 @@ class SQLiteDocumentStore:
             redo_stack=json.loads(row["redo_json"]),
         )
 
-    def delete(self, document_id: str) -> bool:
+    def delete(self, document_id: str, *, expected_revision: int) -> bool:
         with self._lock, self._connect() as connection:
-            cursor = connection.execute("DELETE FROM documents WHERE id = ?", (document_id,))
-            return cursor.rowcount > 0
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "DELETE FROM documents WHERE id = ? AND revision = ?",
+                (document_id, expected_revision),
+            )
+            if cursor.rowcount == 1:
+                return True
+
+            current = connection.execute(
+                "SELECT revision FROM documents WHERE id = ?",
+                (document_id,),
+            ).fetchone()
+            if current is None:
+                return False
+            raise StoreRevisionConflictError(
+                f"document {document_id} no longer has revision {expected_revision}; "
+                f"current revision is {current['revision']}"
+            )
 
     def list(self) -> list[DocumentSummary]:
         with self._lock, self._connect() as connection:

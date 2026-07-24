@@ -7,8 +7,12 @@ const authorization = { Authorization: `Bearer ${TOKEN}` };
 async function resetDocuments(request: APIRequestContext) {
   const listed = await request.get(`${API}/documents`, { headers: authorization });
   expect(listed.ok()).toBeTruthy();
-  for (const document of (await listed.json()) as Array<{ id: string }>) {
-    await request.delete(`${API}/documents/${document.id}`, { headers: authorization });
+  for (const document of (await listed.json()) as Array<{ id: string; revision: number }>) {
+    const removed = await request.delete(
+      `${API}/documents/${document.id}?expected_revision=${encodeURIComponent(document.revision)}`,
+      { headers: authorization },
+    );
+    expect(removed.ok(), await removed.text()).toBeTruthy();
   }
 }
 
@@ -55,7 +59,7 @@ test("shared provider policy blocks localhost, permits an allowlisted target, an
   await page.locator(".service-access-settings").getByText("共享部署访问令牌").click();
   await page.getByTestId("service-token-input").fill(TOKEN);
   await page.getByTestId("service-token-apply").click();
-  await page.locator(`button[data-document-id="${document.id}"]`).click();
+  await page.locator(`.document-open[data-document-id="${document.id}"]`).click();
   await page.waitForFunction(() => Boolean(window.__PID_AGENT_E2E__?.snapshot().document));
 
   await page.getByRole("tab", { name: "Agent" }).click();

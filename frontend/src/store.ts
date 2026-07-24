@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "./api";
+import { nextDocumentIdAfterDeletion } from "./documentDeletion";
 import {
   directLockedOperationTargets,
   expandSelectionByGroups,
@@ -25,6 +26,7 @@ import type {
 
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 const newGroupId = () => `group_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+let documentRequestGeneration = 0;
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -109,6 +111,7 @@ type State = {
   pendingExternalRevision: number | null;
   loadWorkspace: () => Promise<void>;
   createDocument: () => Promise<void>;
+  deleteDocument: (id: string) => Promise<void>;
   importDocumentPayload: (payload: unknown) => Promise<void>;
   importProjectPackagePayload: (payload: unknown) => Promise<void>;
   clearError: () => void;
@@ -210,6 +213,100 @@ export const useWorkspace = create<State>((set, get) => ({
     }
   },
 
+  deleteDocument: async (id) => {
+    const before = get();
+    const target = before.documents.find((document) => document.id === id);
+    if (!target) {
+      set({ error: "要删除的文档已不在当前列表中，请刷新后重试。" });
+      return;
+    }
+    const requestGeneration = ++documentRequestGeneration;
+    set({
+      loading: true,
+      error: null,
+      syncState: "checking",
+      syncMessage: `正在删除 ${target.name}…`,
+    });
+    let deleted = false;
+    try {
+      await api.deleteDocument(id, target.revision);
+      deleted = true;
+      if (requestGeneration !== documentRequestGeneration) {
+        const latest = get();
+        const deletedIsStillCurrent = latest.document?.id === id;
+        set({
+          documents: latest.documents.filter((document) => document.id !== id),
+          document: deletedIsStillCurrent ? null : latest.document,
+          selectedElementIds: deletedIsStillCurrent ? [] : latest.selectedElementIds,
+          pendingExternalRevision: deletedIsStillCurrent
+            ? null
+            : latest.pendingExternalRevision,
+        });
+        return;
+      }
+
+      const optimisticDocuments = before.documents.filter((document) => document.id !== id);
+      const optimisticNextId = nextDocumentIdAfterDeletion(
+        before.documents,
+        optimisticDocuments,
+        id,
+        before.document?.id ?? null,
+      );
+      const keptCurrentDocument = before.document !== null
+        && optimisticNextId === before.document.id
+        && id !== before.document.id;
+      set({
+        documents: optimisticDocuments,
+        document: keptCurrentDocument ? before.document : null,
+        selectedElementIds: keptCurrentDocument ? before.selectedElementIds : [],
+        syncState: "checking",
+        syncMessage: `已删除 ${target.name} · 正在刷新文档列表…`,
+        pendingExternalRevision: null,
+      });
+
+      const documents = await api.listDocuments();
+      if (requestGeneration !== documentRequestGeneration) return;
+      const nextId = nextDocumentIdAfterDeletion(
+        before.documents,
+        documents,
+        id,
+        before.document?.id ?? null,
+      );
+      const keepCurrentAfterRefresh = before.document !== null
+        && nextId === before.document.id
+        && id !== before.document.id;
+      const document = keepCurrentAfterRefresh
+        ? before.document
+        : nextId
+          ? await api.getDocument(nextId)
+          : null;
+      if (requestGeneration !== documentRequestGeneration) return;
+      set({
+        documents,
+        document,
+        selectedElementIds: keepCurrentAfterRefresh ? before.selectedElementIds : [],
+        loading: false,
+        syncState: document ? "synced" : "idle",
+        syncMessage: document
+          ? `已删除 ${target.name} · 已打开 ${document.name}`
+          : `已删除 ${target.name} · 当前项目为空`,
+        pendingExternalRevision: null,
+      });
+    } catch (error) {
+      if (requestGeneration !== documentRequestGeneration) return;
+      set({
+        error: deleted
+          ? `${target.name} 已删除，但文档列表刷新失败：${messageFromError(error)}`
+          : messageFromError(error),
+        loading: false,
+        syncState: "error",
+        syncMessage: deleted
+          ? `${target.name} 已删除 · 请刷新工作区`
+          : `${target.name} 删除未完成`,
+      });
+    }
+  },
+
   importDocumentPayload: async (payload) => {
     set({ importing: true, error: null, syncState: "checking", syncMessage: "正在导入文档…" });
     try {
@@ -264,6 +361,7 @@ export const useWorkspace = create<State>((set, get) => ({
   clearError: () => set({ error: null }),
 
   openDocument: async (id) => {
+    const requestGeneration = ++documentRequestGeneration;
     set({
       loading: true,
       error: null,
@@ -273,6 +371,7 @@ export const useWorkspace = create<State>((set, get) => ({
     });
     try {
       const document = await api.getDocument(id);
+      if (requestGeneration !== documentRequestGeneration) return;
       set({
         document,
         loading: false,
@@ -281,6 +380,7 @@ export const useWorkspace = create<State>((set, get) => ({
         pendingExternalRevision: null,
       });
     } catch (error) {
+      if (requestGeneration !== documentRequestGeneration) return;
       set({
         error: messageFromError(error),
         loading: false,
@@ -504,13 +604,23 @@ export const useWorkspace = create<State>((set, get) => ({
   refreshDocument: async () => {
     const current = get().document;
     if (!current) return;
+    const requestGeneration = documentRequestGeneration;
     set({ syncState: "checking", syncMessage: "正在载入外部修改…" });
     try {
       const latest = await api.getDocument(current.id);
+      if (
+        requestGeneration !== documentRequestGeneration
+        || get().document?.id !== current.id
+      ) return;
+      const documents = await api.listDocuments();
+      if (
+        requestGeneration !== documentRequestGeneration
+        || get().document?.id !== current.id
+      ) return;
       const existing = new Set(latest.elements.map((item) => item.id));
       set({
         document: latest,
-        documents: await api.listDocuments(),
+        documents,
         selectedElementIds: get().selectedElementIds.filter((id) => existing.has(id)),
         syncState: latest.revision > current.revision ? "updated" : "synced",
         syncMessage: latest.revision > current.revision
@@ -519,6 +629,10 @@ export const useWorkspace = create<State>((set, get) => ({
         pendingExternalRevision: null,
       });
     } catch (error) {
+      if (
+        requestGeneration !== documentRequestGeneration
+        || get().document?.id !== current.id
+      ) return;
       set({
         syncState: "error",
         syncMessage: "外部修改载入失败",

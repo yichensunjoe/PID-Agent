@@ -1,5 +1,7 @@
+import { useMemo, useState } from "react";
 import type { SymbolDefinition, SymbolShape } from "../types";
 import { useWorkspace } from "../store";
+import { filterSymbolCatalog, orderedSymbolCategories } from "./symbolCatalog";
 
 function Shape({ shape }: { shape: SymbolShape }) {
   if (shape.type === "line") {
@@ -40,23 +42,50 @@ function SymbolCard({ symbol }: { symbol: SymbolDefinition }) {
         </g>
       </svg>
       <span>{symbol.name}</span>
+      <small>{symbol.key}</small>
     </button>
   );
 }
 
 export function SymbolPalette() {
   const symbols = useWorkspace((state) => state.symbols);
-  const categories = symbols.reduce<Map<string, SymbolDefinition[]>>((result, symbol) => {
-    const items = result.get(symbol.category) ?? [];
-    items.push(symbol);
-    result.set(symbol.category, items);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const categoryOptions = useMemo(() => orderedSymbolCategories(symbols), [symbols]);
+  const filtered = useMemo(
+    () => filterSymbolCatalog(symbols, query, category),
+    [category, query, symbols],
+  );
+  const categories = useMemo(() => {
+    const result = new Map<string, SymbolDefinition[]>();
+    for (const categoryName of orderedSymbolCategories(filtered)) result.set(categoryName, []);
+    for (const symbol of filtered) result.get(symbol.category)?.push(symbol);
     return result;
-  }, new Map());
+  }, [filtered]);
+
   return (
     <div className="symbol-palette">
+      <div className="symbol-catalog-tools">
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索名称、类别或 key"
+          aria-label="搜索单位图例"
+        />
+        <select
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+          aria-label="筛选图例分类"
+        >
+          <option value="">全部分类</option>
+          {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <span>{filtered.length} / {symbols.length} 个标准图例</span>
+      </div>
       {[...categories.entries()].map(([category, items]) => (
         <section key={category}>
-          <h3>{category}</h3>
+          <h3><span>{category}</span><small>{items.length}</small></h3>
           <div className="symbol-grid">
             {items.map((symbol) => (
               <SymbolCard key={symbol.key} symbol={symbol} />
@@ -64,6 +93,7 @@ export function SymbolPalette() {
           </div>
         </section>
       ))}
+      {!filtered.length ? <div className="symbol-empty">没有匹配的图例</div> : null}
     </div>
   );
 }
