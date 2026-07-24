@@ -1,0 +1,253 @@
+.documents-panel {
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.runtime-sidebar-switcher {
+  order: -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #d7dee8);
+  background: var(--panel-background, #ffffff);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.runtime-sidebar-switcher button {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.runtime-sidebar-switcher button.active {
+  font-weight: 650;
+  border-color: #64748b;
+}
+
+.documents-panel .document-list {
+  flex: 0 1 34vh;
+  min-height: 86px;
+  max-height: 34vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.documents-panel .symbol-palette {
+  flex: 1 1 280px;
+  min-height: 120px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 24px;
+}
+
+.documents-panel.runtime-documents-collapsed > .panel-heading,
+.documents-panel.runtime-documents-collapsed > .document-import-actions,
+.documents-panel.runtime-documents-collapsed > .document-import-error,
+.documents-panel.runtime-documents-collapsed > .service-access-settings,
+.documents-panel.runtime-documents-collapsed > .project-summary,
+.documents-panel.runtime-documents-collapsed > .document-list,
+.documents-panel.runtime-documents-collapsed > .divider {
+  display: none !important;
+}
+
+.documents-panel.runtime-symbols-collapsed > h2,
+.documents-panel.runtime-symbols-collapsed > .symbol-palette {
+  display: none !important;
+}
+
+.runtime-process-overlays {
+  pointer-events: none;
+}
+
+.runtime-flow-line {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-width: 3.2;
+  opacity: 0.56;
+  animation: pid-agent-flow-dash 1.6s linear infinite;
+}
+
+.runtime-flow-line.medium-water {
+  stroke: #0284c7;
+  stroke-dasharray: 2 12;
+}
+
+.runtime-flow-line.medium-gas {
+  stroke: #a16207;
+  stroke-dasharray: 9 11;
+  stroke-width: 2.6;
+  opacity: 0.45;
+  animation-duration: 2.1s;
+}
+
+.runtime-flow-line.direction-reverse {
+  animation-direction: reverse;
+}
+
+@keyframes pid-agent-flow-dash {
+  to { stroke-dashoffset: -40; }
+}
+
+.runtime-valve-state circle {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.4;
+}
+
+.runtime-valve-state text {
+  font-size: 8px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.runtime-valve-state.state-open circle {
+  fill: #f0fdf4;
+  stroke: #15803d;
+}
+
+.runtime-valve-state.state-open text {
+  fill: #166534;
+}
+
+.runtime-valve-state.state-closed circle {
+  fill: #fef2f2;
+  stroke: #dc2626;
+}
+
+.runtime-valve-state.state-closed text {
+  fill: #b91c1c;
+}
+
+.runtime-opc-link-badge {
+  fill: #475569;
+  font-size: 10px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.runtime-flow-panel {
+  position: fixed;
+  left: max(316px, calc(50vw - 230px));
+  bottom: 18px;
+  z-index: 30;
+  width: min(460px, calc(100vw - 640px));
+  min-width: 330px;
+  max-height: min(54vh, 520px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-background, #ffffff) 94%, transparent);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 16%);
+  backdrop-filter: blur(8px);
+}
+
+.runtime-flow-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.runtime-flow-panel-heading span {
+  font-size: 11px;
+  color: var(--muted-text, #64748b);
+}
+
+.runtime-flow-panel section {
+  display: grid;
+  gap: 7px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+.runtime-flow-panel h3 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.runtime-flow-panel label {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.runtime-flow-panel select,
+.runtime-flow-panel button {
+  min-height: 30px;
+}
+
+.runtime-flow-panel small {
+  color: var(--muted-text, #64748b);
+  line-height: 1.45;
+}
+
+.runtime-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.runtime-segmented button.active {
+  border-color: #15803d;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.runtime-segmented button.active.danger {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.runtime-blockage-findings > button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  border-color: #fca5a5;
+  background: #fff7f7;
+  color: #991b1b;
+}
+
+.runtime-blockage-findings > button span {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.runtime-flow-message {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .runtime-flow-panel {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-flow-line {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
