@@ -193,16 +193,38 @@ function RuntimeEnhancementsEnabled() {
             );
           }
           if (isOpcDefinition(definition, symbol.symbol_key) && targetDocumentId(symbol)) {
+            const targetId = targetDocumentId(symbol);
             return (
-              <text
-                key={`runtime-opc-${symbol.id}`}
-                className="runtime-opc-link-badge"
-                x={symbol.position.x + symbol.width / 2}
-                y={symbol.position.y - 7}
-                textAnchor="middle"
-              >
-                双击跳转
-              </text>
+              <g key={`runtime-opc-${symbol.id}`}>
+                <rect
+                  data-opc-jump-for={symbol.id}
+                  x={symbol.position.x}
+                  y={symbol.position.y}
+                  width={symbol.width}
+                  height={symbol.height}
+                  fill="transparent"
+                  pointerEvents="all"
+                  style={{ cursor: "pointer" }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    workspace.setSelection([symbol.id]);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void openDocument(targetId);
+                  }}
+                />
+                <text
+                  className="runtime-opc-link-badge"
+                  x={symbol.position.x + symbol.width / 2}
+                  y={symbol.position.y - 7}
+                  textAnchor="middle"
+                  pointerEvents="none"
+                >
+                  双击跳转
+                </text>
+              </g>
             );
           }
           return null;
