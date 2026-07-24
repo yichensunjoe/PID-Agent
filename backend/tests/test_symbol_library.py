@@ -7,7 +7,11 @@ from agentcad.models import SymbolDefinition
 from agentcad.symbols import SymbolCatalogLoadError, SymbolRegistry
 
 DATA_DIR = Path(__file__).parents[1] / "agentcad" / "data"
-BUILTIN_FILES = (DATA_DIR / "symbols.json", DATA_DIR / "standard_symbols.json")
+BUILTIN_FILES = (
+    DATA_DIR / "symbols.json",
+    DATA_DIR / "standard_symbols.json",
+    DATA_DIR / "flow_symbols.json",
+)
 
 LEGACY_KEYS = {
     "ball_valve",
@@ -40,6 +44,8 @@ REQUIRED_STANDARD_KEYS = {
     "metal_expansion_joint",
     "needle_valve",
     "off_page_connector",
+    "off_page_connector_in",
+    "off_page_connector_out",
     "orifice_plate",
     "plate_heat_exchanger",
     "positive_displacement_pump",
@@ -61,6 +67,7 @@ REQUIRED_CATEGORIES = {
     "混合设备",
     "换热设备",
     "排放与边界",
+    "边界与跨图连接",
     "容器",
     "仪表",
     "阀门",
@@ -78,15 +85,17 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
     monkeypatch.delenv("PID_AGENT_SYMBOL_PATHS", raising=False)
     monkeypatch.delenv("AGENTCAD_SYMBOL_PATHS", raising=False)
 
-    legacy = _load_file(BUILTIN_FILES[0])
-    standard = _load_file(BUILTIN_FILES[1])
+    builtin_entries = [_load_file(path) for path in BUILTIN_FILES]
+    legacy = builtin_entries[0]
     legacy_keys = {item["key"] for item in legacy}
-    standard_keys = {item["key"] for item in standard}
-    all_entries = [*legacy, *standard]
+    nonlegacy_keys = {
+        item["key"] for entries in builtin_entries[1:] for item in entries
+    }
+    all_entries = [item for entries in builtin_entries for item in entries]
     all_keys = [item["key"] for item in all_entries]
 
     assert legacy_keys == LEGACY_KEYS
-    assert legacy_keys.isdisjoint(standard_keys)
+    assert legacy_keys.isdisjoint(nonlegacy_keys)
     assert len(all_keys) == len(set(all_keys))
     assert all(SymbolDefinition.model_validate(item) for item in all_entries)
 
@@ -95,6 +104,8 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
     library = registry.get("condenser").metadata["library"]
     assert library["name"] == "P&ID-Agent 内置标准图例库"
     assert library["version"] == "2026.1"
+    opc_library = registry.get("off_page_connector_in").metadata["library"]
+    assert opc_library["name"] == "P&ID-Agent 流向与跨图连接图例"
 
 
 def test_external_symbol_override_does_not_inherit_builtin_library_metadata(
