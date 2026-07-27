@@ -11,14 +11,13 @@ from .agent_semantic_models import (
     AgentTransactionAssessment,
     SemanticAgentApplyRequest,
     SemanticAgentPlanResult,
-    SemanticAgentReplanRequest,
     SemanticTransaction,
 )
 from .api_v2 import _apply_transaction_with_details
 from .diagnostics import DiagnosticLogger
 from .flow_topology import build_agent_harness_context
 from .llm import PlannerError
-from .models import AgentGenerateRequest, AgentPlan, TransactionRequest, TransactionResult
+from .models import AgentPlan, TransactionRequest, TransactionResult
 from .permissive_semantic_compiler import PermissiveSemanticTransactionCompiler
 from .semantic_planner import SemanticAgentPlanner
 from .service import (
@@ -27,15 +26,22 @@ from .service import (
     InvalidOperationError,
     RevisionConflictError,
 )
+from .vision_request_models import (
+    VisionAgentGenerateRequest,
+    VisionSemanticAgentReplanRequest,
+)
+
+VisionPlanningRequest = VisionAgentGenerateRequest | VisionSemanticAgentReplanRequest
 
 
-def _provider_fields(request: AgentGenerateRequest | SemanticAgentReplanRequest) -> dict[str, Any]:
+def _provider_fields(request: VisionPlanningRequest) -> dict[str, Any]:
     provider = request.provider
     return {
         "base_url": provider.base_url if provider else None,
         "model": provider.model if provider else None,
         "timeout_seconds": provider.timeout_seconds if provider else None,
         "api_key_present": bool(provider and provider.api_key),
+        "reference_image_count": len(request.images),
     }
 
 
@@ -88,7 +94,7 @@ def _raise_service_error(exc: Exception):
 def _with_harness_context(
     service: DocumentService,
     document_id: str,
-    request: AgentGenerateRequest | SemanticAgentReplanRequest,
+    request: VisionPlanningRequest,
 ):
     document = service.get_document(document_id)
     harness = build_agent_harness_context(document, service.symbols)
@@ -144,7 +150,7 @@ def create_semantic_agent_router(
         "/documents/{document_id}/agent/plan-v2",
         response_model=SemanticAgentPlanResult,
     )
-    def plan_semantic_transaction(document_id: str, request: AgentGenerateRequest):
+    def plan_semantic_transaction(document_id: str, request: VisionAgentGenerateRequest):
         started = perf_counter()
         if diagnostics is not None:
             diagnostics.emit(
@@ -193,7 +199,10 @@ def create_semantic_agent_router(
         "/documents/{document_id}/agent/replan",
         response_model=SemanticAgentPlanResult,
     )
-    def replan_semantic_transaction(document_id: str, request: SemanticAgentReplanRequest):
+    def replan_semantic_transaction(
+        document_id: str,
+        request: VisionSemanticAgentReplanRequest,
+    ):
         started = perf_counter()
         try:
             failed = compiler.compile(document_id, request.failed_plan.transaction)
