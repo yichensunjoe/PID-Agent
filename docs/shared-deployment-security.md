@@ -77,7 +77,7 @@ allowlist 是安全边界，应尽量小，并与网络防火墙或容器 egress
 | `PID_AGENT_MAX_IMPORT_BODY_BYTES` | 25 MiB | 文档/项目包导入正文 |
 | `PID_AGENT_PROVIDER_MAX_RESPONSE_BYTES` | 4 MiB | Provider 响应 |
 | `PID_AGENT_MAX_CONCURRENT_REQUESTS` | 32 | 单进程并发请求 |
-| `PID_AGENT_AGENT_TIMEOUT_SECONDS` | 180 | Agent/Provider 超时上限 |
+| `PID_AGENT_AGENT_TIMEOUT_SECONDS` | 180 | Agent/Provider 超时上限；网页通过 `/api/v2/agent/runtime-config` 读取有效值 |
 
 超限分别返回明确的 `413`、`429`、`502` 或 `504` 错误。内存并发限制只作用于单实例；多副本部署仍应在反向代理或 API Gateway 配置全局限流、连接限制和上传上限。
 

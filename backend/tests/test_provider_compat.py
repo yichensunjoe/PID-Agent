@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -192,6 +194,28 @@ def test_extract_chat_content_falls_back_to_reasoning_content():
         ]
     }
     assert extract_chat_content(data) == '{"ok": true}'
+
+
+def test_extract_chat_content_prefers_transaction_over_stray_json_in_reasoning():
+    # LongCat-2.0 reasoning often emits stray coordinate JSON {"x":..,"y":..}
+    # after the real answer. The structured fallback must prefer the semantic
+    # transaction object over the last decodable fragment.
+    reasoning = (
+        'Let me place the equipment at {"x": 340, "y": 420}.\n'
+        '{"explanation": "add pump", "transaction": '
+        '{"operations": [{"op": "add_element"}], "label": "add"}}\n'
+        'Confirm position {"x": 340, "y": 420}'
+    )
+    data = {
+        "choices": [
+            {"message": {"content": None, "reasoning_content": reasoning},
+             "finish_reason": "stop"}
+        ]
+    }
+    content = extract_chat_content(data)
+    parsed = json.loads(content)
+    assert "transaction" in parsed or "operations" in parsed
+    assert "x" not in parsed and "y" not in parsed
 
 
 def test_extract_chat_content_falls_back_to_thinking():

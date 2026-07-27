@@ -743,6 +743,121 @@
   backdrop-filter: blur(4px);
 }
 
+.create-document-backdrop {
+  position: fixed;
+  z-index: 95;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.create-document-dialog {
+  width: min(420px, calc(100vw - 48px));
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  color: #1e293b;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
+}
+
+.create-document-dialog > header,
+.create-document-dialog > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.create-document-dialog > header {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.create-document-dialog > footer {
+  justify-content: flex-end;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.create-document-dialog > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.create-document-dialog > header strong {
+  font-size: 15px;
+}
+
+.create-document-dialog > header span {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.create-document-dialog button {
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.create-document-dialog button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.create-document-body {
+  display: grid;
+  gap: 10px;
+  padding: 18px 16px;
+}
+
+.create-document-body label {
+  display: grid;
+  gap: 7px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.create-document-body input {
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: #0f172a;
+  background: #ffffff;
+  font: inherit;
+}
+
+.create-document-body input:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  border-color: #2563eb;
+}
+
+.create-document-error {
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: #991b1b;
+  background: #fef2f2;
+  font-size: 10px;
+}
+
+.create-document-dialog .primary-action {
+  border-color: #2563eb;
+  color: #ffffff;
+  background: #2563eb;
+  font-weight: 650;
+}
+
 .experience-settings,
 .view-navigator {
   width: min(880px, calc(100vw - 48px));

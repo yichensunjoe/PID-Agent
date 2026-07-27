@@ -153,6 +153,13 @@ def create_v2_router(
     def health() -> dict[str, Any]:
         return {"status": "ok", "service": "P&ID-Agent", "api_version": "v2"}
 
+    @router.get("/agent/runtime-config")
+    def agent_runtime_config() -> dict[str, float]:
+        return {
+            "default_timeout_seconds": min(120.0, planner.max_timeout_seconds),
+            "max_timeout_seconds": planner.max_timeout_seconds,
+        }
+
     @router.get("/documents")
     def list_documents():
         return service.list_documents()

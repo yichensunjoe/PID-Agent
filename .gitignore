@@ -10,6 +10,7 @@ venv/
 
 # Runtime data
 data/
+logs/
 !backend/agentcad/data/
 !backend/agentcad/data/*.json
 *.db

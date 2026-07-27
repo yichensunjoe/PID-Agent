@@ -27,7 +27,14 @@ LEGACY_KEYS = {
     "temperature_indicator",
 }
 
-HIDDEN_DUPLICATE_KEYS = {"system_interface", "off_page_connector"}
+HIDDEN_BUILTIN_KEYS = {
+    "system_interface",
+    "off_page_connector",
+    "pressure_transmitter",
+    "temperature_transmitter",
+    "flow_transmitter",
+    "level_transmitter",
+}
 
 REQUIRED_STANDARD_KEYS = {
     "agitator",
@@ -50,7 +57,6 @@ REQUIRED_STANDARD_KEYS = {
     "orifice_plate",
     "plate_heat_exchanger",
     "positive_displacement_pump",
-    "pressure_transmitter",
     "rupture_disc",
     "safety_relief_valve",
     "separator_vessel",
@@ -102,8 +108,8 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
 
     registry = SymbolRegistry()
     registry_keys = {item.key for item in registry.list()}
-    assert registry_keys == set(all_keys) - HIDDEN_DUPLICATE_KEYS
-    assert HIDDEN_DUPLICATE_KEYS.isdisjoint(registry_keys)
+    assert registry_keys == set(all_keys) - HIDDEN_BUILTIN_KEYS
+    assert HIDDEN_BUILTIN_KEYS.isdisjoint(registry_keys)
     library = registry.get("condenser").metadata["library"]
     assert library["name"] == "P&ID-Agent 内置标准图例库"
     assert library["version"] == "2026.1"
@@ -114,6 +120,9 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
     assert opc_in.height == opc_out.height == 50
     assert opc_in.ports[0].x == 100
     assert opc_out.ports[0].x == 0
+    assert opc_in.shapes[0]["points"][2] == [100, 25]
+    # Hidden transmitter definitions remain addressable for existing drawings.
+    assert registry.get("pressure_transmitter").key == "pressure_transmitter"
 
 
 def test_external_symbol_override_does_not_inherit_builtin_library_metadata(
@@ -239,4 +248,4 @@ def test_standard_library_covers_core_pid_categories_and_symbols(monkeypatch):
 
     assert REQUIRED_STANDARD_KEYS <= keys
     assert REQUIRED_CATEGORIES <= categories
-    assert len(symbols) >= 60
+    assert len(symbols) >= 56

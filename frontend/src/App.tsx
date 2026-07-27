@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
 import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest, type CanvasViewportRequest } from "./editor/EditorCanvas";
 import { CommandPalette } from "./editor/CommandPalette";
+import { CreateDocumentDialog } from "./editor/CreateDocumentDialog";
 import { ExperienceSettings } from "./editor/ExperienceSettings";
 import { EngineeringReportPanel } from "./editor/EngineeringReportPanel";
 import { ViewNavigator } from "./editor/ViewNavigator";
@@ -151,6 +152,7 @@ export default function App() {
   const [serviceToken, setServiceToken] = useState(() => getServiceAccessToken());
   const [showServiceToken, setShowServiceToken] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
+  const [maxTimeoutSeconds, setMaxTimeoutSeconds] = useState(180);
   const [testingProvider, setTestingProvider] = useState(false);
   const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
   const [providerTestError, setProviderTestError] = useState("");
@@ -169,6 +171,7 @@ export default function App() {
   const [canvasFocusRequest, setCanvasFocusRequest] = useState<CanvasFocusRequest | null>(null);
   const [canvasCommandRequest, setCanvasCommandRequest] = useState<CanvasCommandRequest | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [createDocumentOpen, setCreateDocumentOpen] = useState(false);
   const [experienceSettingsOpen, setExperienceSettingsOpen] = useState(false);
   const [viewNavigatorOpen, setViewNavigatorOpen] = useState(false);
   const [canvasView, setCanvasView] = useState<CanvasView | null>(null);
@@ -179,6 +182,16 @@ export default function App() {
   const projectImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { void state.loadWorkspace(); }, []);
+  useEffect(() => {
+    void api.getAgentRuntimeConfig()
+      .then((config) => {
+        setMaxTimeoutSeconds(config.max_timeout_seconds);
+        setTimeoutSeconds((current) => Math.min(config.max_timeout_seconds, current));
+      })
+      .catch(() => {
+        // Match the historical server default when connected to an older backend.
+      });
+  }, []);
   useEffect(() => {
     if (import.meta.env.MODE !== "e2e") return;
     return installE2EBridge(() => pendingPlan, setPendingPlan);
@@ -243,6 +256,8 @@ export default function App() {
     api_key: apiKey.trim() || undefined,
     timeout_seconds: timeoutSeconds,
   });
+  const minimumTimeoutSeconds = Math.min(10, maxTimeoutSeconds);
+  const defaultTimeoutSeconds = Math.min(120, maxTimeoutSeconds);
 
   const selectProviderPreset = (presetId: string) => {
     setProviderPreset(presetId);
@@ -644,7 +659,7 @@ export default function App() {
 
       <main className="workspace">
         <aside className="sidebar documents-panel" data-testid="documents-panel">
-          <div className="panel-heading"><h2>文档</h2><button data-testid="create-document" onClick={() => void state.createDocument()}>新建</button></div>
+          <div className="panel-heading"><h2>文档</h2><button data-testid="create-document" onClick={() => { state.clearError(); setCreateDocumentOpen(true); }}>新建</button></div>
           <div className="document-import-actions">
             <button type="button" data-testid="import-document-json" disabled={state.importing} onClick={() => documentImportRef.current?.click()}>导入 JSON</button>
             <button type="button" data-testid="import-project-package" disabled={state.importing} onClick={() => projectImportRef.current?.click()}>导入项目包</button>
@@ -763,7 +778,8 @@ export default function App() {
               {loadingModels ? <div className="provider-model-status">正在读取模型列表…</div> : null}
               {availableModels.length ? <label>可用模型<select value={availableModels.some((item) => item.id === model) ? model : ""} onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}><option value="" disabled>选择模型</option>{availableModels.map((item) => <option key={item.id} value={item.id}>{item.id}{item.owned_by ? ` · ${item.owned_by}` : ""}</option>)}</select></label> : null}
               <label>Model name（可手工覆盖）<input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="从列表选择，或直接输入模型名称" /></label>
-              <label>超时（秒）<input type="number" min={10} max={600} value={timeoutSeconds} onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(600, Math.max(10, Number(event.target.value) || 120)))} /></label>
+              <label>超时（秒）<input type="number" min={minimumTimeoutSeconds} max={maxTimeoutSeconds} value={timeoutSeconds} onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(maxTimeoutSeconds, Math.max(minimumTimeoutSeconds, Number(event.target.value) || defaultTimeoutSeconds)))} /></label>
+              <div className="provider-model-status">服务端有效上限：{maxTimeoutSeconds} 秒</div>
               <div className="provider-actions"><button type="button" onClick={() => void discoverProviderModels()} disabled={loadingModels || !baseUrl.trim()}>{loadingModels ? "读取中…" : "刷新模型列表"}</button><button type="button" onClick={() => void testCustomProvider()} disabled={testingProvider || !baseUrl.trim() || !model.trim()}>{testingProvider ? "正在测试…" : "测试连接"}</button></div>
               {modelDiscoveryError ? <div className="provider-test provider-test-error">{modelDiscoveryError}</div> : null}
               {providerTest ? <div className={`provider-test provider-test-${providerTest.model_available === false ? "warning" : "success"}`}><strong>{providerTest.message}</strong><span>{providerTest.model} · {providerTest.latency_ms} ms · {providerTest.method}</span></div> : null}
@@ -820,6 +836,13 @@ export default function App() {
           </section>
         </aside>
       </main>
+      <CreateDocumentDialog
+        open={createDocumentOpen}
+        busy={state.loading}
+        error={state.error}
+        onClose={() => setCreateDocumentOpen(false)}
+        onCreate={state.createDocument}
+      />
       <CommandPalette
         open={commandPaletteOpen}
         commands={paletteCommands}

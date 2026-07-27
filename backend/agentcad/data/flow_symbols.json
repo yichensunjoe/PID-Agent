@@ -17,8 +17,8 @@
         {"id": "process", "name": "当前图工艺接口", "x": 100, "y": 25, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "polyline", "points": [[100, 5], [25, 5], [0, 25], [25, 45], [100, 45]], "closed": true},
-        {"type": "text", "x": 53, "y": 30, "text": "IN", "font_size": 13, "anchor": "middle"}
+        {"type": "polyline", "points": [[0, 5], [75, 5], [100, 25], [75, 45], [0, 45]], "closed": true},
+        {"type": "text", "x": 47, "y": 30, "text": "IN", "font_size": 13, "anchor": "middle"}
       ],
       "metadata": {"capability": "opc", "opc_direction": "in"}
     },

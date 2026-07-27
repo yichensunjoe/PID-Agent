@@ -76,8 +76,13 @@ def _structured_json_fallback(text: str) -> str:
 
     Reasoning fields often contain private analysis rather than the final answer.
     They are therefore accepted only when a complete JSON object can be decoded.
-    The last decodable object wins because many reasoning models place the final
-    answer after examples or intermediate sketches.
+
+    Reasoning models (e.g. LongCat-2.0, DeepSeek-R1) frequently emit intermediate
+    JSON fragments such as coordinate objects ``{"x": .., "y": ..}`` after the
+    real answer. Simply taking the last decodable object can therefore select a
+    stray fragment instead of the semantic transaction. To avoid this, candidates
+    that look like a semantic plan (containing ``transaction`` or ``operations``)
+    are preferred; only when none qualify does the last decodable object win.
     """
     stripped = text.strip()
     if not stripped:
@@ -93,7 +98,16 @@ def _structured_json_fallback(text: str) -> str:
             continue
         if isinstance(value, dict):
             candidates.append(stripped[index : index + consumed])
-    return candidates[-1] if candidates else ""
+    if not candidates:
+        return ""
+    for candidate in reversed(candidates):
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and ("transaction" in value or "operations" in value):
+            return candidate
+    return candidates[-1]
 
 
 def extract_chat_content(data: Any) -> str:

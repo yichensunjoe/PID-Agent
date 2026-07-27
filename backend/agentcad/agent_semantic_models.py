@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
@@ -212,16 +213,51 @@ FullDiagramOperation = Annotated[
 ]
 
 
+def _validate_instrument_tap_labels(operations: Sequence[Any]) -> None:
+    tap_labels = {
+        operation.instrument_label.strip().casefold()
+        for operation in operations
+        if isinstance(operation, InstrumentTapOperation) and operation.instrument_label.strip()
+    }
+    if not tap_labels:
+        return
+
+    duplicate_labels = sorted(
+        {
+            operation.element.label.strip()
+            for operation in operations
+            if isinstance(operation, (AddElementOperation, AddDiagramElementOperation))
+            and operation.element.type == "symbol"
+            and operation.element.label.strip().casefold() in tap_labels
+        }
+    )
+    if duplicate_labels:
+        raise ValueError(
+            "instrument_tap already creates its instrument symbol; remove standalone "
+            f"add_element symbol operations for labels: {', '.join(duplicate_labels)}"
+        )
+
+
 class SemanticTransaction(StrictModel):
     operations: list[SemanticOperation] = Field(min_length=1, max_length=500)
     expected_revision: int | None = Field(default=None, ge=0)
     label: str = ""
+
+    @model_validator(mode="after")
+    def validate_instrument_tap_labels(self) -> SemanticTransaction:
+        _validate_instrument_tap_labels(self.operations)
+        return self
 
 
 class FullDiagramTransaction(StrictModel):
     operations: list[FullDiagramOperation] = Field(min_length=1, max_length=500)
     expected_revision: int | None = Field(default=None, ge=0)
     label: str = ""
+
+    @model_validator(mode="after")
+    def validate_instrument_tap_labels(self) -> FullDiagramTransaction:
+        _validate_instrument_tap_labels(self.operations)
+        return self
 
 
 class SemanticAgentPlan(StrictModel):

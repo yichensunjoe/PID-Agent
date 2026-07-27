@@ -116,7 +116,7 @@ type State = {
   syncMessage: string;
   pendingExternalRevision: number | null;
   loadWorkspace: () => Promise<void>;
-  createDocument: () => Promise<void>;
+  createDocument: (name: string) => Promise<boolean>;
   deleteDocument: (id: string) => Promise<void>;
   importDocumentPayload: (payload: unknown) => Promise<void>;
   importProjectPackagePayload: (payload: unknown) => Promise<void>;
@@ -200,12 +200,12 @@ export const useWorkspace = create<State>((set, get) => ({
     }
   },
 
-  createDocument: async () => {
-    const name = window.prompt("文档名称", "新建 P&ID")?.trim();
-    if (!name) return;
+  createDocument: async (name) => {
+    const normalizedName = name.trim();
+    if (!normalizedName) return false;
     set({ loading: true, error: null, syncState: "checking", syncMessage: "正在创建文档…" });
     try {
-      const document = await api.createDocument(name);
+      const document = await api.createDocument(normalizedName);
       set({
         document,
         documents: await api.listDocuments(),
@@ -215,6 +215,7 @@ export const useWorkspace = create<State>((set, get) => ({
         syncMessage: `已同步至 r${document.revision}`,
         pendingExternalRevision: null,
       });
+      return true;
     } catch (error) {
       set({
         error: messageFromError(error),
@@ -222,6 +223,7 @@ export const useWorkspace = create<State>((set, get) => ({
         syncState: "error",
         syncMessage: "文档创建失败",
       });
+      return false;
     }
   },
 

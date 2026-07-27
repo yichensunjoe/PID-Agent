@@ -299,18 +299,10 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
         sign = -1 if operation.direction == "up" else 1
         instrument_process_y = operation.junction_point.y + sign * operation.branch_length
         instrument_rotation = 0 if operation.direction == "up" else 180
-        instrument_position = Point(
-            x=operation.junction_point.x - instrument_definition.width / 2,
-            y=(
-                instrument_process_y - instrument_definition.height
-                if operation.direction == "up"
-                else instrument_process_y
-            ),
-        )
         instrument = SymbolElement(
             id=operation.instrument_id,
             symbol_key=instrument_key,
-            position=instrument_position,
+            position=Point(x=0, y=0),
             width=instrument_definition.width,
             height=instrument_definition.height,
             rotation=instrument_rotation,
@@ -319,16 +311,21 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
             system_id=system_id,
             metadata={**assembly_metadata, "role": "instrument"},
         )
+        instrument_port_at_origin = self.service._symbol_port_point(
+            instrument,
+            operation.instrument_port_id,
+        )
+        instrument.position = Point(
+            x=operation.junction_point.x - instrument_port_at_origin.x,
+            y=instrument_process_y - instrument_port_at_origin.y,
+        )
 
         root_rotation = -90 if operation.direction == "up" else 90
         root_center_y = (operation.junction_point.y + instrument_process_y) / 2
         root_valve = SymbolElement(
             id=operation.root_valve_id,
             symbol_key=operation.root_valve_symbol_key,
-            position=Point(
-                x=operation.junction_point.x - root_definition.width / 2,
-                y=root_center_y - root_definition.height / 2,
-            ),
+            position=Point(x=0, y=0),
             width=root_definition.width,
             height=root_definition.height,
             rotation=root_rotation,
@@ -336,6 +333,20 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
             layer_id=layer_id,
             system_id=system_id,
             metadata={**assembly_metadata, "role": "root_valve"},
+        )
+        root_in_at_origin = self.service._symbol_port_point(
+            root_valve,
+            operation.root_valve_in_port_id,
+        )
+        root_out_at_origin = self.service._symbol_port_point(
+            root_valve,
+            operation.root_valve_out_port_id,
+        )
+        root_valve.position = Point(
+            x=operation.junction_point.x
+            - (root_in_at_origin.x + root_out_at_origin.x) / 2,
+            y=root_center_y
+            - (root_in_at_origin.y + root_out_at_origin.y) / 2,
         )
 
         root_in = self.service._symbol_port_point(root_valve, operation.root_valve_in_port_id)
@@ -435,9 +446,11 @@ class SemanticTransactionCompiler(BaseSemanticTransactionCompiler):
     def _branch_style(main_style: Style, override: dict[str, Any] | None) -> Style:
         if override is not None:
             return Style.model_validate(override)
-        data = main_style.model_dump(mode="python")
-        data["stroke_width"] = min(main_style.stroke_width, 1.0)
-        return Style.model_validate(data)
+        # Keep instrument take-off pipes visually continuous with the process
+        # line unless the caller explicitly asks for a different branch style.
+        # Silently forcing the branch to 1.0 made a correctly connected tap look
+        # offset from the 1.5-wide main line at the junction.
+        return main_style.model_copy(deep=True)
 
     @staticmethod
     def _split_segment_index(points: list[Point], point: Point) -> int | None:

@@ -144,11 +144,13 @@ class OpenAICompatiblePlanner:
         self.max_timeout_seconds = max_timeout_seconds
 
     def test_provider(self, override: ProviderConfig | None) -> dict[str, Any]:
-        """Verify an OpenAI-compatible provider without persisting credentials."""
+        """Verify model discovery and one real completion without persisting credentials."""
         provider = self._resolve_provider(override, self.provider_policy, self.max_timeout_seconds)
         headers = self._headers(provider)
         started = perf_counter()
         models_endpoint = provider.base_url.rstrip("/") + "/models"
+        model_ids: list[str] = []
+        model_available: bool | None = None
 
         try:
             with httpx.Client(
@@ -162,6 +164,23 @@ class OpenAICompatiblePlanner:
                     result = self._test_with_minimal_completion(client, provider, headers)
                     result["latency_ms"] = round((perf_counter() - started) * 1000)
                     return result
+                self._raise_for_response(response, provider)
+                try:
+                    payload = response.json()
+                    entries = payload.get("data", []) if isinstance(payload, dict) else []
+                    model_ids = [
+                        item["id"]
+                        for item in entries
+                        if isinstance(item, dict) and isinstance(item.get("id"), str)
+                    ]
+                except ValueError:
+                    model_ids = []
+                model_available = provider.model in model_ids if model_ids else None
+
+                # A successful /models response proves discovery access only. Some
+                # providers list cloud models that the current account cannot run,
+                # so the test must exercise the same completion path as generation.
+                result = self._test_with_minimal_completion(client, provider, headers)
         except ProviderURLPolicyError as exc:
             raise ProviderNetworkPolicyError(
                 str(exc), category=exc.category, provider=provider
@@ -178,36 +197,21 @@ class OpenAICompatiblePlanner:
                 provider=provider,
             ) from exc
 
-        self._raise_for_response(response, provider)
-        model_ids: list[str] = []
-        try:
-            payload = response.json()
-            entries = payload.get("data", []) if isinstance(payload, dict) else []
-            model_ids = [
-                item["id"]
-                for item in entries
-                if isinstance(item, dict) and isinstance(item.get("id"), str)
-            ]
-        except ValueError:
-            model_ids = []
-
-        model_available = provider.model in model_ids if model_ids else None
-        return {
-            "ok": True,
-            "base_url": provider.base_url,
-            "model": provider.model,
-            "method": "models",
-            "latency_ms": round((perf_counter() - started) * 1000),
-            "model_available": model_available,
-            "available_model_count": len(model_ids),
-            "message": (
-                "连接成功，指定模型可用"
-                if model_available is True
-                else "连接成功，但模型列表中未找到指定名称"
-                if model_available is False
-                else "连接成功，服务未返回可解析的模型列表"
-            ),
-        }
+        result.update(
+            {
+                "latency_ms": round((perf_counter() - started) * 1000),
+                "model_available": model_available,
+                "available_model_count": len(model_ids),
+                "message": (
+                    "连接成功，指定模型完成了最小生成测试"
+                    if model_available is True
+                    else "模型列表中未找到指定名称，但该模型完成了最小生成测试"
+                    if model_available is False
+                    else "连接成功，模型完成了最小生成测试"
+                ),
+            }
+        )
+        return result
 
     def plan(self, document_id: str, request: AgentGenerateRequest) -> AgentPlan:
         provider = self._resolve_provider(request.provider, self.provider_policy, self.max_timeout_seconds)

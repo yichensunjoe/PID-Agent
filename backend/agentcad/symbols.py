@@ -10,7 +10,15 @@ from .models import SymbolDefinition
 
 HIDDEN_BUILTIN_SYMBOL_KEYS: dict[str, frozenset[str]] = {
     "symbols.json": frozenset({"system_interface"}),
-    "standard_symbols.json": frozenset({"off_page_connector"}),
+    "standard_symbols.json": frozenset(
+        {
+            "off_page_connector",
+            "pressure_transmitter",
+            "temperature_transmitter",
+            "flow_transmitter",
+            "level_transmitter",
+        }
+    ),
 }
 
 

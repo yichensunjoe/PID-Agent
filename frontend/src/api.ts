@@ -98,6 +98,11 @@ export type ProviderModelsResult = {
   latency_ms: number;
 };
 
+export type AgentRuntimeConfig = {
+  default_timeout_seconds: number;
+  max_timeout_seconds: number;
+};
+
 export type DocumentStatus = { id: string; revision: number; updated_at: string };
 export type AgentPlanResponse = { plan: AgentPlan; document?: Document | null };
 
@@ -232,6 +237,7 @@ function providerPayload(provider?: ProviderConfig): ProviderConfig | undefined 
 
 export const api = {
   listDocuments: () => request<DocumentSummary[]>("/documents"),
+  getAgentRuntimeConfig: () => request<AgentRuntimeConfig>("/agent/runtime-config"),
   createDocument: (name: string) => request<Document>("/documents", { method: "POST", body: JSON.stringify({ name }) }),
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getDocumentStatus: (id: string) => request<DocumentStatus>(`/documents/${id}/status`),

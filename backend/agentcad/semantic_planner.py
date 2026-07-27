@@ -437,7 +437,8 @@ class SemanticAgentPlanner:
             "Preserve the original engineering intent, IDs, coordinates, labels and operation order unless a "
             "validation error requires a change. Do not add unrelated elements. Every bound connector endpoint "
             "must provide both element_id and port_id. A junction endpoint always uses port_id 'node'. A free "
-            "endpoint has no element_id or port_id and must provide point."
+            "endpoint has no element_id or port_id and must provide point. When instrument_tap already creates "
+            "a labeled instrument, remove any standalone add_element symbol with the same label."
         )
 
     @staticmethod
@@ -484,6 +485,16 @@ class SemanticAgentPlanner:
             "Use connect_ports to create a semantic pipe between two real ports; use waypoints "
             "instead of raw connector JSON when a specific orthogonal route is required. "
             "Use instrument_tap for pressure, temperature or flow takeoffs from a main connector. "
+            "instrument_tap already creates the instrument symbol, root valve, junction and branch "
+            "connectors: never add a second standalone symbol with the same instrument label. "
+            "When the user names an equipment type that exists in the catalog, use that exact symbol "
+            "instead of a merely similar category. Before returning a full diagram, verify that every "
+            "explicitly requested inlet, outlet and utility-side connection is represented by a real connector. "
+            "A symbol position is the top-left corner of its unrotated bounding box, not the visual center and "
+            "not a port coordinate. For a straight horizontal process train, calculate each symbol's position "
+            "from the catalog port offset so every connected process port has exactly the same y coordinate; "
+            "do not give unlike symbols the same position.y and rely on orthogonal routing to hide the mismatch. "
+            "Place off-page connectors so the pipe lands on the visual centerline of their real process port. "
             "Use reconnect_connector to move one existing connector endpoint; never edit source or target "
             "through update_element. Use replace_symbol to replace equipment while preserving connector IDs; "
             "provide port_mapping whenever old connected port IDs do not exist on the replacement. "

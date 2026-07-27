@@ -182,6 +182,10 @@ def test_instrument_tap_splits_main_and_builds_bound_assembly(tmp_path):
     assert branch_b.source and branch_b.source.element_id == "root_pt101"
     assert branch_b.target and branch_b.target.element_id == "pt101"
     assert branch_b.target.port_id == "process"
+    assert branch_a.style.stroke_width == upstream.style.stroke_width
+    assert branch_b.style.stroke_width == upstream.style.stroke_width
+    assert all(point.x == junction.position.x for point in branch_a.points)
+    assert all(point.x == junction.position.x for point in branch_b.points)
     for connector in (upstream, downstream, branch_a, branch_b):
         assert all(
             first.x == second.x or first.y == second.y
