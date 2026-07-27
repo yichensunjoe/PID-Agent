@@ -3,8 +3,8 @@ from __future__ import annotations
 import base64
 
 import httpx
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from agentcad.models import ProviderConfig
 from agentcad.vision_inputs import multimodal_user_content
@@ -13,7 +13,6 @@ from agentcad.vision_semantic_planner import (
     ProviderVisionUnsupportedError,
     VisionSemanticAgentPlanner,
 )
-
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nreference"
 
