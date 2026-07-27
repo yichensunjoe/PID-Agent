@@ -72,7 +72,9 @@ def test_vision_request_accepts_a_valid_base64_image_and_masks_it_in_dumps():
 
     assert len(request.images) == 1
     assert request.images[0].data_url.get_secret_value().startswith("data:image/png;base64,")
-    assert "reference" not in request.model_dump_json()
+    dumped = request.model_dump_json()
+    assert _data_url() not in dumped
+    assert "**********" in dumped
 
 
 def test_vision_request_rejects_media_type_and_magic_mismatch():
