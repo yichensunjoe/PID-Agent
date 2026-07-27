@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { VisionImageInputEnhancements } from "./agent/VisionImageInputEnhancements";
 import { GridVisualCompatibility } from "./GridVisualCompatibility";
 import { ProcessInteractionEnhancements } from "./ProcessInteractionEnhancements";
 import { RuntimeEnhancements } from "./RuntimeEnhancements";
@@ -13,6 +14,7 @@ createRoot(document.getElementById("root")!).render(
     <RuntimeEnhancements />
     <ProcessInteractionEnhancements />
     <GridVisualCompatibility />
+    <VisionImageInputEnhancements />
     <UiCompatibilityEnhancements />
   </StrictMode>,
 );
