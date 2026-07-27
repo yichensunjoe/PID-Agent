@@ -22,10 +22,10 @@ from .diagnostics import DiagnosticLogger
 from .llm import OpenAICompatiblePlanner
 from .provider_security import ProviderNetworkPolicy
 from .security import RequestBoundary, redact_query_string
-from .semantic_planner import SemanticAgentPlanner
 from .service import DocumentService
 from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
+from .vision_semantic_planner import VisionSemanticAgentPlanner
 
 VERSION = "2.1.0-alpha.1"
 
@@ -52,7 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ".diagnostics.jsonl"
     )
     diagnostics = DiagnosticLogger(diagnostics_path, service_version=VERSION)
-    semantic_planner = SemanticAgentPlanner(
+    semantic_planner = VisionSemanticAgentPlanner(
         service=service,
         symbols=symbols,
         diagnostics=diagnostics,

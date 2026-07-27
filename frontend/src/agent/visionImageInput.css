@@ -1,0 +1,130 @@
+.vision-image-portal-host {
+  display: contents;
+}
+
+.vision-image-input {
+  display: grid;
+  gap: 8px;
+  margin: -2px 0 10px;
+}
+
+.vision-image-dropzone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+  outline: none;
+}
+
+.vision-image-dropzone:focus-visible,
+.vision-image-dropzone.dragging {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 16%);
+  background: #eff6ff;
+}
+
+.vision-image-dropzone > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.vision-image-dropzone strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.vision-image-dropzone span,
+.vision-image-dropzone small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.vision-image-dropzone small {
+  grid-column: 1 / -1;
+}
+
+.vision-image-dropzone button,
+.vision-image-list button {
+  white-space: nowrap;
+}
+
+.vision-image-list {
+  display: grid;
+  gap: 6px;
+}
+
+.vision-image-list article {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.vision-image-list img {
+  width: 56px;
+  height: 42px;
+  border-radius: 5px;
+  object-fit: contain;
+  background: #f1f5f9;
+}
+
+.vision-image-list article > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.vision-image-list article strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vision-image-list article span,
+.vision-image-summary {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.vision-image-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vision-image-summary button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #2563eb;
+}
+
+.vision-image-error {
+  padding: 7px 9px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.vision-image-input > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}

@@ -44,6 +44,7 @@ class Settings:
     provider_allow_hosts: tuple[str, ...] = field(default_factory=tuple)
     provider_allow_cidrs: tuple[str, ...] = field(default_factory=tuple)
     max_json_body_bytes: int = 2 * 1024 * 1024
+    max_agent_body_bytes: int = 24 * 1024 * 1024
     max_import_body_bytes: int = 25 * 1024 * 1024
     provider_max_response_bytes: int = 4 * 1024 * 1024
     max_concurrent_requests: int = 32
@@ -112,6 +113,11 @@ class Settings:
             max_json_body_bytes=_int_env(
                 "PID_AGENT_MAX_JSON_BODY_BYTES", "AGENTCAD_MAX_JSON_BODY_BYTES", 2 * 1024 * 1024
             ),
+            max_agent_body_bytes=_int_env(
+                "PID_AGENT_MAX_AGENT_BODY_BYTES",
+                "AGENTCAD_MAX_AGENT_BODY_BYTES",
+                24 * 1024 * 1024,
+            ),
             max_import_body_bytes=_int_env(
                 "PID_AGENT_MAX_IMPORT_BODY_BYTES",
                 "AGENTCAD_MAX_IMPORT_BODY_BYTES",
@@ -154,6 +160,7 @@ class Settings:
                     raise ValueError(f"shared CORS origin must be an origin only: {origin}")
         for name, value in {
             "max_json_body_bytes": self.max_json_body_bytes,
+            "max_agent_body_bytes": self.max_agent_body_bytes,
             "max_import_body_bytes": self.max_import_body_bytes,
             "provider_max_response_bytes": self.provider_max_response_bytes,
             "max_concurrent_requests": self.max_concurrent_requests,
