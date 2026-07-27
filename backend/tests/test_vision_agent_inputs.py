@@ -3,8 +3,8 @@ from __future__ import annotations
 import base64
 
 import httpx
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from agentcad.models import ProviderConfig
 from agentcad.vision_inputs import multimodal_user_content
