@@ -10,11 +10,11 @@ from .llm import (
     LLMResponseError,
     OpenAICompatiblePlanner,
     PlannerError,
-    ProviderConfig,
     ProviderConnectionError,
     ProviderNetworkPolicyError,
     ProviderTimeoutError,
 )
+from .models import ProviderConfig
 from .provider_compat import completion_temperature, extract_chat_content
 from .provider_security import ProviderURLPolicyError, provider_http_transport
 from .semantic_planner import SemanticAgentPlanner
