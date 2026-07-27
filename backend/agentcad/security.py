@@ -39,6 +39,12 @@ def query_contains_credentials(request: Request) -> bool:
     )
 
 
+def _is_agent_planning_path(path: str) -> bool:
+    return path.startswith("/api/v2/documents/") and path.endswith(
+        ("/agent/plan-v2", "/agent/replan")
+    )
+
+
 def _error(status_code: int, code: str, message: str, *, authenticate: bool = False) -> JSONResponse:
     headers = {"WWW-Authenticate": "Bearer"} if authenticate else None
     response = JSONResponse(
@@ -91,11 +97,12 @@ class RequestBoundary:
                 return _error(403, "invalid_access_token", "The supplied service access token is invalid.")
 
         if protected and request.method in {"POST", "PUT", "PATCH"}:
-            limit = (
-                self.settings.max_import_body_bytes
-                if path.startswith("/api/v2/imports/")
-                else self.settings.max_json_body_bytes
-            )
+            if path.startswith("/api/v2/imports/"):
+                limit = self.settings.max_import_body_bytes
+            elif _is_agent_planning_path(path):
+                limit = self.settings.max_agent_body_bytes
+            else:
+                limit = self.settings.max_json_body_bytes
             content_length = request.headers.get("Content-Length")
             if content_length:
                 try:
