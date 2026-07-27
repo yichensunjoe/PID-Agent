@@ -1,0 +1,55 @@
+/* Process-line interaction refinements: deterministic bridge symbols, dwell-to-tee snapping and blocked-flow state. */
+.connector-jumps {
+  display: none;
+}
+
+.process-interaction-overlays {
+  pointer-events: none;
+}
+
+.process-connector-draft {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2.4;
+  stroke-dasharray: 8 5;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.9;
+}
+
+.process-segment-snap circle {
+  fill: #ffffff;
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.process-segment-snap.pending circle {
+  stroke: #f59e0b;
+  stroke-dasharray: 3 2;
+}
+
+.process-segment-snap.attached circle {
+  fill: #dcfce7;
+  stroke: #16a34a;
+}
+
+.process-segment-snap text {
+  fill: #111827;
+  font-size: 12px;
+  font-weight: 650;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.runtime-flow-line.runtime-flow-blocked {
+  animation: none !important;
+  opacity: 0.18 !important;
+  stroke-dasharray: 2 7 !important;
+  filter: none !important;
+}
+
+/* Keep acceptance baselines and the inspector compact; the status bar already shows the active fine snap. */
+.fine-grid-notice {
+  display: none;
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -120,20 +121,99 @@ def _directed_element_ids(connector: ConnectorElement) -> tuple[str | None, str 
     return None, None
 
 
-def flow_rule_findings(document: Document, registry: SymbolRegistry) -> list[FlowFinding]:
-    """Return no flow errors.
+def blocked_downstream_connectors(
+    document: Document,
+    registry: SymbolRegistry,
+) -> dict[str, tuple[str, ...]]:
+    """Return directed connector ids isolated downstream of each closed valve.
 
-    Valve state and process direction are visual/semantic annotations only. They
-    are deliberately not converted into blocking findings because a schematic
-    may validly show a closed valve, an isolated section, or an operating state
-    without preventing an LLM or engineer from completing the drawing.
-
-    The function remains as a compatibility surface for report callers.
+    Operating state affects flow semantics and visualization, but never invalidates a
+    drawing transaction. Connectors without a declared flow direction are excluded
+    because upstream/downstream cannot be determined reliably.
     """
-    return []
+
+    closed_valves = {
+        element.id
+        for element in document.elements
+        if element.type == "symbol"
+        and is_valve_symbol(element, registry)
+        and valve_state(element) == "closed"
+    }
+    outgoing: dict[str, list[ConnectorElement]] = defaultdict(list)
+    for element in document.elements:
+        if element.type != "connector":
+            continue
+        upstream_id, _ = _directed_element_ids(element)
+        if upstream_id:
+            outgoing[upstream_id].append(element)
+
+    result: dict[str, tuple[str, ...]] = {}
+    for valve_id in sorted(closed_valves):
+        blocked: set[str] = set()
+        queue: deque[str] = deque([valve_id])
+        visited_elements: set[str] = set()
+        while queue:
+            element_id = queue.popleft()
+            if element_id in visited_elements:
+                continue
+            visited_elements.add(element_id)
+            for connector in outgoing.get(element_id, []):
+                if connector.id in blocked:
+                    continue
+                blocked.add(connector.id)
+                _, downstream_id = _directed_element_ids(connector)
+                if downstream_id and downstream_id not in closed_valves:
+                    queue.append(downstream_id)
+        if blocked:
+            result[valve_id] = tuple(sorted(blocked))
+    return result
+
+
+def flow_rule_findings(document: Document, registry: SymbolRegistry) -> list[FlowFinding]:
+    findings: list[FlowFinding] = []
+    element_map = {element.id: element for element in document.elements}
+    connector_map = {
+        element.id: element for element in document.elements if element.type == "connector"
+    }
+    for valve_id, connector_ids in blocked_downstream_connectors(document, registry).items():
+        valve = element_map[valve_id]
+        assert valve.type == "symbol"
+        media = sorted(
+            {
+                normalize_flow_medium(connector_map[connector_id].medium)
+                for connector_id in connector_ids
+                if connector_id in connector_map
+            }
+        )
+        display = valve.label.strip() or valve.id
+        findings.append(
+            FlowFinding(
+                severity="info",
+                code="VALVE_CLOSED_FLOW_ISOLATION",
+                message=(
+                    f"阀门 {display} 已关闭，其下游 "
+                    f"{', '.join(media) or 'process'} 介质流动已停止。"
+                ),
+                element_ids=(valve_id, *connector_ids),
+                details={
+                    "valve_id": valve_id,
+                    "valve_state": "closed",
+                    "blocked_connector_ids": list(connector_ids),
+                    "media": media,
+                    "drawing_blocked": False,
+                },
+            )
+        )
+    return findings
 
 
 def build_agent_harness_context(document: Document, registry: SymbolRegistry) -> dict[str, Any]:
+    findings = flow_rule_findings(document, registry)
+    blocked_connector_ids = {
+        connector_id
+        for finding in findings
+        for connector_id in finding.details.get("blocked_connector_ids", [])
+    }
     symbols: list[dict[str, Any]] = []
     connectors: list[dict[str, Any]] = []
     for element in document.elements:
@@ -173,6 +253,7 @@ def build_agent_harness_context(document: Document, registry: SymbolRegistry) ->
                     "medium": element.medium,
                     "medium_class": normalize_flow_medium(element.medium),
                     "flow_direction": element.flow_direction,
+                    "flow_blocked": element.id in blocked_connector_ids,
                     "upstream_element_id": upstream_id,
                     "downstream_element_id": downstream_id,
                     "source": element.source.model_dump(mode="json") if element.source else None,
@@ -187,12 +268,24 @@ def build_agent_harness_context(document: Document, registry: SymbolRegistry) ->
         "revision": document.revision,
         "symbols": symbols,
         "connectors": connectors,
-        "flow_findings": [],
+        "flow_findings": [
+            {
+                "severity": finding.severity,
+                "code": finding.code,
+                "message": finding.message,
+                "element_ids": list(finding.element_ids),
+                "details": finding.details,
+            }
+            for finding in findings
+        ],
         "engineering_contract": [
             "Use real symbol ports and semantic connector operations; never fake connectivity with decorative lines or arrow text.",
             "Connector medium should be water, gas, or an explicit project medium; use flow_direction for visual direction.",
             "Valve properties.valve_state is open or closed; a missing value means normally open.",
-            "Valve state is descriptive and must not block or reject drawing generation.",
+            "A closed valve stops directed downstream medium flow, but operating state must never reject or block drawing edits.",
+            "Use junction elements as semantic tees when process connectors intentionally join.",
+            "Geometric crossings without a shared junction are non-connecting crossings and should use a jump bridge.",
+            "Use 5-unit coordinate increments for precise alignment unless a real symbol port or connector intersection supplies the exact point.",
             "Use off_page_connector_in/out for cross-drawing boundaries and set properties.target_document_id.",
             "Preserve document_id and expected_revision and avoid changing unrelated elements.",
         ],
