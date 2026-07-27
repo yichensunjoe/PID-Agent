@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createDocument, openDocument, resetDocuments } from "./helpers";
+import { createDocument, openDocument, resetDocuments } from "./fixtures";
 
 const ONE_PIXEL_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=",
