@@ -107,12 +107,11 @@ test("renames the current P&ID and downloads a real PNG", async ({ page, request
   ]);
   await openDocument(page, document.id);
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.type()).toBe("prompt");
-    expect(dialog.defaultValue()).toBe("Original P&ID");
-    await dialog.accept("Feed Preparation P&ID");
-  });
   await page.getByRole("button", { name: "重命名" }).click();
+  const renameDialog = page.getByRole("dialog", { name: "重命名 P&ID 图纸" });
+  await expect(renameDialog).toBeVisible();
+  await renameDialog.getByRole("textbox", { name: "图纸名称" }).fill("Feed Preparation P&ID");
+  await renameDialog.getByRole("button", { name: "保存" }).click();
   await expect(page.locator(".document-bar strong")).toHaveText("Feed Preparation P&ID");
 
   const persisted = await request.get(`${API_ROOT}/documents/${document.id}`);
