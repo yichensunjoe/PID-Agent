@@ -53,7 +53,9 @@ export function InputDialogHost() {
     const update = () => setRequest(activeRequest);
     subscribers.add(update);
     update();
-    return () => subscribers.delete(update);
+    return () => {
+      subscribers.delete(update);
+    };
   }, []);
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export function InputDialogHost() {
   if (!request) return null;
   const { options } = request;
   const normalized = options.trim === false ? value : value.trim();
-  const canSubmit = options.allowEmpty !== false || normalized.length > 0;
+  const canSubmit = options.allowEmpty === true || normalized.length > 0;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
