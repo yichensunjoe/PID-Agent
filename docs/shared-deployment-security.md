@@ -74,6 +74,7 @@ allowlist 是安全边界，应尽量小，并与网络防火墙或容器 egress
 | 环境变量 | 默认值 | 用途 |
 | --- | ---: | --- |
 | `PID_AGENT_MAX_JSON_BODY_BYTES` | 2 MiB | 普通 JSON 请求正文 |
+| `PID_AGENT_MAX_AGENT_BODY_BYTES` | 24 MiB | Agent 规划/重规划请求正文，包含 Base64 参考图片 |
 | `PID_AGENT_MAX_IMPORT_BODY_BYTES` | 25 MiB | 文档/项目包导入正文 |
 | `PID_AGENT_PROVIDER_MAX_RESPONSE_BYTES` | 4 MiB | Provider 响应 |
 | `PID_AGENT_MAX_CONCURRENT_REQUESTS` | 32 | 单进程并发请求 |

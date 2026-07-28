@@ -463,23 +463,15 @@ class SemanticAgentPlanner:
             "to produce the smallest complete corrected plan. Do not repeat the same invalid IDs, ports, "
             "symbol keys or endpoint edits."
             if repair
-            else (
-                "Draw the complete diagram the user asked for in a single transaction. "
-                "Add every requested equipment, pipe, valve and instrument as real elements now — "
-                "do not create only a layer or system and wait for more instructions."
-                if full_diagram
-                else "Plan the smallest atomic change that satisfies the user request."
-            )
+            else "Plan the smallest atomic change that satisfies the user request."
         )
         task_mode = (
-            "This is an empty-document full-diagram task. The user expects a visible drawing, not just "
-            "scaffolding. Add real symbols (equipment, valves, instruments), connect them with connect_ports, "
-            "and only add a layer or system when the user explicitly names one. A transaction that adds only "
-            "a layer or system without any visible elements does not satisfy the request. "
-            "Only use operations in the supplied full-diagram schema. Never create a raw connector through "
-            "add_element. Use connect_ports for equipment-to-equipment pipes, with waypoints for explicit "
-            "orthogonal routing. Use instrument_tap to split a main connector and create a junction, root "
-            "valve, instrument and bound branch pipes. "
+            "This is an empty-document task. Only use operations in the supplied full-diagram schema. "
+            "A request that only manages layers or systems is valid and may intentionally leave the canvas "
+            "without visible elements. Never create a raw connector through add_element. Use connect_ports "
+            "for equipment-to-equipment pipes, with waypoints for explicit orthogonal routing. Use "
+            "instrument_tap to split a main connector and create a junction, root valve, instrument and "
+            "bound branch pipes. "
             if full_diagram
             else "This is a local-edit task on an existing drawing. "
         )

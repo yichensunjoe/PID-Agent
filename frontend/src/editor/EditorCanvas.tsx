@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorPreferences } from "../editorPreferences";
 import { SpatialIndex, type SpatialBounds } from "../spatialIndex";
 import { useWorkspace } from "../store";
+import { requestTextInput } from "./InputDialogHost";
 import type {
   ConnectorElement,
   ConnectorEndpoint,
@@ -1092,7 +1093,8 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     if (symbolKey) {
       const definition = symbolMap.get(symbolKey);
       if (!definition) return;
-      const label = window.prompt("设备位号/标签（可留空）", "") ?? "";
+      const label = await requestTextInput({ title: "放置设备", label: "设备位号/标签", initialValue: "", allowEmpty: true, confirmLabel: "放置" });
+      if (label === null) return;
       await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
       return;
     }
@@ -1131,12 +1133,13 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     if (tool === "symbol" && selectedSymbolKey) {
       const definition = symbolMap.get(selectedSymbolKey);
       if (!definition) return;
-      const label = window.prompt("设备位号/标签（可留空）", "") ?? "";
+      const label = await requestTextInput({ title: "放置设备", label: "设备位号/标签", initialValue: "", allowEmpty: true, confirmLabel: "放置" });
+      if (label === null) return;
       await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
       return;
     }
     if (tool === "text") {
-      const value = window.prompt("文字内容", "")?.trim();
+      const value = await requestTextInput({ title: "添加文字", label: "文字内容", initialValue: "", allowEmpty: false, confirmLabel: "添加" });
       if (value) await addElement({ type: "text", position: point, text: value, font_size: 16 }, "Add text");
       return;
     }

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { authorizedFetch, downloadApiResource } from "./api";
 import { useWorkspace } from "./store";
 import type { ConnectorElement, Document, SymbolElement } from "./types";
+import { requestTextInput } from "./editor/InputDialogHost";
 import {
   animatedConnector,
   isOpcDefinition,
@@ -153,7 +154,7 @@ function RuntimeEnhancementsEnabled() {
   const renameCurrentDocument = async () => {
     const current = workspace.document;
     if (!current || renaming) return;
-    const requested = window.prompt("重命名 P&ID 图纸", current.name)?.trim();
+    const requested = await requestTextInput({ title: "重命名 P&ID 图纸", label: "图纸名称", initialValue: current.name, allowEmpty: false, confirmLabel: "保存" });
     if (!requested || requested === current.name) return;
     setRenaming(true);
     setRuntimeMessage("");
@@ -169,6 +170,11 @@ function RuntimeEnhancementsEnabled() {
         return;
       }
       const updated = await response.json() as Document;
+      const active = useWorkspace.getState().document;
+      if (!active || active.id !== current.id || active.revision !== current.revision) {
+        setRuntimeMessage("图纸已切换，旧重命名响应未写回当前画布。");
+        return;
+      }
       useWorkspace.setState({ document: updated });
       await useWorkspace.getState().refreshDocument();
       setRuntimeMessage(`图纸已重命名为“${updated.name}”。`);

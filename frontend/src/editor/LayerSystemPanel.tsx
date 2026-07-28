@@ -1,5 +1,6 @@
 import { useWorkspace } from "../store";
 import type { Layer, Operation, SystemGroup } from "../types";
+import { requestTextInput } from "./InputDialogHost";
 import { ExportPanel } from "./ExportPanel";
 import { LayoutPanel } from "./LayoutPanel";
 import { WorkspaceControls } from "./WorkspaceControls";
@@ -16,27 +17,27 @@ export function LayerSystemPanel() {
   if (!document) return <div className="inspector-empty">没有打开的文档</div>;
 
   const addLayer = async () => {
-    const name = window.prompt("新图层名称", "新图层")?.trim();
+    const name = await requestTextInput({ title: "新增图层", label: "图层名称", initialValue: "新图层", allowEmpty: false, confirmLabel: "新增" });
     if (!name) return;
     const layer: Layer = { id: newGroupId("layer"), name, visible: true, locked: false };
     await transact([{ op: "add_layer", layer }], `Add layer ${name}`);
   };
 
   const addSystem = async () => {
-    const name = window.prompt("新系统名称", "新系统")?.trim();
+    const name = await requestTextInput({ title: "新增系统", label: "系统名称", initialValue: "新系统", allowEmpty: false, confirmLabel: "新增" });
     if (!name) return;
     const system: SystemGroup = { id: newGroupId("system"), name, visible: true };
     await transact([{ op: "add_system", system }], `Add system ${name}`);
   };
 
   const renameLayer = async (layer: Layer) => {
-    const name = window.prompt("图层名称", layer.name)?.trim();
+    const name = await requestTextInput({ title: "重命名图层", label: "图层名称", initialValue: layer.name, allowEmpty: false, confirmLabel: "保存" });
     if (!name || name === layer.name) return;
     await transact([{ op: "update_layer", layer_id: layer.id, patch: { name } }], `Rename layer ${layer.id}`);
   };
 
   const renameSystem = async (system: SystemGroup) => {
-    const name = window.prompt("系统名称", system.name)?.trim();
+    const name = await requestTextInput({ title: "重命名系统", label: "系统名称", initialValue: system.name, allowEmpty: false, confirmLabel: "保存" });
     if (!name || name === system.name) return;
     await transact([{ op: "update_system", system_id: system.id, patch: { name } }], `Rename system ${system.id}`);
   };

@@ -38,6 +38,7 @@ class AgentImageInput(StrictModel):
 
 class VisionAgentGenerateRequest(AgentGenerateRequest):
     images: list[AgentImageInput] = Field(default_factory=list, max_length=MAX_AGENT_IMAGES)
+    require_visible_output: bool = False
 
     @model_validator(mode="after")
     def validate_images(self) -> VisionAgentGenerateRequest:
@@ -47,6 +48,7 @@ class VisionAgentGenerateRequest(AgentGenerateRequest):
 
 class VisionSemanticAgentReplanRequest(SemanticAgentReplanRequest):
     images: list[AgentImageInput] = Field(default_factory=list, max_length=MAX_AGENT_IMAGES)
+    require_visible_output: bool = False
 
     @model_validator(mode="after")
     def validate_images(self) -> VisionSemanticAgentReplanRequest:

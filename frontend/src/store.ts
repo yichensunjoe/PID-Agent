@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "./api";
 import { nextDocumentIdAfterDeletion } from "./documentDeletion";
+import { mutationOriginCanApply, mutationResponseCanApply, type WorkspaceMutationOrigin } from "./storeRequestGuard";
 import {
   directLockedOperationTargets,
   expandSelectionByGroups,
@@ -30,6 +31,7 @@ import type {
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 const newGroupId = () => `group_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 let documentRequestGeneration = 0;
+let mutationRequestGeneration = 0;
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -235,8 +237,10 @@ export const useWorkspace = create<State>((set, get) => ({
       return;
     }
     const requestGeneration = ++documentRequestGeneration;
+    mutationRequestGeneration += 1;
     set({
       loading: true,
+      isMutating: false,
       error: null,
       syncState: "checking",
       syncMessage: `正在删除 ${target.name}…`,
@@ -376,8 +380,10 @@ export const useWorkspace = create<State>((set, get) => ({
 
   openDocument: async (id) => {
     const requestGeneration = ++documentRequestGeneration;
+    mutationRequestGeneration += 1;
     set({
       loading: true,
+      isMutating: false,
       error: null,
       selectedElementIds: [],
       syncState: "checking",
@@ -479,13 +485,27 @@ export const useWorkspace = create<State>((set, get) => ({
       set({ error: error.message });
       throw error;
     }
+    const origin: WorkspaceMutationOrigin = {
+      documentId: document.id,
+      revision: document.revision,
+      documentGeneration: documentRequestGeneration,
+      mutationGeneration: ++mutationRequestGeneration,
+    };
     set({ isMutating: true, error: null, syncState: "checking", syncMessage: "正在提交修改…" });
     try {
       const result = await api.transact(document.id, document.revision, operations, label);
+      const documents = await api.listDocuments();
+      if (!mutationResponseCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+        result.document,
+      )) return;
       const existing = new Set(result.document.elements.map((item) => item.id));
       set({
         document: result.document,
-        documents: await api.listDocuments(),
+        documents,
         selectedElementIds: get().selectedElementIds.filter((id) => existing.has(id)),
         isMutating: false,
         error: null,
@@ -494,7 +514,19 @@ export const useWorkspace = create<State>((set, get) => ({
         pendingExternalRevision: null,
       });
     } catch (error) {
+      if (!mutationOriginCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+      )) return;
       const latest = await api.getDocument(document.id).catch(() => null);
+      if (!mutationOriginCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+      )) return;
       set({
         error: messageFromError(error),
         document: latest ?? get().document,
@@ -544,9 +576,22 @@ export const useWorkspace = create<State>((set, get) => ({
   undo: async () => {
     const document = get().document;
     if (!document) return;
+    const origin: WorkspaceMutationOrigin = {
+      documentId: document.id,
+      revision: document.revision,
+      documentGeneration: documentRequestGeneration,
+      mutationGeneration: ++mutationRequestGeneration,
+    };
     set({ isMutating: true, syncState: "checking", syncMessage: "正在撤销…" });
     try {
       const updated = await api.undo(document.id);
+      if (!mutationResponseCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+        updated,
+      )) return;
       set({
         document: updated,
         selectedElementIds: [],
@@ -556,6 +601,12 @@ export const useWorkspace = create<State>((set, get) => ({
         pendingExternalRevision: null,
       });
     } catch (error) {
+      if (!mutationOriginCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+      )) return;
       set({
         error: messageFromError(error),
         isMutating: false,
@@ -568,9 +619,22 @@ export const useWorkspace = create<State>((set, get) => ({
   redo: async () => {
     const document = get().document;
     if (!document) return;
+    const origin: WorkspaceMutationOrigin = {
+      documentId: document.id,
+      revision: document.revision,
+      documentGeneration: documentRequestGeneration,
+      mutationGeneration: ++mutationRequestGeneration,
+    };
     set({ isMutating: true, syncState: "checking", syncMessage: "正在重做…" });
     try {
       const updated = await api.redo(document.id);
+      if (!mutationResponseCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+        updated,
+      )) return;
       set({
         document: updated,
         selectedElementIds: [],
@@ -580,6 +644,12 @@ export const useWorkspace = create<State>((set, get) => ({
         pendingExternalRevision: null,
       });
     } catch (error) {
+      if (!mutationOriginCanApply(
+        origin,
+        get().document,
+        documentRequestGeneration,
+        mutationRequestGeneration,
+      )) return;
       set({
         error: messageFromError(error),
         isMutating: false,
