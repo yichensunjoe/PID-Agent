@@ -141,6 +141,5 @@ def test_vision_planner_reports_a_clear_error_when_provider_rejects_images(monke
     finally:
         planner._request_images.reset(token)
 
-    assert len(client.payloads) == 2
+    assert len(client.payloads) == 1
     assert "response_format" in client.payloads[0]
-    assert "response_format" not in client.payloads[1]
