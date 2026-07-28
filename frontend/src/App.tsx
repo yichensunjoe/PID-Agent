@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
+import { VisionImageInput } from "./agent/VisionImageInput";
+import { shouldRequireVisibleOutput } from "./agent/visibleOutputIntent";
+import { toAgentImagePayload, type VisionAttachment } from "./agent/visionImageTypes";
 import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest, type CanvasViewportRequest } from "./editor/EditorCanvas";
 import { CommandPalette } from "./editor/CommandPalette";
 import { CreateDocumentDialog } from "./editor/CreateDocumentDialog";
@@ -145,6 +148,7 @@ export default function App() {
   const shortcutMap = useMemo(() => resolvedShortcutMap(preferences.shortcutOverrides), [preferences.shortcutOverrides]);
   const [prompt, setPrompt] = useState("");
   const [context, setContext] = useState("");
+  const [referenceImages, setReferenceImages] = useState<VisionAttachment[]>([]);
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -235,6 +239,7 @@ export default function App() {
     setCanvasView(document ? { x: 0, y: 0, width: document.canvas.width, height: document.canvas.height } : null);
     setCanvasViewportRequest(null);
     setViewNavigatorOpen(false);
+    setReferenceImages([]);
   }, [state.document?.id]);
 
   const applyServiceToken = () => {
@@ -336,6 +341,8 @@ export default function App() {
         prompt.trim(),
         scopedContext(),
         providerConfig(),
+        toAgentImagePayload(referenceImages),
+        shouldRequireVisibleOutput(prompt, state.document.elements.length),
       );
       setPendingPlan(response);
     } catch (error) {
@@ -360,6 +367,8 @@ export default function App() {
         pendingPlan.plan,
         attempt,
         providerConfig(),
+        toAgentImagePayload(referenceImages),
+        shouldRequireVisibleOutput(prompt, document.elements.length),
       );
       setPendingPlan(response);
     } catch (error) {
@@ -388,6 +397,11 @@ export default function App() {
         pendingPlan.attempt,
         compiled.transaction,
       );
+      const activeDocument = useWorkspace.getState().document;
+      if (!activeDocument || activeDocument.id !== document.id || activeDocument.revision !== document.revision) {
+        setAgentError("图纸已切换，旧 Agent 应用响应未写回当前画布。");
+        return;
+      }
       const documents = await api.listDocuments();
       const existing = new Set(result.document.elements.map((element) => element.id));
       useWorkspace.setState({
@@ -401,6 +415,7 @@ export default function App() {
       });
       setPendingPlan(null);
       setPrompt("");
+      setReferenceImages([]);
     } catch (error) {
       setAgentError(error instanceof ApiError ? error.message : String(error));
     } finally {
@@ -448,6 +463,8 @@ export default function App() {
     { id: "agent", label: "Agent" },
   ];
   const busyAgent = planningAgent || repairingAgent || applyingAgent || automaticAgentRunning;
+  const agentImages = useMemo(() => toAgentImagePayload(referenceImages), [referenceImages]);
+  const requireVisibleOutput = shouldRequireVisibleOutput(prompt, state.document?.elements.length ?? 0);
   const agentCanvasPreview: AgentCanvasPreview | null = pendingPlan?.assessment.valid && pendingPlan.compiled_plan
     ? {
         planId: pendingPlan.plan.plan_id,
@@ -752,6 +769,7 @@ export default function App() {
           <section className="agent-panel" role="tabpanel" hidden={rightPanel !== "agent"}>
             <h2>P&amp;ID Agent</h2>
             <label>自然语言指令<textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} placeholder="例如：把选中的阀门替换为球阀，并保持原有管线连接。" rows={5} /></label>
+            <VisionImageInput scopeId={state.document?.id ?? ""} images={referenceImages} onChange={setReferenceImages} disabled={busyAgent} />
             <details className="agent-context-settings">
               <summary>工艺与设计上下文</summary>
               <label>补充上下文<textarea value={context} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContext(event.target.value)} placeholder="粘贴工艺原则、设备要求、位号规则、管线说明等。" rows={7} /></label>
@@ -761,12 +779,15 @@ export default function App() {
               prompt={prompt}
               context={scopedContext()}
               provider={providerConfig()}
+              images={agentImages}
+              requireVisibleOutput={requireVisibleOutput}
               disabled={busyAgent}
               onRunningChange={setAutomaticAgentRunning}
               onApplied={() => {
                 setPendingPlan(null);
                 setAgentError("");
                 setPrompt("");
+                setReferenceImages([]);
               }}
             />
             <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "仅生成事务预览（手动模式）"}</button>

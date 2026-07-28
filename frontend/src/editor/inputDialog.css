@@ -1,0 +1,49 @@
+.input-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(2px);
+}
+
+.input-dialog {
+  width: min(430px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 12px;
+  background: var(--panel, #ffffff);
+  color: var(--text, #0f172a);
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.28);
+}
+
+.input-dialog header,
+.input-dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.input-dialog header strong {
+  font-size: 17px;
+}
+
+.input-dialog header span {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.input-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

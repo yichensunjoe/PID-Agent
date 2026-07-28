@@ -6,6 +6,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from agentcad.llm import LLMResponseError
 from agentcad.models import ProviderConfig
 from agentcad.vision_inputs import multimodal_user_content
 from agentcad.vision_request_models import AgentImageInput, VisionAgentGenerateRequest
@@ -39,8 +40,8 @@ def _provider() -> ProviderConfig:
 
 
 class _VisionClient:
-    def __init__(self, status_code: int = 200):
-        self.status_code = status_code
+    def __init__(self, responses: list[tuple[int, dict[str, object]]]):
+        self.responses = responses
         self.payloads: list[dict[str, object]] = []
 
     def __enter__(self):
@@ -51,29 +52,44 @@ class _VisionClient:
 
     def post(self, url: str, *, json: dict[str, object], headers: dict[str, str]):
         self.payloads.append(json)
-        payload = (
-            {"choices": [{"message": {"content": "{}"}}]}
-            if self.status_code == 200
-            else {"error": {"message": "image input is not supported"}}
-        )
+        index = min(len(self.payloads) - 1, len(self.responses) - 1)
+        status_code, payload = self.responses[index]
         return httpx.Response(
-            self.status_code,
+            status_code,
             json=payload,
             request=httpx.Request("POST", url, headers=headers),
         )
+
+
+def _success_payload() -> dict[str, object]:
+    return {"choices": [{"message": {"content": "{}"}}]}
 
 
 def _planner() -> VisionSemanticAgentPlanner:
     return VisionSemanticAgentPlanner(service=object(), symbols=object())  # type: ignore[arg-type]
 
 
+def _request(planner: VisionSemanticAgentPlanner):
+    token = planner._request_images.set((_image(),))
+    try:
+        return planner._request_model_json(
+            _provider(),
+            system_prompt="Return JSON",
+            user_prompt="Create the drawing",
+            temperature=0.1,
+        )
+    finally:
+        planner._request_images.reset(token)
+
+
 def test_vision_request_accepts_a_valid_base64_image_and_masks_it_in_dumps():
     request = VisionAgentGenerateRequest(prompt="按图片生成 P&ID", images=[_image()])
 
     assert len(request.images) == 1
-    assert request.images[0].data_url.get_secret_value().startswith("data:image/png;base64,")
+    secret = request.images[0].data_url.get_secret_value()
     dumped = request.model_dump_json()
-    assert _data_url() not in dumped
+    assert secret.startswith("data:image/png;base64,")
+    assert secret not in dumped
     assert "**********" in dumped
 
 
@@ -97,24 +113,13 @@ def test_multimodal_content_uses_openai_image_url_parts():
 
 
 def test_vision_planner_sends_text_and_image_in_one_user_message(monkeypatch):
-    client = _VisionClient()
+    client = _VisionClient([(200, _success_payload())])
     monkeypatch.setattr(
         "agentcad.vision_semantic_planner.httpx.Client",
         lambda *, timeout, follow_redirects=False, transport=None: client,
     )
-    planner = _planner()
-    token = planner._request_images.set((_image(),))
-    try:
-        result = planner._request_model_json(
-            _provider(),
-            system_prompt="Return JSON",
-            user_prompt="Create the drawing",
-            temperature=0.1,
-        )
-    finally:
-        planner._request_images.reset(token)
 
-    assert result == {}
+    assert _request(_planner()) == {}
     user_content = client.payloads[0]["messages"][1]["content"]
     assert isinstance(user_content, list)
     assert user_content[0]["type"] == "text"
@@ -122,24 +127,45 @@ def test_vision_planner_sends_text_and_image_in_one_user_message(monkeypatch):
     assert user_content[1]["type"] == "image_url"
 
 
-def test_vision_planner_reports_a_clear_error_when_provider_rejects_images(monkeypatch):
-    client = _VisionClient(status_code=400)
+def test_explicit_vision_rejection_is_not_retried(monkeypatch):
+    client = _VisionClient([
+        (400, {"error": {"message": "image input is not supported by this text-only model"}}),
+    ])
     monkeypatch.setattr(
         "agentcad.vision_semantic_planner.httpx.Client",
         lambda *, timeout, follow_redirects=False, transport=None: client,
     )
-    planner = _planner()
-    token = planner._request_images.set((_image(),))
-    try:
-        with pytest.raises(ProviderVisionUnsupportedError, match="拒绝了图片输入"):
-            planner._request_model_json(
-                _provider(),
-                system_prompt="Return JSON",
-                user_prompt="Create the drawing",
-                temperature=0.1,
-            )
-    finally:
-        planner._request_images.reset(token)
+
+    with pytest.raises(ProviderVisionUnsupportedError, match="明确拒绝"):
+        _request(_planner())
 
     assert len(client.payloads) == 1
+
+
+def test_response_format_fallback_only_runs_for_explicit_format_rejection(monkeypatch):
+    client = _VisionClient([
+        (400, {"error": {"message": "response_format json_object is not supported"}}),
+        (200, _success_payload()),
+    ])
+    monkeypatch.setattr(
+        "agentcad.vision_semantic_planner.httpx.Client",
+        lambda *, timeout, follow_redirects=False, transport=None: client,
+    )
+
+    assert _request(_planner()) == {}
+    assert len(client.payloads) == 2
     assert "response_format" in client.payloads[0]
+    assert "response_format" not in client.payloads[1]
+
+
+def test_generic_404_keeps_provider_response_error_and_does_not_resend_images(monkeypatch):
+    client = _VisionClient([(404, {"error": {"message": "route not found"}})])
+    monkeypatch.setattr(
+        "agentcad.vision_semantic_planner.httpx.Client",
+        lambda *, timeout, follow_redirects=False, transport=None: client,
+    )
+
+    with pytest.raises(LLMResponseError, match="HTTP 404"):
+        _request(_planner())
+
+    assert len(client.payloads) == 1

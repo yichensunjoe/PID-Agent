@@ -320,38 +320,6 @@ class SemanticTransactionCompiler:
             label=transaction.label or "Agent semantic transaction",
             source="llm",
         )
-        # An empty-document full-diagram task must produce visible elements.
-        # A plan that only adds layers/systems without any symbols, connectors or
-        # instruments leaves the canvas blank, so reject it and trigger a replan.
-        if not current.elements and not working.elements:
-            assessment = AgentTransactionAssessment(
-                valid=False,
-                stage="compile",
-                document_id=document_id,
-                current_revision=current.revision,
-                next_revision=current.revision + 1,
-                semantic_operation_count=len(transaction.operations),
-                compiled_operation_count=len(compiled),
-                resulting_element_count=len(working.elements),
-                issues=[
-                    _issue(
-                        index=None,
-                        operation="transaction",
-                        code="empty_full_diagram",
-                        message=(
-                            "空文档任务必须添加可见元素（设备、管线、仪表等），"
-                            "不能只添加图层或系统。请在一次事务中绘制完整的 P&ID 内容。"
-                        ),
-                        field_path="transaction.operations",
-                        suggestions=[
-                            "使用 add_element 添加设备符号（泵、阀门、储罐等），"
-                            "再用 connect_ports 连接管线的真实端口。",
-                            "不要只添加图层或系统就结束事务。",
-                        ],
-                    )
-                ],
-            )
-            return CompiledSemanticTransaction(assessment=assessment)
         assessment = analyze_transaction(
             self.service,
             document_id,

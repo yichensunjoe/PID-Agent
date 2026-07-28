@@ -33,9 +33,15 @@ test("creates a document, places two devices, connects real ports and preserves 
   const canvas = page.getByTestId("editor-canvas");
   await page.getByRole("button", { name: "立式储罐" }).click();
   await canvas.click({ position: { x: 220, y: 280 } });
+  const tankDialog = page.getByRole("dialog", { name: "放置设备" });
+  await expect(tankDialog).toBeVisible();
+  await tankDialog.getByRole("button", { name: "放置" }).click();
   await expect.poll(async () => (await workspaceSnapshot(page)).document.elements.length).toBe(1);
   await page.getByRole("button", { name: "离心泵" }).click();
   await canvas.click({ position: { x: 570, y: 320 } });
+  const pumpDialog = page.getByRole("dialog", { name: "放置设备" });
+  await expect(pumpDialog).toBeVisible();
+  await pumpDialog.getByRole("button", { name: "放置" }).click();
   await expect.poll(async () => (await workspaceSnapshot(page)).document.elements.length).toBe(2);
 
   let snapshot = await workspaceSnapshot(page);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type ProviderConfig } from "../api";
 import { useWorkspace } from "../store";
+import type { AgentImagePayload } from "./visionImageTypes";
 import type { SemanticAgentPlanResult, SemanticOperation } from "../types";
 import {
   automaticAgentApplyResponseError,
@@ -22,6 +23,8 @@ type Props = {
   prompt: string;
   context: string;
   provider: ProviderConfig;
+  images?: AgentImagePayload[];
+  requireVisibleOutput?: boolean;
   disabled?: boolean;
   onApplied?: () => void;
   onRunningChange?: (running: boolean) => void;
@@ -56,6 +59,8 @@ export function AutomaticAgentRunner({
   prompt,
   context,
   provider,
+  images = [],
+  requireVisibleOutput = false,
   disabled,
   onApplied,
   onRunningChange,
@@ -188,6 +193,8 @@ export function AutomaticAgentRunner({
         prompt.trim(),
         context,
         provider,
+        images,
+        requireVisibleOutput,
       );
       assertRunContext(origin, result);
       const entries: TraceEntry[] = [traceEntry(result)];
@@ -214,6 +221,8 @@ export function AutomaticAgentRunner({
           result.plan,
           nextAttempt,
           provider,
+          images,
+          requireVisibleOutput,
         );
         assertRunContext(origin, result);
         entries.push(traceEntry(result));

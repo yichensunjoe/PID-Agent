@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException
 
 from .agent_semantic import analyze_transaction
 from .agent_semantic_models import (
+    AgentOperationIssue,
     AgentTransactionAssessment,
+    CompiledSemanticTransaction,
     SemanticAgentApplyRequest,
     SemanticAgentPlanResult,
     SemanticTransaction,
@@ -42,7 +44,49 @@ def _provider_fields(request: VisionPlanningRequest) -> dict[str, Any]:
         "timeout_seconds": provider.timeout_seconds if provider else None,
         "api_key_present": bool(provider and provider.api_key),
         "reference_image_count": len(request.images),
+        "require_visible_output": request.require_visible_output,
     }
+
+
+def _enforce_visible_output_requirement(
+    service: DocumentService,
+    document_id: str,
+    required: bool,
+    compiled: CompiledSemanticTransaction,
+) -> CompiledSemanticTransaction:
+    """Apply the web-agent-only empty-canvas contract after permissive compilation.
+
+    Generic semantic compilation remains valid for MCP and programmatic layer/system
+    management. Callers must opt in when their user interaction explicitly requires
+    a visible drawing result.
+    """
+    if not required or not compiled.assessment.valid:
+        return compiled
+    current = service.get_document(document_id)
+    if current.elements or (compiled.assessment.resulting_element_count or 0) > 0:
+        return compiled
+    issue = AgentOperationIssue(
+        operation_index=None,
+        operation="transaction",
+        code="empty_full_diagram",
+        message=(
+            "当前网页 Agent 请求要求生成可见图形，但编译结果只包含图层或系统等结构操作。"
+            "请在同一事务中添加设备、管线或仪表。"
+        ),
+        field_path="transaction.operations",
+        suggestions=[
+            "添加至少一个真实设备、阀门、管线或仪表元素。",
+            "如果用户只要求管理图层或系统，请将 require_visible_output 设为 false。",
+        ],
+    )
+    assessment = compiled.assessment.model_copy(
+        update={"valid": False, "issues": [*compiled.assessment.issues, issue]},
+        deep=True,
+    )
+    return compiled.model_copy(
+        update={"transaction": None, "assessment": assessment},
+        deep=True,
+    )
 
 
 def _operation_types(plan, compiled) -> dict[str, Any]:
@@ -165,6 +209,9 @@ def create_semantic_agent_router(
             prepared_request = _with_harness_context(service, document_id, request)
             plan = planner.plan(document_id, prepared_request)
             compiled = compiler.compile(document_id, plan.transaction)
+            compiled = _enforce_visible_output_requirement(
+                service, document_id, request.require_visible_output, compiled
+            )
         except PlannerError as exc:
             if diagnostics is not None:
                 diagnostics.emit(
@@ -206,6 +253,9 @@ def create_semantic_agent_router(
         started = perf_counter()
         try:
             failed = compiler.compile(document_id, request.failed_plan.transaction)
+            failed = _enforce_visible_output_requirement(
+                service, document_id, request.require_visible_output, failed
+            )
             if diagnostics is not None:
                 diagnostics.emit(
                     "llm.semantic_replan.started",
@@ -225,6 +275,9 @@ def create_semantic_agent_router(
             prepared_request = _with_harness_context(service, document_id, request)
             plan = planner.replan(document_id, prepared_request, failed.assessment)
             compiled = compiler.compile(document_id, plan.transaction)
+            compiled = _enforce_visible_output_requirement(
+                service, document_id, request.require_visible_output, compiled
+            )
         except PlannerError as exc:
             if diagnostics is not None:
                 diagnostics.emit(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextvars import ContextVar
 from typing import Any
 
@@ -10,11 +11,11 @@ from .llm import (
     LLMResponseError,
     OpenAICompatiblePlanner,
     PlannerError,
+    ProviderConfig,
     ProviderConnectionError,
     ProviderNetworkPolicyError,
     ProviderTimeoutError,
 )
-from .models import ProviderConfig
 from .provider_compat import completion_temperature, extract_chat_content
 from .provider_security import ProviderURLPolicyError, provider_http_transport
 from .semantic_planner import SemanticAgentPlanner
@@ -31,8 +32,76 @@ class ProviderVisionUnsupportedError(PlannerError):
     status_code = 422
 
 
+def _provider_error_text(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text[:1000]
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            parts = [error.get(key) for key in ("message", "type", "code", "param")]
+            text = " ".join(str(part) for part in parts if part)
+            if text:
+                return text[:1000]
+        if isinstance(error, str):
+            return error[:1000]
+        message = payload.get("message")
+        if isinstance(message, str):
+            return message[:1000]
+    return json.dumps(payload, ensure_ascii=False)[:1000]
+
+
+def _response_format_rejected(response: httpx.Response) -> bool:
+    if response.status_code not in {400, 422}:
+        return False
+    text = _provider_error_text(response).lower()
+    mentions_format = "response_format" in text or "json_object" in text
+    rejected = any(
+        marker in text
+        for marker in (
+            "not supported",
+            "unsupported",
+            "unknown parameter",
+            "unrecognized",
+            "not allowed",
+            "invalid parameter",
+        )
+    )
+    return mentions_format and rejected
+
+
+def _vision_input_rejected(response: httpx.Response) -> bool:
+    if response.status_code not in {400, 415, 422}:
+        return False
+    text = _provider_error_text(response).lower()
+    mentions_image = any(
+        marker in text
+        for marker in (
+            "image_url",
+            "image input",
+            "image content",
+            "images are",
+            "vision",
+            "multimodal",
+        )
+    )
+    rejected = any(
+        marker in text
+        for marker in (
+            "not supported",
+            "unsupported",
+            "does not support",
+            "text-only",
+            "only text",
+            "invalid content type",
+        )
+    )
+    return mentions_image and rejected
+
+
 class VisionSemanticAgentPlanner(SemanticAgentPlanner):
-    """Semantic planner that preserves the existing schema-repair pipeline and adds images."""
+    """Semantic planner that preserves schema repair and adds validated images."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -96,7 +165,7 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
             ) as client:
                 response = client.post(endpoint, json=payload, headers=headers)
                 self.provider_transport._inspect_response(response, provider, endpoint)
-                if response.status_code in {400, 404, 422} and "response_format" in payload:
+                if _response_format_rejected(response):
                     fallback_payload = dict(payload)
                     fallback_payload.pop("response_format", None)
                     response = client.post(endpoint, json=fallback_payload, headers=headers)
@@ -117,10 +186,11 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                 provider=provider,
             ) from exc
 
-        if images and response.status_code in {400, 413, 415, 422}:
+        if images and _vision_input_rejected(response):
+            provider_message = _provider_error_text(response)
             raise ProviderVisionUnsupportedError(
-                "模型或 OpenAI 兼容接口拒绝了图片输入。请确认所选模型支持视觉识别，"
-                "且该接口接受 image_url 数据 URL 格式。",
+                "模型或 OpenAI 兼容接口明确拒绝了图片输入。"
+                f" Provider 返回：{provider_message}",
                 provider=provider,
                 provider_status=response.status_code,
             )

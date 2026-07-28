@@ -1,3 +1,4 @@
+import type { AgentImagePayload } from "./agent/visionImageTypes";
 import type { AutoLayoutOptions, AutoLayoutPreview } from "./layoutTypes";
 import type {
   AgentPlan,
@@ -149,6 +150,7 @@ function errorMessage(detail: unknown, fallback: string): string {
     if (structured.error === "invalid_access_token") return "服务访问令牌错误，请重新输入。";
     if (structured.error === "provider_authentication_failed") return "API Key 无效，或当前账号没有访问该模型的权限";
     if (structured.error === "provider_not_configured") return "尚未配置模型服务地址和模型名称";
+    if (structured.error === "provider_vision_unsupported") return `所选模型或接口不支持图片输入：${message}`;
     if (structured.error === "invalid_agent_plan") return `模型返回的事务未通过校验：${message}`;
     return message;
   }
@@ -320,6 +322,8 @@ export const api = {
     prompt: string,
     context: string,
     provider?: ProviderConfig,
+    images: AgentImagePayload[] = [],
+    requireVisibleOutput = false,
   ) => request<SemanticAgentPlanResult>(`/documents/${id}/agent/plan-v2`, {
     method: "POST",
     body: JSON.stringify({
@@ -328,6 +332,8 @@ export const api = {
       dry_run: true,
       expected_revision: revision,
       provider: providerPayload(provider),
+      images,
+      require_visible_output: requireVisibleOutput,
     }),
   }),
   replanSemanticAgent: (
@@ -338,6 +344,8 @@ export const api = {
     failedPlan: SemanticAgentPlan,
     attempt: number,
     provider?: ProviderConfig,
+    images: AgentImagePayload[] = [],
+    requireVisibleOutput = false,
   ) => request<SemanticAgentPlanResult>(`/documents/${id}/agent/replan`, {
     method: "POST",
     body: JSON.stringify({
@@ -347,6 +355,8 @@ export const api = {
       failed_plan: failedPlan,
       attempt,
       provider: providerPayload(provider),
+      images,
+      require_visible_output: requireVisibleOutput,
     }),
   }),
   planAgent: (

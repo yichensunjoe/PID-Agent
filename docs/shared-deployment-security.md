@@ -74,10 +74,13 @@ allowlist 是安全边界，应尽量小，并与网络防火墙或容器 egress
 | 环境变量 | 默认值 | 用途 |
 | --- | ---: | --- |
 | `PID_AGENT_MAX_JSON_BODY_BYTES` | 2 MiB | 普通 JSON 请求正文 |
+| `PID_AGENT_MAX_AGENT_BODY_BYTES` | 24 MiB | Agent 规划/重规划请求正文，包含 Base64 参考图片 |
 | `PID_AGENT_MAX_IMPORT_BODY_BYTES` | 25 MiB | 文档/项目包导入正文 |
 | `PID_AGENT_PROVIDER_MAX_RESPONSE_BYTES` | 4 MiB | Provider 响应 |
 | `PID_AGENT_MAX_CONCURRENT_REQUESTS` | 32 | 单进程并发请求 |
 | `PID_AGENT_AGENT_TIMEOUT_SECONDS` | 180 | Agent/Provider 超时上限；网页通过 `/api/v2/agent/runtime-config` 读取有效值 |
+
+`PID_AGENT_MAX_AGENT_BODY_BYTES` 只放宽规划与重规划路由；普通编辑事务仍受较小的 `PID_AGENT_MAX_JSON_BODY_BYTES` 约束。反向代理的请求体限制应不低于该值，否则参考图片会在到达应用前被拒绝。
 
 超限分别返回明确的 `413`、`429`、`502` 或 `504` 错误。内存并发限制只作用于单实例；多副本部署仍应在反向代理或 API Gateway 配置全局限流、连接限制和上传上限。
 

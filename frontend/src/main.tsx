@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { VisionImageInputEnhancements } from "./agent/VisionImageInputEnhancements";
+import { InputDialogHost } from "./editor/InputDialogHost";
 import { GridVisualCompatibility } from "./GridVisualCompatibility";
 import { ProcessInteractionEnhancements } from "./ProcessInteractionEnhancements";
 import { RuntimeEnhancements } from "./RuntimeEnhancements";
@@ -11,10 +11,10 @@ import "./styles.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
+    <InputDialogHost />
     <RuntimeEnhancements />
     <ProcessInteractionEnhancements />
     <GridVisualCompatibility />
-    <VisionImageInputEnhancements />
     <UiCompatibilityEnhancements />
   </StrictMode>,
 );
