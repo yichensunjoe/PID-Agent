@@ -32,14 +32,6 @@ class PermissiveSemanticTransactionCompiler(StrictSemanticTransactionCompiler):
             return strict_result
 
         current = self.service.get_document(document_id)
-        if not current.elements or any(
-            issue.code.startswith("drafting_") for issue in strict_result.assessment.issues
-        ):
-            # A newly generated full P&ID is one coherent engineering artifact.
-            # Silently dropping a wrong port, pipe, valve, or layout operation can
-            # make a visually plausible but logically incomplete drawing. Return
-            # structured issues so the planner must repair the complete plan.
-            return strict_result
         accepted: list[SemanticOperation] = []
         for operation in transaction.operations:
             candidate = transaction.model_copy(
