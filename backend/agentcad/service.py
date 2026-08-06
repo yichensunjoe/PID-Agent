@@ -288,7 +288,10 @@ class DocumentService:
 
         working.revision = current.revision + 1
         working.updated_at = datetime.now(UTC)
-        working = Document.model_validate(working.model_dump(mode="python"))
+        try:
+            working = Document.model_validate(working.model_dump(mode="python"))
+        except ValidationError as exc:
+            raise InvalidOperationError(f"resulting document is invalid: {exc}") from exc
         undo_stack = [*stored.undo_stack, current.model_dump(mode="json")][-self.history_limit :]
         history_source = source or transaction.source or "web"
         try:
@@ -312,8 +315,18 @@ class DocumentService:
             label=transaction.label,
         )
 
-    def undo(self, document_id: str, *, source: HistorySource = "web") -> Document:
+    def undo(
+        self,
+        document_id: str,
+        *,
+        expected_revision: int | None = None,
+        source: HistorySource = "web",
+    ) -> Document:
         stored = self._get_stored(document_id)
+        if expected_revision is not None and expected_revision != stored.document.revision:
+            raise RevisionConflictError(
+                f"expected revision {expected_revision}, current revision is {stored.document.revision}"
+            )
         if not stored.undo_stack:
             return stored.document
         previous = Document.model_validate(stored.undo_stack[-1])
@@ -343,8 +356,18 @@ class DocumentService:
             raise RevisionConflictError(str(exc)) from exc
         return previous
 
-    def redo(self, document_id: str, *, source: HistorySource = "web") -> Document:
+    def redo(
+        self,
+        document_id: str,
+        *,
+        expected_revision: int | None = None,
+        source: HistorySource = "web",
+    ) -> Document:
         stored = self._get_stored(document_id)
+        if expected_revision is not None and expected_revision != stored.document.revision:
+            raise RevisionConflictError(
+                f"expected revision {expected_revision}, current revision is {stored.document.revision}"
+            )
         if not stored.redo_stack:
             return stored.document
         next_document = Document.model_validate(stored.redo_stack[-1])

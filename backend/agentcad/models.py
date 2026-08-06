@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
@@ -16,7 +17,11 @@ def new_id(prefix: str) -> str:
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        allow_inf_nan=False,
+    )
 
 
 class Point(StrictModel):
@@ -169,7 +174,12 @@ class CanvasSettings(StrictModel):
 
 
 class Document(StrictModel):
-    id: str = Field(default_factory=lambda: new_id("doc"))
+    id: str = Field(
+        default_factory=lambda: new_id("doc"),
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9._~-]+$",
+    )
     name: str = "Untitled P&ID"
     revision: int = Field(default=0, ge=0)
     canvas: CanvasSettings = Field(default_factory=CanvasSettings)
@@ -184,6 +194,7 @@ class Document(StrictModel):
 
     @model_validator(mode="after")
     def validate_references(self) -> Document:
+        self._validate_finite_values(self.model_dump(mode="python"))
         layer_ids = [layer.id for layer in self.layers]
         if len(layer_ids) != len(set(layer_ids)):
             raise ValueError("layer ids must be unique")
@@ -223,6 +234,17 @@ class Document(StrictModel):
                         f"connector {element.id} {endpoint_name} must use junction port 'node'"
                     )
         return self
+
+    @staticmethod
+    def _validate_finite_values(value: Any, path: str = "document") -> None:
+        if isinstance(value, float) and not isfinite(value):
+            raise ValueError(f"{path} must be a finite number")
+        if isinstance(value, dict):
+            for key, child in value.items():
+                Document._validate_finite_values(child, f"{path}.{key}")
+        elif isinstance(value, (list, tuple)):
+            for index, child in enumerate(value):
+                Document._validate_finite_values(child, f"{path}[{index}]")
 
 
 class CreateDocumentRequest(StrictModel):
@@ -305,7 +327,10 @@ HistorySource = Literal["web", "llm", "mcp", "system"]
 
 
 class TransactionRequest(StrictModel):
-    operations: list[Operation] = Field(min_length=1, max_length=500)
+    # Dense reference reconstructions can legitimately exceed 500 low-level
+    # operations after connector normalization and annotation polish even when
+    # the semantic plan itself stays below its stricter 500-operation limit.
+    operations: list[Operation] = Field(min_length=1, max_length=1000)
     expected_revision: int | None = Field(default=None, ge=0)
     label: str = ""
     source: HistorySource | None = None
@@ -362,6 +387,8 @@ class ProviderConfig(StrictModel):
     model: str | None = None
     api_key: str | None = None
     timeout_seconds: float = Field(default=120, gt=0, le=600)
+    thinking_enabled: bool | None = None
+    thinking_level: Literal["low", "high", "max"] | None = None
 
 
 class AgentGenerateRequest(StrictModel):

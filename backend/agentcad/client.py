@@ -164,12 +164,28 @@ class AgentCADClient:
         )
         return ImportResult.model_validate(response.json())
 
-    def undo(self, document_id: str) -> Document:
-        response = self._request("POST", f"/documents/{document_id}/undo")
+    def undo(self, document_id: str, expected_revision: int | None = None) -> Document:
+        response = self._request(
+            "POST",
+            f"/documents/{document_id}/undo",
+            params=(
+                {"expected_revision": expected_revision}
+                if expected_revision is not None
+                else None
+            ),
+        )
         return Document.model_validate(response.json())
 
-    def redo(self, document_id: str) -> Document:
-        response = self._request("POST", f"/documents/{document_id}/redo")
+    def redo(self, document_id: str, expected_revision: int | None = None) -> Document:
+        response = self._request(
+            "POST",
+            f"/documents/{document_id}/redo",
+            params=(
+                {"expected_revision": expected_revision}
+                if expected_revision is not None
+                else None
+            ),
+        )
         return Document.model_validate(response.json())
 
     def list_symbols(self) -> list[SymbolDefinition]:

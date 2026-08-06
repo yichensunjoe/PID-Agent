@@ -15,20 +15,28 @@ from .agent_semantic_models import (
     SemanticTransaction,
 )
 from .diagnostics import DiagnosticLogger
+from .diagram_quality import drafting_prompt_contract
 from .llm import (
     LLMPlanValidationError,
     LLMResponseError,
     OpenAICompatiblePlanner,
     ProviderConnectionError,
     ProviderNetworkPolicyError,
+    ProviderResponseTooLargeError,
     ProviderTimeoutError,
 )
 from .models import AgentGenerateRequest, Document, ProviderConfig
-from .provider_compat import completion_temperature, extract_chat_content
+from .provider_compat import (
+    completion_budget_fields,
+    completion_temperature,
+    extract_chat_content,
+    thinking_request_fields,
+)
 from .provider_security import (
     ProviderNetworkPolicy,
     ProviderURLPolicyError,
     provider_http_transport,
+    request_with_response_limit,
 )
 from .service import DocumentService
 from .symbols import SymbolRegistry
@@ -72,7 +80,7 @@ class SemanticAgentPlanner:
         *,
         provider_policy: ProviderNetworkPolicy | None = None,
         max_response_bytes: int = 4 * 1024 * 1024,
-        max_timeout_seconds: float = 180,
+        max_timeout_seconds: float = 600,
     ):
         self.service = service
         self.symbols = symbols
@@ -246,6 +254,7 @@ class SemanticAgentPlanner:
                         repair_attempt,
                     ),
                     temperature=0.0,
+                    repair=True,
                 )
                 continue
 
@@ -269,6 +278,7 @@ class SemanticAgentPlanner:
         system_prompt: str,
         user_prompt: str,
         temperature: float,
+        repair: bool = False,
     ) -> dict[str, Any]:
         payload = {
             "model": provider.model,
@@ -279,6 +289,8 @@ class SemanticAgentPlanner:
             "temperature": completion_temperature(provider, temperature),
             "response_format": {"type": "json_object"},
         }
+        payload.update(completion_budget_fields(provider))
+        payload.update(thinking_request_fields(provider))
         headers = OpenAICompatiblePlanner._headers(provider)
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
         try:
@@ -287,14 +299,40 @@ class SemanticAgentPlanner:
                 follow_redirects=False,
                 transport=provider_http_transport(self.provider_transport.provider_policy),
             ) as client:
-                response = client.post(endpoint, json=payload, headers=headers)
+                response = request_with_response_limit(
+                    client,
+                    "POST",
+                    endpoint,
+                    self.provider_transport.max_response_bytes,
+                    json=payload,
+                    headers=headers,
+                )
                 self.provider_transport._inspect_response(response, provider, endpoint)
-                if response.status_code in {400, 404, 422} and "response_format" in payload:
+                if response.status_code in {400, 404, 422} and any(
+                    key in payload for key in (
+                        "response_format",
+                        "thinking",
+                        "reasoning_effort",
+                        "max_completion_tokens",
+                    )
+                ):
                     fallback_payload = dict(payload)
                     fallback_payload.pop("response_format", None)
-                    response = client.post(endpoint, json=fallback_payload, headers=headers)
+                    fallback_payload.pop("thinking", None)
+                    fallback_payload.pop("reasoning_effort", None)
+                    fallback_payload.pop("max_completion_tokens", None)
+                    response = request_with_response_limit(
+                        client,
+                        "POST",
+                        endpoint,
+                        self.provider_transport.max_response_bytes,
+                        json=fallback_payload,
+                        headers=headers,
+                    )
                     self.provider_transport._inspect_response(response, provider, endpoint)
         except ProviderURLPolicyError as exc:
+            if exc.category == "response size":
+                raise ProviderResponseTooLargeError(str(exc), provider=provider) from exc
             raise ProviderNetworkPolicyError(
                 str(exc), category=exc.category, provider=provider
             ) from exc
@@ -438,7 +476,9 @@ class SemanticAgentPlanner:
             "validation error requires a change. Do not add unrelated elements. Every bound connector endpoint "
             "must provide both element_id and port_id. A junction endpoint always uses port_id 'node'. A free "
             "endpoint has no element_id or port_id and must provide point. When instrument_tap already creates "
-            "a labeled instrument, remove any standalone add_element symbol with the same label."
+            "a labeled instrument, remove any standalone add_element symbol with the same label. Preserve the "
+            "drafting contract: exact valve type, correct inlet/outlet direction, aligned ports, orthogonal "
+            "routing, no micro-doglegs, and jump bridges for non-connecting crossings."
         )
 
     @staticmethod
@@ -476,15 +516,16 @@ class SemanticAgentPlanner:
             else "This is a local-edit task on an existing drawing. "
         )
         return (
-            "You are P&ID-Agent's semantic planning engine. "
+            "You are P&ID-Agent's deterministic semantic engineering and drafting engine. "
             f"{task_mode}"
             "Return JSON only with keys 'explanation' and 'transaction'. Preserve unrelated "
             "elements. Use only real element IDs, "
             "symbol keys and port IDs from the supplied document and catalog. "
             "When a later operation references an element or connector added earlier in the same transaction, "
             "assign an explicit unique id in the add operation and reuse that exact id. "
-            "Use connect_ports to create a semantic pipe between two real ports; use waypoints "
-            "instead of raw connector JSON when a specific orthogonal route is required. "
+            "Use connect_ports to create a semantic pipe between two real ports. Prefer no waypoints; "
+            "the deterministic router owns the final route. Supply waypoints only as coarse lane hints when "
+            "a genuine obstacle or reserved pipe highway makes a direct orthogonal route unsuitable. "
             "Use instrument_tap for pressure, temperature or flow takeoffs from a main connector. "
             "instrument_tap already creates the instrument symbol, root valve, junction and branch "
             "connectors: never add a second standalone symbol with the same instrument label. "
@@ -503,8 +544,8 @@ class SemanticAgentPlanner:
             "clearly asked to leave detached pipes or delete the connected pipes. "
             "Never change symbol_key through update_element. Use junction ports only as 'node'. "
             "For add_element connector endpoints: element_id and port_id are an inseparable pair; a free endpoint "
-            "must omit both and provide point. Keep connector routes orthogonal. Include expected_revision and a "
-            f"concise transaction label. {mode}\n\n"
+            "must omit both and provide point. Include expected_revision and a concise transaction label. "
+            f"{mode}\n\n{drafting_prompt_contract()}\n\n"
             f"Available symbol catalog:\n{self.symbols.as_prompt_catalog()}\n\n"
             f"Semantic transaction JSON Schema:\n{json.dumps(schema, ensure_ascii=False)}"
         )

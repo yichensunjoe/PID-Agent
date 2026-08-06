@@ -168,6 +168,44 @@ def test_concurrency_limit_returns_429_without_running_handler(tmp_path: Path):
     asyncio.run(run())
 
 
+def test_chunked_request_body_is_limited_before_handler_runs(tmp_path: Path):
+    boundary = RequestBoundary(settings(tmp_path, max_json_body_bytes=8))
+
+    async def run() -> None:
+        messages = iter(
+            [
+                {"type": "http.request", "body": b'{"name":', "more_body": True},
+                {"type": "http.request", "body": b'"too long"}', "more_body": False},
+            ]
+        )
+
+        async def receive() -> dict[str, object]:
+            return next(messages)
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v2/documents",
+            "raw_path": b"/api/v2/documents",
+            "query_string": b"",
+            "headers": [(b"content-type", b"application/json")],
+            "client": ("127.0.0.1", 1),
+            "server": ("test", 80),
+            "scheme": "http",
+            "http_version": "1.1",
+        }
+        request = Request(scope, receive)
+
+        async def call_next(_request: Request):
+            pytest.fail("handler must not run when a chunked body exceeds the limit")
+
+        response = await boundary(request, call_next)
+        assert response.status_code == 413
+        assert json.loads(response.body)["detail"]["error"] == "request_body_too_large"
+
+    asyncio.run(run())
+
+
 def test_python_client_sends_bearer_token_without_query_string():
     seen: list[httpx.Request] = []
 

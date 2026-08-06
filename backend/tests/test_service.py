@@ -84,6 +84,24 @@ def test_transaction_is_persisted_and_undoable(service: DocumentService):
     assert len(redone.elements) == 1
 
 
+def test_undo_and_redo_reject_stale_expected_revision(service: DocumentService):
+    document = service.create_document(CreateDocumentRequest())
+    changed = service.apply_transaction(
+        document.id,
+        TransactionRequest.model_validate(
+            {"expected_revision": 0, "operations": [{"op": "clear_document"}]}
+        ),
+    ).document
+
+    with pytest.raises(RevisionConflictError, match="current revision is 1"):
+        service.undo(document.id, expected_revision=0)
+
+    undone = service.undo(document.id, expected_revision=changed.revision)
+    assert undone.revision == 2
+    with pytest.raises(RevisionConflictError, match="current revision is 2"):
+        service.redo(document.id, expected_revision=changed.revision)
+
+
 def test_revision_conflict_rejects_stale_agent_write(service: DocumentService):
     document = service.create_document(CreateDocumentRequest())
     transaction = TransactionRequest.model_validate(

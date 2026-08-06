@@ -5,10 +5,12 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__
 from .api import create_v1_compat_router, create_v2_router
 from .api_acceptance import create_acceptance_router
 from .api_documents import create_documents_router
@@ -27,7 +29,7 @@ from .store import SQLiteDocumentStore
 from .symbols import SymbolRegistry
 from .vision_semantic_planner import VisionSemanticAgentPlanner
 
-VERSION = "2.1.0-alpha.1"
+VERSION = __version__
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -74,6 +76,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.diagnostics = diagnostics
     app.state.settings = settings
     app.state.provider_policy = provider_policy
+
+    def json_safe(value):
+        if isinstance(value, float) and not isfinite(value):
+            return None
+        if isinstance(value, dict):
+            return {str(key): json_safe(child) for key, child in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [json_safe(child) for child in value]
+        if isinstance(value, BaseException):
+            return str(value)
+        return value
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(_request: Request, exc: RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": json_safe(exc.errors())},
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

@@ -63,13 +63,17 @@ P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 
 要求 Python 3.11+ 和 Node.js 20+。
 
+PNG/PDF 导出还需要 Cairo 系统运行库。Debian/Ubuntu 可执行
+`sudo apt-get install libcairo2 libpango-1.0-0`；macOS 可执行
+`brew install cairo pango`。
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[mcp]"
 
 cd frontend
-npm install
+npm ci
 npm run build
 cd ..
 
@@ -260,6 +264,8 @@ GET    /api/v2/symbols
 GET    /api/v2/agent/tool-schema
 ```
 
+撤销和重做可通过 `expected_revision` 查询参数进行乐观并发校验；编辑器和 Python Client 会自动发送当前 revision，省略参数仍保留旧客户端兼容性。
+
 运行后访问 `/docs` 查看 OpenAPI。
 
 JSON 格式、冲突策略、原子失败语义、浏览器操作和 Python Client 示例见 [`docs/project-json-import.md`](docs/project-json-import.md)。
@@ -284,6 +290,8 @@ npm run test:e2e
 
 Playwright 安装、headed 模式、视觉基线更新和 trace 查看方式见 [`docs/browser-e2e-visual-acceptance.md`](docs/browser-e2e-visual-acceptance.md)。
 无需模型或 API Key 的图例、拓扑和 Agent 事务验收见 [`docs/offline-quality-harness.md`](docs/offline-quality-harness.md)。
+系统提示词、确定性端口路由、跨线桥和 95 分图面质量门禁见
+[`docs/pid-drafting-quality.md`](docs/pid-drafting-quality.md)。
 
 ## 近期路线
 

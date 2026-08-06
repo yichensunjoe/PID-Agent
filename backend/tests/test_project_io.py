@@ -8,7 +8,13 @@ from fastapi.testclient import TestClient
 
 from agentcad.config import Settings
 from agentcad.main import create_app
-from agentcad.models import CreateDocumentRequest, TransactionRequest
+from agentcad.models import (
+    CreateDocumentRequest,
+    Document,
+    Point,
+    SymbolElement,
+    TransactionRequest,
+)
 from agentcad.project_io import (
     DOCUMENT_FORMAT,
     FORMAT_VERSION,
@@ -17,7 +23,7 @@ from agentcad.project_io import (
     ProjectSettings,
 )
 from agentcad.service import DocumentService
-from agentcad.store import SQLiteDocumentStore
+from agentcad.store import SQLiteDocumentStore, StoredDocument
 from agentcad.symbols import SymbolRegistry
 
 
@@ -217,6 +223,38 @@ def test_project_package_round_trip_preserves_settings_and_is_atomic(tmp_path: P
     assert invalid.value.code == "unknown_symbol"
     assert target.store.document_ids() == before_ids
     assert target.get_project_settings() == before_settings
+
+
+def test_project_package_remaps_cross_document_opc_targets(tmp_path: Path):
+    source = make_service(tmp_path, "source-cross-document.db")
+    source_a = Document(
+        id="doc_a",
+        name="Unit A",
+        elements=[
+            SymbolElement(
+                id="opc_a",
+                symbol_key="off_page_connector_out",
+                position=Point(x=10, y=20),
+                width=70,
+                height=30,
+                properties={"target_document_id": "doc_b"},
+            )
+        ],
+    )
+    source_b = Document(id="doc_b", name="Unit B")
+    for item in (source_a, source_b):
+        source.store.save(StoredDocument(document=item, undo_stack=[], redo_stack=[]))
+
+    target = make_service(tmp_path, "target-cross-document.db")
+    for item in (Document(id="doc_a", name="Existing A"), Document(id="doc_b", name="Existing B")):
+        target.store.save(StoredDocument(document=item, undo_stack=[], redo_stack=[]))
+
+    result = target.import_project_payload(source.export_project_package().model_dump(mode="json"))
+    assert result.document_id_map["doc_a"] != "doc_a"
+    assert result.document_id_map["doc_b"] != "doc_b"
+    imported_a = next(item for item in result.documents if item.name == "Unit A")
+    imported_opc = imported_a.elements[0]
+    assert imported_opc.properties["target_document_id"] == result.document_id_map["doc_b"]
 
 
 def test_project_package_rejects_duplicate_ids_and_future_versions(tmp_path: Path):

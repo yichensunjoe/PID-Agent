@@ -21,6 +21,7 @@ from .provider_security import (
     ProviderURLPolicyError,
     ensure_response_within_limit,
     provider_http_transport,
+    request_with_response_limit,
 )
 
 __all__ = ["discover_provider_models", "normalize_openai_base_url"]
@@ -31,7 +32,7 @@ def discover_provider_models(
     *,
     provider_policy: ProviderNetworkPolicy | None = None,
     max_response_bytes: int = 4 * 1024 * 1024,
-    max_timeout_seconds: float = 180,
+    max_timeout_seconds: float = 600,
 ) -> dict[str, Any]:
     """List models from an OpenAI-compatible provider without persisting credentials."""
     if not request.base_url:
@@ -64,8 +65,16 @@ def discover_provider_models(
             follow_redirects=False,
             transport=provider_http_transport(policy),
         ) as client:
-            response = client.get(endpoint, headers=headers)
+            response = request_with_response_limit(
+                client,
+                "GET",
+                endpoint,
+                max_response_bytes,
+                headers=headers,
+            )
     except ProviderURLPolicyError as exc:
+        if exc.category == "response size":
+            raise ProviderResponseTooLargeError(str(exc), provider=provider) from exc
         raise ProviderNetworkPolicyError(
             str(exc), category=exc.category, provider=provider
         ) from exc

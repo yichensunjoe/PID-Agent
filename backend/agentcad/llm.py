@@ -10,13 +10,20 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 from pydantic import ValidationError
 
+from .diagram_quality import drafting_prompt_contract
 from .models import AgentGenerateRequest, AgentPlan, ProviderConfig, TransactionRequest
-from .provider_compat import completion_temperature, extract_chat_content
+from .provider_compat import (
+    completion_budget_fields,
+    completion_temperature,
+    extract_chat_content,
+    thinking_request_fields,
+)
 from .provider_security import (
     ProviderNetworkPolicy,
     ProviderURLPolicyError,
     ensure_response_within_limit,
     provider_http_transport,
+    request_with_response_limit,
 )
 from .service import DocumentService
 from .symbols import SymbolRegistry
@@ -135,7 +142,7 @@ class OpenAICompatiblePlanner:
         *,
         provider_policy: ProviderNetworkPolicy | None = None,
         max_response_bytes: int = 4 * 1024 * 1024,
-        max_timeout_seconds: float = 180,
+        max_timeout_seconds: float = 600,
     ):
         self.service = service
         self.symbols = symbols
@@ -158,7 +165,13 @@ class OpenAICompatiblePlanner:
                 follow_redirects=False,
                 transport=provider_http_transport(self.provider_policy),
             ) as client:
-                response = client.get(models_endpoint, headers=headers)
+                response = request_with_response_limit(
+                    client,
+                    "GET",
+                    models_endpoint,
+                    self.max_response_bytes,
+                    headers=headers,
+                )
                 self._inspect_response(response, provider, models_endpoint)
                 if response.status_code in {404, 405}:
                     result = self._test_with_minimal_completion(client, provider, headers)
@@ -182,6 +195,8 @@ class OpenAICompatiblePlanner:
                 # so the test must exercise the same completion path as generation.
                 result = self._test_with_minimal_completion(client, provider, headers)
         except ProviderURLPolicyError as exc:
+            if exc.category == "response size":
+                raise ProviderResponseTooLargeError(str(exc), provider=provider) from exc
             raise ProviderNetworkPolicyError(
                 str(exc), category=exc.category, provider=provider
             ) from exc
@@ -234,6 +249,8 @@ class OpenAICompatiblePlanner:
             "temperature": completion_temperature(provider, 0.1),
             "response_format": {"type": "json_object"},
         }
+        payload.update(completion_budget_fields(provider))
+        payload.update(thinking_request_fields(provider))
         headers = self._headers(provider)
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
 
@@ -243,14 +260,40 @@ class OpenAICompatiblePlanner:
                 follow_redirects=False,
                 transport=provider_http_transport(self.provider_policy),
             ) as client:
-                response = client.post(endpoint, json=payload, headers=headers)
+                response = request_with_response_limit(
+                    client,
+                    "POST",
+                    endpoint,
+                    self.max_response_bytes,
+                    json=payload,
+                    headers=headers,
+                )
                 self._inspect_response(response, provider, endpoint)
-                if response.status_code in {400, 404, 422} and "response_format" in payload:
+                if response.status_code in {400, 404, 422} and any(
+                    key in payload for key in (
+                        "response_format",
+                        "thinking",
+                        "reasoning_effort",
+                        "max_completion_tokens",
+                    )
+                ):
                     fallback_payload = dict(payload)
                     fallback_payload.pop("response_format", None)
-                    response = client.post(endpoint, json=fallback_payload, headers=headers)
+                    fallback_payload.pop("thinking", None)
+                    fallback_payload.pop("reasoning_effort", None)
+                    fallback_payload.pop("max_completion_tokens", None)
+                    response = request_with_response_limit(
+                        client,
+                        "POST",
+                        endpoint,
+                        self.max_response_bytes,
+                        json=fallback_payload,
+                        headers=headers,
+                    )
                     self._inspect_response(response, provider, endpoint)
         except ProviderURLPolicyError as exc:
+            if exc.category == "response size":
+                raise ProviderResponseTooLargeError(str(exc), provider=provider) from exc
             raise ProviderNetworkPolicyError(
                 str(exc), category=exc.category, provider=provider
             ) from exc
@@ -317,18 +360,38 @@ class OpenAICompatiblePlanner:
         headers: dict[str, str],
     ) -> dict[str, Any]:
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
-        response = client.post(
+        payload = {
+            "model": provider.model,
+            "messages": [{"role": "user", "content": "Reply with OK."}],
+            "temperature": completion_temperature(provider, 0),
+            "max_tokens": 1,
+            "stream": False,
+            **thinking_request_fields(provider),
+        }
+        response = request_with_response_limit(
+            client,
+            "POST",
             endpoint,
+            self.max_response_bytes,
             headers=headers,
-            json={
-                "model": provider.model,
-                "messages": [{"role": "user", "content": "Reply with OK."}],
-                "temperature": completion_temperature(provider, 0),
-                "max_tokens": 1,
-                "stream": False,
-            },
+            json=payload,
         )
         self._inspect_response(response, provider, endpoint)
+        if response.status_code in {400, 404, 422} and any(
+            key in payload for key in ("thinking", "reasoning_effort")
+        ):
+            fallback_payload = dict(payload)
+            fallback_payload.pop("thinking", None)
+            fallback_payload.pop("reasoning_effort", None)
+            response = request_with_response_limit(
+                client,
+                "POST",
+                endpoint,
+                self.max_response_bytes,
+                headers=headers,
+                json=fallback_payload,
+            )
+            self._inspect_response(response, provider, endpoint)
         self._raise_for_response(response, provider)
         try:
             payload = response.json()
@@ -371,6 +434,13 @@ class OpenAICompatiblePlanner:
             )
         if response.is_error:
             body = response.text[:1000]
+            if response.status_code in {408, 504, 524, 529}:
+                raise LLMResponseError(
+                    "model provider timed out before returning a completion; "
+                    "try a lower thinking level or a smaller reference image",
+                    provider=provider,
+                    provider_status=response.status_code,
+                )
             if response.status_code == 400 and "invalid temperature" in body.lower():
                 raise LLMResponseError(
                     "模型拒绝了 temperature 参数。Kimi Coding 模型要求 temperature=1；"
@@ -387,13 +457,13 @@ class OpenAICompatiblePlanner:
 
     def _system_prompt(self, schema: dict[str, Any]) -> str:
         return (
-            "You are P&ID-Agent's planning engine. Convert the user's process description "
-            "into one valid atomic drawing transaction. Use only symbols from the catalog. "
-            "Preserve existing elements unless the user explicitly asks to modify or delete them. "
-            "Prefer connector elements for process pipes so source/target semantics remain machine-readable. "
-            "Use junction elements for real branch and merge topology, not visual overlaps. "
-            "Use orthogonal connector point sequences when practical. Return JSON only with keys "
-            "'explanation' and 'transaction'. Never invent operation types or symbol keys.\n\n"
+            "You are P&ID-Agent's deterministic engineering planning engine. Convert the user's "
+            "process intent into one valid atomic drawing transaction. Engineering topology and drafting "
+            "quality are equally mandatory. Preserve unrelated elements and use only catalog symbols, "
+            "real ports, junctions for real topology, and connector elements for process pipes. Never "
+            "invent operation types, symbol keys, ports, decorative pipes, or arrow text. Return JSON only "
+            "with keys 'explanation' and 'transaction'.\n\n"
+            f"{drafting_prompt_contract()}\n\n"
             f"Available symbol catalog:\n{self.symbols.as_prompt_catalog()}\n\n"
             f"Transaction JSON Schema:\n{json.dumps(schema, ensure_ascii=False)}"
         )
@@ -402,7 +472,7 @@ class OpenAICompatiblePlanner:
     def _resolve_provider(
         override: ProviderConfig | None,
         policy: ProviderNetworkPolicy | None = None,
-        max_timeout_seconds: float = 180,
+        max_timeout_seconds: float = 600,
     ) -> ProviderConfig:
         provider = override or ProviderConfig()
         custom_connection = bool(
@@ -429,6 +499,8 @@ class OpenAICompatiblePlanner:
             unsafe_provider = ProviderConfig(
                 base_url=_safe_provider_url(base_url),
                 model=model,
+                thinking_enabled=provider.thinking_enabled,
+                thinking_level=provider.thinking_level,
                 timeout_seconds=min(provider.timeout_seconds, max_timeout_seconds),
             )
             raise ProviderNetworkPolicyError(
@@ -438,6 +510,8 @@ class OpenAICompatiblePlanner:
             base_url=normalized,
             model=model,
             api_key=api_key,
+            thinking_enabled=provider.thinking_enabled,
+            thinking_level=provider.thinking_level,
             timeout_seconds=min(provider.timeout_seconds, max_timeout_seconds),
         )
 

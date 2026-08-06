@@ -7,6 +7,7 @@ from heapq import heappop, heappush
 from math import hypot
 from typing import Literal
 
+from .diagram_quality import port_outward_normal
 from .layout_models import AutoLayoutMetrics, AutoLayoutPreview, AutoLayoutRequest, LayoutBounds
 from .models import (
     ConnectorElement,
@@ -86,7 +87,19 @@ class AutoLayoutEngine:
         self.service = service
 
     def preview(self, document_id: str, request: AutoLayoutRequest) -> AutoLayoutPreview:
-        document = self.service.get_document(document_id)
+        return self.preview_document(self.service.get_document(document_id), request)
+
+    def preview_document(
+        self,
+        document: Document,
+        request: AutoLayoutRequest,
+    ) -> AutoLayoutPreview:
+        """Preview layout for a supplied snapshot without persisting it.
+
+        The semantic compiler uses this entry point for a newly generated drawing
+        that has not yet been committed. The public preview API continues to load
+        the persisted snapshot through :meth:`preview`.
+        """
         if request.expected_revision is not None and request.expected_revision != document.revision:
             raise RevisionConflictError(
                 f"expected revision {request.expected_revision}, current revision is {document.revision}"
@@ -125,7 +138,22 @@ class AutoLayoutEngine:
         ]
         nodes = self._make_nodes(document, scope_ids, locked_layer_ids)
         components = self._components(scope_ids, graph_connectors)
-        positions = self._layout_components(document, nodes, components, graph_connectors, request)
+        positions = (
+            {
+                element_id: Point.model_validate(
+                    element_map[element_id].position.model_dump(mode="python")
+                )
+                for element_id in nodes
+            }
+            if request.preserve_positions
+            else self._layout_components(
+                document,
+                nodes,
+                components,
+                graph_connectors,
+                request,
+            )
+        )
 
         working = Document.model_validate(document.model_dump(mode="python"))
         operations: list[Operation] = []
@@ -195,9 +223,9 @@ class AutoLayoutEngine:
                     visible_layer_ids,
                     visible_system_ids,
                 )
-                route = self._route_connector(
-                    connector.points[0],
-                    connector.points[-1],
+                route = self._route_bound_connector(
+                    working,
+                    connector,
                     obstacles,
                     lane_segments,
                     request.lane_gap,
@@ -684,6 +712,8 @@ class AutoLayoutEngine:
         lane_segments: list[Segment],
         lane_gap: float,
         grid_size: float,
+        source_normal: tuple[int, int] | None = None,
+        target_normal: tuple[int, int] | None = None,
     ) -> list[Point] | None:
         if self._same(start.x, end.x) or self._same(start.y, end.y):
             direct = Segment(start, end)
@@ -694,6 +724,19 @@ class AutoLayoutEngine:
         xs = {start.x, end.x}
         ys = {start.y, end.y}
         step = max(4.0, min(grid_size, lane_gap))
+        shared_lane_offset = max(grid_size * 2, lane_gap * 2)
+        xs.update(
+            {
+                min(start.x, end.x) - shared_lane_offset,
+                max(start.x, end.x) + shared_lane_offset,
+            }
+        )
+        ys.update(
+            {
+                min(start.y, end.y) - shared_lane_offset,
+                max(start.y, end.y) + shared_lane_offset,
+            }
+        )
         for rect in relevant:
             xs.update({rect.x1, rect.x2, rect.x1 - lane_gap, rect.x2 + lane_gap})
             ys.update({rect.y1, rect.y2, rect.y1 - lane_gap, rect.y2 + lane_gap})
@@ -726,10 +769,22 @@ class AutoLayoutEngine:
             by_y[point.y].append(index)
         for indices in by_x.values():
             indices.sort(key=lambda value: points[value].y)
-            self._connect_adjacent(indices, points, neighbors, relevant)
+            self._connect_adjacent(
+                indices,
+                points,
+                neighbors,
+                relevant,
+                minimum_leg=grid_size,
+            )
         for indices in by_y.values():
             indices.sort(key=lambda value: points[value].x)
-            self._connect_adjacent(indices, points, neighbors, relevant)
+            self._connect_adjacent(
+                indices,
+                points,
+                neighbors,
+                relevant,
+                minimum_leg=grid_size,
+            )
 
         start_index = point_index[(start.x, start.y)]
         end_index = point_index[(end.x, end.y)]
@@ -748,8 +803,24 @@ class AutoLayoutEngine:
                 final_state = state
                 break
             for neighbor, segment in neighbors.get(current, []):
+                dx = segment.end.x - segment.start.x
+                dy = segment.end.y - segment.start.y
+                if (
+                    current == start_index
+                    and source_normal is not None
+                    and dx * source_normal[0] + dy * source_normal[1] < -EPSILON
+                ):
+                    continue
+                if (
+                    neighbor == end_index
+                    and target_normal is not None
+                    and dx * target_normal[0] + dy * target_normal[1] > EPSILON
+                ):
+                    continue
                 direction = 1 if segment.horizontal else 2
                 next_cost = cost + segment.length
+                if segment.length < grid_size - EPSILON:
+                    next_cost += (grid_size - segment.length + 1) * 10_000
                 if incoming_direction and incoming_direction != direction:
                     next_cost += bend_penalty
                 next_cost += self._lane_penalty(segment, lane_segments, lane_gap)
@@ -771,6 +842,70 @@ class AutoLayoutEngine:
             state = previous[state]
         path_indices.reverse()
         return [Point.model_validate(points[index].model_dump()) for index in path_indices]
+
+    def _route_bound_connector(
+        self,
+        document: Document,
+        connector: ConnectorElement,
+        obstacles: list[Rect],
+        lane_segments: list[Segment],
+        lane_gap: float,
+        grid_size: float,
+    ) -> list[Point] | None:
+        start = connector.points[0]
+        end = connector.points[-1]
+        element_map = {element.id: element for element in document.elements}
+
+        def endpoint_normal(endpoint):
+            if endpoint is None or not endpoint.element_id or not endpoint.port_id:
+                return None
+            element = element_map.get(endpoint.element_id)
+            if element is None or element.type != "symbol":
+                return None
+            return port_outward_normal(element, endpoint.port_id, self.service.symbols)
+
+        source_normal = endpoint_normal(connector.source)
+        target_normal = endpoint_normal(connector.target)
+        guarded_obstacles = list(obstacles)
+        for endpoint in (connector.source, connector.target):
+            if endpoint is None or not endpoint.element_id:
+                continue
+            element = element_map.get(endpoint.element_id)
+            if element is None:
+                continue
+            rect = self._element_rect(element)
+            if rect is not None:
+                guarded_obstacles.append(rect.expanded(2.0))
+        stub = max(20.0, grid_size)
+        start_stub = (
+            Point(
+                x=start.x + source_normal[0] * stub,
+                y=start.y + source_normal[1] * stub,
+            )
+            if source_normal is not None
+            else start
+        )
+        end_stub = (
+            Point(
+                x=end.x + target_normal[0] * stub,
+                y=end.y + target_normal[1] * stub,
+            )
+            if target_normal is not None
+            else end
+        )
+        middle = self._route_connector(
+            start_stub,
+            end_stub,
+            guarded_obstacles,
+            lane_segments,
+            lane_gap,
+            grid_size,
+            source_normal,
+            target_normal,
+        )
+        if middle is None:
+            return None
+        return self._simplify([start, start_stub, *middle, end_stub, end])
 
     @staticmethod
     def _relevant_obstacles(
@@ -803,13 +938,21 @@ class AutoLayoutEngine:
         points: list[Point],
         neighbors: dict[int, list[tuple[int, Segment]]],
         obstacles: list[Rect],
+        *,
+        minimum_leg: float = 0.0,
     ) -> None:
-        for left, right in zip(indices, indices[1:], strict=False):
-            segment = Segment(points[left], points[right])
-            if segment.length <= EPSILON or not cls._segment_clear(segment, obstacles):
-                continue
-            neighbors[left].append((right, segment))
-            neighbors[right].append((left, Segment(segment.end, segment.start)))
+        for position, left in enumerate(indices[:-1]):
+            for right in indices[position + 1 :]:
+                segment = Segment(points[left], points[right])
+                if segment.length <= EPSILON:
+                    continue
+                if not cls._segment_clear(segment, obstacles):
+                    break
+                if segment.length < minimum_leg - EPSILON:
+                    continue
+                neighbors[left].append((right, segment))
+                neighbors[right].append((left, Segment(segment.end, segment.start)))
+                break
 
     @classmethod
     def _segment_clear(cls, segment: Segment, obstacles: list[Rect]) -> bool:

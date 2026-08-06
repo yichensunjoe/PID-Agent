@@ -34,7 +34,7 @@ from .service import (
     InvalidOperationError,
     RevisionConflictError,
 )
-from .svg import render_svg
+from .svg import render_png, render_svg
 
 
 def _record_revision_details(
@@ -283,9 +283,17 @@ def create_v2_router(
         return _call(_validate_transaction, service, document_id, request)
 
     @router.post("/documents/{document_id}/undo", response_model=Document)
-    def undo(document_id: str):
+    def undo(
+        document_id: str,
+        expected_revision: Annotated[int | None, Query(ge=0)] = None,
+    ):
         before = _call(service.get_document, document_id)
-        updated = _call(service.undo, document_id, source="web")
+        updated = _call(
+            service.undo,
+            document_id,
+            expected_revision=expected_revision,
+            source="web",
+        )
         if updated.revision != before.revision:
             _record_revision_details(
                 service,
@@ -299,9 +307,17 @@ def create_v2_router(
         return updated
 
     @router.post("/documents/{document_id}/redo", response_model=Document)
-    def redo(document_id: str):
+    def redo(
+        document_id: str,
+        expected_revision: Annotated[int | None, Query(ge=0)] = None,
+    ):
         before = _call(service.get_document, document_id)
-        updated = _call(service.redo, document_id, source="web")
+        updated = _call(
+            service.redo,
+            document_id,
+            expected_revision=expected_revision,
+            source="web",
+        )
         if updated.revision != before.revision:
             _record_revision_details(
                 service,
@@ -427,15 +443,21 @@ def create_v2_router(
             raise HTTPException(status_code=422, detail="scale must be between 0.1 and 8")
         document = _call(service.get_document, document_id)
         try:
-            import cairosvg
-
-            payload = cairosvg.svg2png(
-                bytestring=render_svg(document, service.symbols).encode("utf-8"),
+            payload = render_png(
+                document,
+                service.symbols,
                 output_width=int(document.canvas.width * scale),
                 output_height=int(document.canvas.height * scale),
             )
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"PNG export failed: {exc}") from exc
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "png_render_failed",
+                    "message": "PNG export failed",
+                    "retryable": True,
+                },
+            ) from exc
         return Response(
             payload,
             media_type="image/png",

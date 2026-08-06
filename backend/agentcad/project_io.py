@@ -111,14 +111,31 @@ def remap_conflicting_document_ids(
             code="document_id_conflict",
         )
     for document in documents:
-        cloned = Document.model_validate(document.model_dump(mode="python"))
-        original_id = cloned.id
+        original_id = document.id
         if original_id in occupied:
-            cloned.id = _deterministic_document_id(cloned, occupied)
-            id_map[original_id] = cloned.id
-        occupied.add(cloned.id)
-        remapped.append(cloned)
+            id_map[original_id] = _deterministic_document_id(document, occupied)
+            occupied.add(id_map[original_id])
+        else:
+            occupied.add(original_id)
+
+    for document in documents:
+        payload = _remap_document_references(document.model_dump(mode="python"), id_map)
+        payload["id"] = id_map.get(document.id, document.id)
+        remapped.append(Document.model_validate(payload))
     return remapped, id_map
+
+
+def _remap_document_references(value: Any, id_map: dict[str, str], *, key: str = "") -> Any:
+    if isinstance(value, dict):
+        return {
+            item_key: _remap_document_references(item_value, id_map, key=str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_remap_document_references(item, id_map, key=key) for item in value]
+    if key == "target_document_id" and isinstance(value, str):
+        return id_map.get(value, value)
+    return value
 
 
 def _deterministic_document_id(document: Document, occupied: set[str]) -> str:

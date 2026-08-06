@@ -38,29 +38,44 @@ def _points(points: list[Any]) -> str:
     return " ".join(f"{point.x},{point.y}" for point in points)
 
 
-def _render_symbol_shape(shape: dict[str, Any]) -> str:
+def _render_symbol_shape(shape: dict[str, Any], *, counter_rotation: float = 0) -> str:
     kind = shape.get("type")
+    dash = ""
+    raw_dash = shape.get("dash")
+    if isinstance(raw_dash, list) and raw_dash and all(
+        isinstance(value, (int, float)) and value > 0 for value in raw_dash
+    ):
+        dash = f' stroke-dasharray="{",".join(str(value) for value in raw_dash)}"'
     if kind == "line":
-        return f'<line x1="{shape["x1"]}" y1="{shape["y1"]}" x2="{shape["x2"]}" y2="{shape["y2"]}" />'
+        return (
+            f'<line x1="{shape["x1"]}" y1="{shape["y1"]}" '
+            f'x2="{shape["x2"]}" y2="{shape["y2"]}"{dash} />'
+        )
     if kind == "polyline":
         points = " ".join(f"{x},{y}" for x, y in shape["points"])
         tag = "polygon" if shape.get("closed") else "polyline"
         fill = shape.get("fill", "none")
-        return f'<{tag} points="{points}" fill="{escape(str(fill), quote=True)}" />'
+        return f'<{tag} points="{points}" fill="{escape(str(fill), quote=True)}"{dash} />'
     if kind == "rect":
         return (
             f'<rect x="{shape["x"]}" y="{shape["y"]}" '
             f'width="{shape["width"]}" height="{shape["height"]}" '
-            f'rx="{shape.get("rx", 0)}" />'
+            f'rx="{shape.get("rx", 0)}"{dash} />'
         )
     if kind == "circle":
-        return f'<circle cx="{shape["cx"]}" cy="{shape["cy"]}" r="{shape["r"]}" />'
+        return f'<circle cx="{shape["cx"]}" cy="{shape["cy"]}" r="{shape["r"]}"{dash} />'
     if kind == "path":
-        return f'<path d="{escape(str(shape["d"]), quote=True)}" />'
+        return f'<path d="{escape(str(shape["d"]), quote=True)}"{dash} />'
     if kind == "text":
+        transform = (
+            f' transform="rotate({-counter_rotation} {shape["x"]} {shape["y"]})"'
+            if counter_rotation
+            else ""
+        )
         return (
             f'<text x="{shape["x"]}" y="{shape["y"]}" '
-            f'font-size="{shape.get("font_size", 12)}" text-anchor="{shape.get("anchor", "middle")}">'
+            f'font-size="{shape.get("font_size", 12)}" '
+            f'text-anchor="{shape.get("anchor", "middle")}"{transform}>'
             f"{escape(str(shape.get('text', '')))}</text>"
         )
     return ""
@@ -125,12 +140,57 @@ def _render_element(element: Element, registry: SymbolRegistry) -> str:
         definition = registry.get(element.symbol_key)
         sx = element.width / definition.width
         sy = element.height / definition.height
-        shapes = "".join(_render_symbol_shape(shape) for shape in definition.shapes)
+        embedded_off_page_label = element.metadata.get("embedded_off_page_label")
+        has_embedded = isinstance(embedded_off_page_label, str) and bool(embedded_off_page_label)
+        text_overrides = element.metadata.get("text_overrides")
+        if not isinstance(text_overrides, dict):
+            text_overrides = {}
+        rendered_shapes: list[str] = []
+        for index, shape in enumerate(definition.shapes):
+            if has_embedded and shape.get("type") == "text":
+                continue
+            if (
+                not has_embedded
+                and shape.get("type") == "text"
+                and str(index) in text_overrides
+            ):
+                override = text_overrides[str(index)]
+                if isinstance(override, dict) and "x" in override and "y" in override:
+                    shape = {**shape, "x": override["x"], "y": override["y"]}
+            rendered_shapes.append(
+                _render_symbol_shape(shape, counter_rotation=element.rotation)
+            )
+        shapes = "".join(rendered_shapes)
+        if isinstance(embedded_off_page_label, str) and embedded_off_page_label:
+            label_font_size = max(
+                7.0,
+                min(13.0, 96.0 / max(1, len(embedded_off_page_label))),
+            )
+            label_x = definition.width / 2
+            label_y = definition.height / 2
+            label_transform = (
+                f' transform="rotate({-element.rotation:g} {label_x} {label_y})"'
+                if element.rotation
+                else ""
+            )
+            shapes += (
+                f'<text x="{label_x}" y="{label_y}" text-anchor="middle" '
+                f'font-size="{label_font_size:g}" fill="{escape(element.style.stroke, quote=True)}"'
+                f'{label_transform}>'
+                f"{escape(embedded_off_page_label)}</text>"
+            )
         label = ""
         if element.label:
+            label_x = definition.width / 2
+            label_y = definition.height + 16
+            transform = (
+                f' transform="rotate({-element.rotation} {label_x} {label_y})"'
+                if element.rotation
+                else ""
+            )
             label = (
-                f'<text x="{definition.width / 2}" y="{definition.height + 16}" '
-                f'text-anchor="middle" font-size="12" fill="{escape(element.style.stroke, quote=True)}">'
+                f'<text x="{label_x}" y="{label_y}" text-anchor="middle" '
+                f'font-size="12" fill="{escape(element.style.stroke, quote=True)}"{transform}>'
                 f"{escape(element.label)}</text>"
             )
         return (
@@ -187,6 +247,36 @@ def _render_arrow(connector: ConnectorElement) -> str:
         f'points="{tip[0]},{tip[1]} {left[0]},{left[1]} {right[0]},{right[1]}" '
         f'fill="{escape(connector.style.stroke, quote=True)}" opacity="{connector.style.opacity}" />'
     )
+
+
+def _arrow_connectors(connectors: list[ConnectorElement]) -> list[ConnectorElement]:
+    """Render one arrow for each logical route and declared direction.
+
+    Instrument taps split a logical pipe into multiple connector elements. Flow
+    semantics stay on every segment, while the drawing should not expose those
+    internal splits as a row of repeated arrowheads.
+    """
+
+    selected: dict[tuple[str, str], ConnectorElement] = {}
+    lengths: dict[tuple[str, str], float] = {}
+    for connector in connectors:
+        if connector.flow_direction == "none":
+            continue
+        route_value = connector.metadata.get("main_route_id")
+        route_id = route_value if isinstance(route_value, str) and route_value else connector.id
+        key = (route_id, connector.flow_direction)
+        length = sum(
+            abs(second.x - first.x) + abs(second.y - first.y)
+            for first, second in zip(connector.points, connector.points[1:], strict=False)
+        )
+        current = selected.get(key)
+        if current is None or length > lengths[key] or (
+            length == lengths[key] and connector.id < current.id
+        ):
+            selected[key] = connector
+            lengths[key] = length
+    selected_ids = {connector.id for connector in selected.values()}
+    return [connector for connector in connectors if connector.id in selected_ids]
 
 
 def _crossing(first: Point, second: Point, third: Point, fourth: Point) -> Point | None:
@@ -286,7 +376,7 @@ def _render_svg_content(
     connectors = [element for element in rendered_elements if element.type == "connector"]
     body = "".join(_render_element(element, registry) for element in rendered_elements)
     overlays = _render_jumps(connectors, document.canvas.background)
-    arrows = "".join(_render_arrow(connector) for connector in connectors)
+    arrows = "".join(_render_arrow(connector) for connector in _arrow_connectors(connectors))
     background = (
         f'<rect x="{export_bounds.x}" y="{export_bounds.y}" '
         f'width="{export_bounds.width}" height="{export_bounds.height}" '
@@ -331,4 +421,22 @@ def render_svg(
         f'viewBox="{export_bounds.x} {export_bounds.y} {export_bounds.width} {export_bounds.height}" '
         f'font-family="{SVG_FONT_FAMILY}" data-document-id="{escape(document.id, quote=True)}" data-revision="{document.revision}" '
         f'data-rendered-elements="{rendered_count}">{content}</svg>'
+    )
+
+
+def render_png(
+    document: Document,
+    registry: SymbolRegistry,
+    *,
+    output_width: int,
+    output_height: int,
+    bounds: ExportBounds | None = None,
+) -> bytes:
+    """Render the canonical SVG scene to PNG using one shared implementation."""
+    import cairosvg
+
+    return cairosvg.svg2png(
+        bytestring=render_svg(document, registry, bounds).encode("utf-8"),
+        output_width=output_width,
+        output_height=output_height,
     )

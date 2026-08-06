@@ -9,10 +9,12 @@ from agentcad.llm import LLMResponseError, OpenAICompatiblePlanner
 from agentcad.models import AgentGenerateRequest, Document, ProviderConfig
 from agentcad.provider_compat import (
     KIMI_CODING_BASE_URL,
+    completion_budget_fields,
     completion_temperature,
     extract_chat_content,
     is_kimi_coding_provider,
     normalize_openai_base_url,
+    thinking_request_fields,
 )
 from agentcad.semantic_planner import SemanticAgentPlanner
 
@@ -111,6 +113,39 @@ def test_kimi_coding_temperature_is_forced_to_one():
     ) == 0.1
 
 
+def test_thinking_request_fields_are_optional_and_provider_compatible():
+    provider = ProviderConfig(
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        thinking_enabled=True,
+        thinking_level="max",
+    )
+    assert thinking_request_fields(provider) == {
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "max",
+    }
+    assert thinking_request_fields(
+        provider.model_copy(update={"thinking_enabled": False})
+    ) == {"thinking": {"type": "disabled"}}
+    assert thinking_request_fields(ProviderConfig()) == {}
+
+
+def test_kimi_k3_uses_reasoning_effort_without_k2_thinking_flag():
+    provider = ProviderConfig(
+        base_url=KIMI_CODING_BASE_URL,
+        model="k3",
+        thinking_enabled=True,
+        thinking_level="high",
+    )
+
+    assert thinking_request_fields(provider) == {"reasoning_effort": "high"}
+    assert thinking_request_fields(
+        provider.model_copy(update={"thinking_enabled": False})
+    ) == {"reasoning_effort": "low"}
+    assert completion_budget_fields(provider) == {"max_completion_tokens": 8_192}
+    assert completion_budget_fields(provider, vision=True) == {"max_completion_tokens": 16_384}
+
+
 def test_classic_plan_uses_kimi_compatible_temperature(monkeypatch):
     client = _PlanClient()
     monkeypatch.setattr("agentcad.llm.httpx.Client", lambda *, timeout, follow_redirects=False, transport=None: client)
@@ -123,6 +158,8 @@ def test_classic_plan_uses_kimi_compatible_temperature(monkeypatch):
             provider=ProviderConfig(
                 base_url="https://api.kimi.com/coding/",
                 model="kimi-for-coding",
+                thinking_enabled=True,
+                thinking_level="max",
             ),
         ),
     )
@@ -130,6 +167,8 @@ def test_classic_plan_uses_kimi_compatible_temperature(monkeypatch):
     assert plan.transaction.operations[0].op == "clear_document"
     assert client.requests[0]["url"] == "https://api.kimi.com/coding/v1/chat/completions"
     assert client.requests[0]["json"]["temperature"] == 1.0  # type: ignore[index]
+    assert client.requests[0]["json"]["thinking"] == {"type": "enabled"}  # type: ignore[index]
+    assert client.requests[0]["json"]["reasoning_effort"] == "max"  # type: ignore[index]
 
 
 def test_minimal_completion_uses_kimi_compatible_temperature():

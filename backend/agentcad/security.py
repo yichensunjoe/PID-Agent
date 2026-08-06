@@ -96,6 +96,7 @@ class RequestBoundary:
             if not secrets.compare_digest(supplied, self.settings.api_token):
                 return _error(403, "invalid_access_token", "The supplied service access token is invalid.")
 
+        body_limit: int | None = None
         if protected and request.method in {"POST", "PUT", "PATCH"}:
             if path.startswith("/api/v2/imports/"):
                 limit = self.settings.max_import_body_bytes
@@ -103,6 +104,7 @@ class RequestBoundary:
                 limit = self.settings.max_agent_body_bytes
             else:
                 limit = self.settings.max_json_body_bytes
+            body_limit = limit
             content_length = request.headers.get("Content-Length")
             if content_length:
                 try:
@@ -110,15 +112,6 @@ class RequestBoundary:
                         return _error(413, "request_body_too_large", f"Request body exceeds {limit} bytes.")
                 except ValueError:
                     return _error(400, "invalid_content_length", "Content-Length must be an integer.")
-            body = await request.body()
-            if len(body) > limit:
-                return _error(413, "request_body_too_large", f"Request body exceeds {limit} bytes.")
-
-            async def receive() -> dict[str, object]:
-                return {"type": "http.request", "body": body, "more_body": False}
-
-            request._receive = receive  # type: ignore[attr-defined]
-
         try:
             await asyncio.wait_for(self._semaphore.acquire(), timeout=0.01)
         except TimeoutError:
@@ -128,6 +121,25 @@ class RequestBoundary:
                 "The server is handling the configured maximum number of concurrent requests.",
             )
         try:
+            if body_limit is not None:
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in request.stream():
+                    total += len(chunk)
+                    if total > body_limit:
+                        return _error(
+                            413,
+                            "request_body_too_large",
+                            f"Request body exceeds {body_limit} bytes.",
+                        )
+                    chunks.append(chunk)
+                body = b"".join(chunks)
+                request._body = body  # type: ignore[attr-defined]
+
+                async def receive() -> dict[str, object]:
+                    return {"type": "http.request", "body": body, "more_body": False}
+
+                request._receive = receive  # type: ignore[attr-defined]
             response = await call_next(request)
         finally:
             self._semaphore.release()

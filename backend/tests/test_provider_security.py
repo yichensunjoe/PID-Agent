@@ -7,7 +7,11 @@ from agentcad.llm import LLMResponseError, ProviderNetworkPolicyError
 from agentcad.models import ProviderConfig
 from agentcad.provider_compat import KIMI_CODING_BASE_URL
 from agentcad.provider_discovery import discover_provider_models
-from agentcad.provider_security import ProviderNetworkPolicy, ProviderURLPolicyError
+from agentcad.provider_security import (
+    ProviderNetworkPolicy,
+    ProviderURLPolicyError,
+    request_with_response_limit,
+)
 
 PUBLIC_IP = "93.184.216.34"
 
@@ -249,6 +253,76 @@ def test_provider_timeout_is_capped_and_oversized_response_is_rejected():
     )
     with pytest.raises(ProviderResponseTooLargeError):
         planner._inspect_response(response, provider, str(response.request.url))
+
+
+def test_provider_request_streams_and_stops_at_response_limit():
+    class Response:
+        def __init__(self):
+            self.status_code = 200
+            self.headers = httpx.Headers({"content-type": "application/json"})
+            self.request = httpx.Request("GET", "https://public.example/v1/models")
+            self.extensions: dict[str, object] = {}
+
+        @staticmethod
+        def iter_bytes():
+            yield b"1234"
+            yield b"5678"
+            yield b"9"
+
+    class StreamContext:
+        def __enter__(self):
+            return Response()
+
+        def __exit__(self, *_args):
+            return None
+
+    class Client:
+        def stream(self, *_args, **_kwargs):
+            return StreamContext()
+
+    with pytest.raises(ProviderURLPolicyError, match="response exceeded") as exc_info:
+        request_with_response_limit(Client(), "GET", "https://public.example/v1/models", 8)  # type: ignore[arg-type]
+    assert exc_info.value.category == "response size"
+
+
+def test_provider_request_disables_compression_for_streaming_reads():
+    captured: dict[str, object] = {}
+
+    class Response:
+        status_code = 200
+        headers = httpx.Headers({"content-type": "application/json"})
+        request = httpx.Request("GET", "https://public.example/v1/models")
+        extensions: dict[str, object] = {}
+
+        @staticmethod
+        def iter_bytes():
+            yield b"{}"
+
+    class StreamContext:
+        def __enter__(self):
+            return Response()
+
+        def __exit__(self, *_args):
+            return None
+
+    class Client:
+        def stream(self, _method, _url, **kwargs):
+            captured.update(kwargs)
+            return StreamContext()
+
+    response = request_with_response_limit(
+        Client(),
+        "GET",
+        "https://public.example/v1/models",
+        8,
+        headers={"Authorization": "Bearer redacted"},
+    )  # type: ignore[arg-type]
+
+    assert response.content == b"{}"
+    assert captured["headers"] == {
+        "Authorization": "Bearer redacted",
+        "Accept-Encoding": "identity",
+    }
 
 
 def test_public_redirect_is_still_rejected_with_explicit_category():

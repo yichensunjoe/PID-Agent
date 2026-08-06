@@ -12,6 +12,7 @@ from agentcad.models import (
     ConnectorElement,
     CreateDocumentRequest,
     DeleteElementOperation,
+    Document,
     Layer,
     Point,
     SystemGroup,
@@ -97,6 +98,30 @@ def test_system_visibility_flow_arrows_jumps_and_history(tmp_path: Path):
     restored = service.undo(document.id, source="web")
     assert next(system for system in restored.systems if system.id == "system_cw").visible
     assert service.get_history(document.id)[0].action == "undo"
+
+
+def test_svg_renders_one_arrow_for_split_logical_route():
+    document = Document(
+        elements=[
+            ConnectorElement(
+                id="short_segment",
+                points=[Point(x=0, y=20), Point(x=40, y=20)],
+                flow_direction="forward",
+                metadata={"main_route_id": "main"},
+            ),
+            ConnectorElement(
+                id="long_segment",
+                points=[Point(x=40, y=20), Point(x=160, y=20)],
+                flow_direction="forward",
+                metadata={"main_route_id": "main"},
+            ),
+        ]
+    )
+
+    svg = render_svg(document, SymbolRegistry())
+
+    assert 'data-arrow-for="long_segment"' in svg
+    assert 'data-arrow-for="short_segment"' not in svg
 
 
 def test_locked_layer_rejects_element_edit_and_delete(tmp_path: Path):

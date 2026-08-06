@@ -48,7 +48,7 @@ class Settings:
     max_import_body_bytes: int = 25 * 1024 * 1024
     provider_max_response_bytes: int = 4 * 1024 * 1024
     max_concurrent_requests: int = 32
-    agent_timeout_seconds: float = 180.0
+    agent_timeout_seconds: float = 600.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -136,7 +136,7 @@ class Settings:
             agent_timeout_seconds=_float_env(
                 "PID_AGENT_AGENT_TIMEOUT_SECONDS",
                 "AGENTCAD_AGENT_TIMEOUT_SECONDS",
-                180.0,
+                600.0,
             ),
         )
         settings.validate()
@@ -169,3 +169,5 @@ class Settings:
                 raise ValueError(f"{name} must be greater than zero")
         if self.agent_timeout_seconds <= 0:
             raise ValueError("agent_timeout_seconds must be greater than zero")
+        if self.agent_timeout_seconds > 600:
+            raise ValueError("agent_timeout_seconds must not exceed 600 seconds")

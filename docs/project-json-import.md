@@ -65,7 +65,7 @@ A project package is imported in one SQLite transaction. All documents and proje
 
 Both import endpoints accept `conflict_policy`:
 
-- `regenerate` (default): keep every element ID and internal reference unchanged, but deterministically assign a new document ID when the incoming document ID already exists;
+- `regenerate` (default): keep every element ID, deterministically assign a new document ID when the incoming document ID already exists, and rewrite known cross-document references such as `properties.target_document_id`;
 - `reject`: return HTTP 409 without writing anything.
 
 The response includes `document_id_map`, which maps each conflicting source document ID to its imported ID. Element IDs are not silently rewritten. Duplicate document IDs inside one project package are invalid.

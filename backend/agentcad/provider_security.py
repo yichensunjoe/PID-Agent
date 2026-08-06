@@ -171,6 +171,58 @@ def ensure_response_within_limit(response: httpx.Response, max_bytes: int) -> No
         )
 
 
+def request_with_response_limit(
+    client: httpx.Client,
+    method: str,
+    url: str,
+    max_bytes: int,
+    **kwargs: object,
+) -> httpx.Response:
+    """Fetch a response without buffering more than the configured byte limit.
+
+    A few OpenAI-compatible providers advertise a compressed response while
+    returning an already-decoded body.  httpx can read that body when buffered,
+    but its streaming decoder raises ``DecodingError``.  Provider discovery and
+    completion should not turn that provider quirk into a misleading connection
+    failure, so bounded provider reads explicitly request an identity encoding.
+    """
+    headers = kwargs.get("headers")
+    if isinstance(headers, httpx.Headers):
+        request_headers = headers.copy()
+    elif isinstance(headers, dict):
+        request_headers = dict(headers)
+    else:
+        request_headers = {}
+    request_headers.setdefault("Accept-Encoding", "identity")
+    kwargs["headers"] = request_headers
+    stream_method = getattr(client, "stream", None)
+    if stream_method is None:
+        # Small test doubles may only implement get/post. Keep them compatible while
+        # production httpx clients use the bounded streaming path below.
+        response = getattr(client, method.lower())(url, **kwargs)
+        ensure_response_within_limit(response, max_bytes)
+        return response
+
+    with stream_method(method, url, **kwargs) as response:
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in response.iter_bytes():
+            total += len(chunk)
+            if total > max_bytes:
+                raise ProviderURLPolicyError(
+                    "response size",
+                    f"Provider response exceeded the configured {max_bytes} byte limit.",
+                )
+            chunks.append(chunk)
+        return httpx.Response(
+            status_code=response.status_code,
+            headers=response.headers,
+            content=b"".join(chunks),
+            request=response.request,
+            extensions=response.extensions,
+        )
+
+
 class _PolicySyncBackend(httpcore.SyncBackend):
     """Connect shared deployments to a validated IP instead of resolving twice."""
 

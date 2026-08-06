@@ -17,6 +17,7 @@ class AutoLayoutRequest(StrictModel):
     obstacle_margin: float = Field(default=24, ge=4, le=200)
     lane_gap: float = Field(default=24, ge=4, le=120)
     reroute_connectors: bool = True
+    preserve_positions: bool = False
     include_hidden: bool = False
 
 

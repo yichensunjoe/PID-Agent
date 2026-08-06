@@ -20,7 +20,7 @@ from .pdf_export import (
     render_print_sheet_svg,
 )
 from .service import DocumentNotFoundError, DocumentService
-from .svg import render_svg
+from .svg import render_png, render_svg
 
 DEFAULT_MAX_EXPORT_PIXELS = 40_000_000
 ExportRange = Literal["canvas", "content", "viewport"]
@@ -260,14 +260,13 @@ def create_export_router(
                     ],
                 },
             )
-        svg = render_svg(document, service.symbols, bounds)
         try:
-            import cairosvg
-
-            payload = cairosvg.svg2png(
-                bytestring=svg.encode("utf-8"),
+            payload = render_png(
+                document,
+                service.symbols,
                 output_width=output_width,
                 output_height=output_height,
+                bounds=bounds,
             )
         except Exception as exc:
             if diagnostics is not None:

@@ -114,11 +114,17 @@ def test_connect_ports_waypoints_compile_to_manual_route(tmp_path):
     connector = operation.element
     assert connector.type == "connector"
     assert connector.routing == "manual"
+    # Model waypoints are retained as intent metadata, while the deterministic
+    # router owns the final balanced, port-aware orthogonal route.
     assert [(point.x, point.y) for point in connector.points] == [
         (160, 120),
-        (260, 120),
-        (260, 240),
+        (280, 120),
+        (280, 240),
         (400, 240),
+    ]
+    assert connector.metadata["requested_waypoints"] == [
+        {"x": 260.0, "y": 120.0},
+        {"x": 260.0, "y": 240.0},
     ]
 
 

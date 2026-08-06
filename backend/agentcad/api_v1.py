@@ -56,6 +56,17 @@ def create_v1_compat_router(service: DocumentService) -> APIRouter:
         return layer.id, [{"op": "add_layer", "layer": layer}]
 
     def build_element(raw: dict[str, Any]):
+        try:
+            return _build_element(raw)
+        except HTTPException:
+            raise
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid legacy primitive: {exc}",
+            ) from exc
+
+    def _build_element(raw: dict[str, Any]):
         kind = raw.get("type")
         style = Style(
             stroke=str(raw.get("color", "#111827")),
@@ -96,7 +107,10 @@ def create_v1_compat_router(service: DocumentService) -> APIRouter:
             )
         if kind in {"symbol", "industrial_symbol"}:
             key = raw.get("symbol_key") or raw.get("symbol_type")
-            definition = service.symbols.get(str(key))
+            try:
+                definition = service.symbols.get(str(key))
+            except KeyError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             return SymbolElement(
                 symbol_key=str(key),
                 position=Point(x=raw.get("x", 0), y=raw.get("y", 0)),
@@ -188,7 +202,10 @@ def create_v1_compat_router(service: DocumentService) -> APIRouter:
 
     @router.post("/draw/symbol")
     def draw_symbol(request: LegacySymbolRequest):
-        definition = service.symbols.get(request.symbol_type)
+        try:
+            definition = service.symbols.get(request.symbol_type)
+        except KeyError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return add(
             SymbolElement(
                 symbol_key=request.symbol_type,

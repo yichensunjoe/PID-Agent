@@ -119,6 +119,43 @@ def test_document_transaction_status_and_svg_export(tmp_path: Path):
     assert exported_json.json()["revision"] == 1
 
 
+def test_transaction_rejects_non_finite_numbers_without_writing(tmp_path: Path):
+    client = make_client(tmp_path)
+    document = client.post("/api/v2/documents", json={"name": "Finite values"}).json()
+
+    response = client.post(
+        f"/api/v2/documents/{document['id']}/transactions",
+        content=b'{"expected_revision":0,"operations":[{"op":"add_element","element":{"type":"line","start":{"x":NaN,"y":0},"end":{"x":10,"y":10}}}]}',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert client.get(f"/api/v2/documents/{document['id']}").json()["revision"] == 0
+
+
+def test_undo_requires_current_revision(tmp_path: Path):
+    client = make_client(tmp_path)
+    document = client.post("/api/v2/documents", json={"name": "Undo race"}).json()
+    changed = client.post(
+        f"/api/v2/documents/{document['id']}/transactions",
+        json={"expected_revision": 0, "operations": [{"op": "clear_document"}]},
+    ).json()["document"]
+
+    stale = client.post(
+        f"/api/v2/documents/{document['id']}/undo",
+        params={"expected_revision": 0},
+    )
+    assert stale.status_code == 409
+    assert "current revision is 1" in stale.json()["detail"]
+
+    current = client.post(
+        f"/api/v2/documents/{document['id']}/undo",
+        params={"expected_revision": changed["revision"]},
+    )
+    assert current.status_code == 200
+    assert current.json()["revision"] == 2
+
+
 def test_agent_timeout_returns_structured_504(tmp_path: Path, monkeypatch):
     def raise_timeout(self, document_id, request):
         provider = ProviderConfig(
@@ -291,3 +328,25 @@ def test_legacy_endpoint_uses_v2_document_engine(tmp_path: Path):
     assert listed.json()["data"]["primitives"][0]["type"] == "line"
     scene = client.get("/api/v1/scene").json()
     assert scene["elements"][0]["type"] == "line"
+
+
+def test_legacy_validation_returns_422_for_invalid_geometry_and_symbols(tmp_path: Path):
+    client = make_client(tmp_path)
+    assert client.post("/api/v1/draw/line", json={"start": [0], "end": [1, 1]}).status_code == 422
+    assert client.post(
+        "/api/v1/draw/rectangle",
+        json={"x1": 1, "y1": 2, "x2": 1, "y2": 4},
+    ).status_code == 422
+    assert client.post(
+        "/api/v1/draw/symbol",
+        json={"symbol_type": "missing-symbol"},
+    ).status_code == 422
+    assert client.post(
+        "/api/v1/draw/batch",
+        json={"operations": [{"type": "line", "start": [0]}]},
+    ).status_code == 422
+    assert client.post(
+        "/api/v1/draw/line",
+        content=b'{"start":[NaN,0],"end":[1,1]}',
+        headers={"Content-Type": "application/json"},
+    ).status_code == 422
