@@ -12,7 +12,7 @@ from pydantic import Field
 from .exporting import ExportBounds
 from .models import Document, StrictModel
 from .project_io import ProjectSettings
-from .svg import render_svg_fragment
+from .svg import load_cairosvg, render_svg_fragment
 from .symbols import SymbolRegistry
 
 PaperSize = Literal["A4", "A3", "A2", "A1", "A0"]
@@ -476,9 +476,9 @@ def render_pdf_bytes(
     plan: PdfExportPlan,
 ) -> bytes:
     try:
-        import cairosvg
+        cairosvg = load_cairosvg()
         from pypdf import PdfReader, PdfWriter
-    except ImportError as exc:  # pragma: no cover - installation failure
+    except (ImportError, OSError) as exc:  # pragma: no cover - installation failure
         raise PdfExportError("PDF export dependencies are unavailable", code="pdf_unavailable") from exc
 
     writer = PdfWriter()

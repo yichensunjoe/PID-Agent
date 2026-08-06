@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from html import escape
@@ -11,6 +12,37 @@ from .models import ConnectorElement, Document, Element, Point, Style
 from .symbols import SymbolRegistry
 
 SVG_FONT_FAMILY = "Noto Sans CJK SC, Noto Sans CJK, DejaVu Sans, sans-serif"
+
+
+def load_cairosvg():
+    """Import cairosvg, with a macOS Homebrew fallback for cairo discovery.
+
+    Homebrew installs cairo under /opt/homebrew/lib (Apple Silicon) or
+    /usr/local/lib (Intel). cairocffi resolves the library through
+    ctypes.util.find_library, which re-reads DYLD_LIBRARY_PATH on every call
+    (pure-Python macholib), so adding the Homebrew lib dir to the environment
+    and retrying the import works without touching the system.
+    """
+    try:
+        import cairosvg
+
+        return cairosvg
+    except OSError:
+        for candidate in (
+            "/opt/homebrew/lib",
+            "/usr/local/lib",
+        ):
+            if os.path.isdir(candidate) and os.path.exists(
+                os.path.join(candidate, "libcairo.2.dylib")
+            ):
+                existing = os.environ.get("DYLD_LIBRARY_PATH", "")
+                os.environ["DYLD_LIBRARY_PATH"] = (
+                    f"{candidate}:{existing}" if existing else candidate
+                )
+                import cairosvg
+
+                return cairosvg
+        raise
 
 
 @dataclass(frozen=True)
@@ -433,7 +465,7 @@ def render_png(
     bounds: ExportBounds | None = None,
 ) -> bytes:
     """Render the canonical SVG scene to PNG using one shared implementation."""
-    import cairosvg
+    cairosvg = load_cairosvg()
 
     return cairosvg.svg2png(
         bytestring=render_svg(document, registry, bounds).encode("utf-8"),
