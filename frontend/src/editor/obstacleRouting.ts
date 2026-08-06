@@ -655,8 +655,3 @@ export function doglegTouchesLockedPoint(connector: ConnectorElement, segmentInd
   const candidates = connector.points.slice(Math.max(0, segmentIndex - 1), Math.min(connector.points.length, segmentIndex + 3));
   return locked.some((point) => candidates.some((candidate) => pointsEqual(candidate, point)));
 }
-
-export function pointBelongsToRoute(points: Point[], point: Point): boolean {
-  return points.some((candidate) => pointsEqual(candidate, point))
-    || points.slice(0, -1).some((candidate, index) => pointOnSegment(point, candidate, points[index + 1]));
-}

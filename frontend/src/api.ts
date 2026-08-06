@@ -78,6 +78,8 @@ export type ProviderConfig = {
   model?: string;
   api_key?: string;
   timeout_seconds?: number;
+  thinking_enabled?: boolean;
+  thinking_level?: "low" | "high" | "max";
 };
 
 export type ProviderTestResult = {
@@ -228,12 +230,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function providerPayload(provider?: ProviderConfig): ProviderConfig | undefined {
-  if (!provider?.base_url && !provider?.model && !provider?.api_key && !provider?.timeout_seconds) return undefined;
+  if (!provider?.base_url && !provider?.model && !provider?.api_key && !provider?.timeout_seconds && provider?.thinking_enabled === undefined && !provider?.thinking_level) return undefined;
   return {
     base_url: provider.base_url || undefined,
     model: provider.model || undefined,
     api_key: provider.api_key || undefined,
     timeout_seconds: provider.timeout_seconds,
+    thinking_enabled: provider.thinking_enabled,
+    thinking_level: provider.thinking_level,
   };
 }
 
@@ -311,8 +315,14 @@ export const api = {
       transaction,
     }),
   }),
-  undo: (id: string) => request<Document>(`/documents/${id}/undo`, { method: "POST" }),
-  redo: (id: string) => request<Document>(`/documents/${id}/redo`, { method: "POST" }),
+  undo: (id: string, revision?: number) => request<Document>(
+    `/documents/${id}/undo${revision == null ? "" : `?expected_revision=${encodeURIComponent(revision)}`}`,
+    { method: "POST" },
+  ),
+  redo: (id: string, revision?: number) => request<Document>(
+    `/documents/${id}/redo${revision == null ? "" : `?expected_revision=${encodeURIComponent(revision)}`}`,
+    { method: "POST" },
+  ),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
   listProviderModels: (provider: ProviderConfig) => request<ProviderModelsResult>("/agent/provider/models", { method: "POST", body: JSON.stringify(provider) }),
   testProvider: (provider: ProviderConfig) => request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider) }),

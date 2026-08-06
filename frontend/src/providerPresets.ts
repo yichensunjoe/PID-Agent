@@ -79,3 +79,7 @@ export function presetForBaseUrl(baseUrl: string): string {
     [preset.baseUrl, ...(preset.aliases ?? [])].some((candidate) => normalizePresetUrl(candidate) === normalized),
   )?.id ?? "custom";
 }
+
+export function defaultModelForPreset(presetId: string): string {
+  return PROVIDER_PRESETS.find((preset) => preset.id === presetId)?.defaultModel ?? "";
+}

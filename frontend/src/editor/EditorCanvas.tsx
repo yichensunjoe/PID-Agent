@@ -18,6 +18,7 @@ import type {
   SymbolPort,
   SymbolShape,
 } from "../types";
+import { visibleFlowArrowConnectors } from "./flowArrowSelection";
 import {
   dedupePoints,
   insertEditableSegment,
@@ -113,6 +114,19 @@ type EndpointDrag = {
   activeConnection?: ConnectionHit;
 } | null;
 type BoxSelection = { start: Point; current: Point; additive: boolean } | null;
+type TextDrag = {
+  symbol: SymbolElement;
+  shapeIndex: number;
+  text: string;
+  current: Point;
+} | null;
+type ResizeCorner = "nw" | "ne" | "sw" | "se";
+type ResizeDrag = {
+  symbol: SymbolElement;
+  corner: ResizeCorner;
+  orig: { x: number; y: number; w: number; h: number };
+  current: Point;
+} | null;
 type ViewBox = { x: number; y: number; width: number; height: number };
 type Bounds = SpatialBounds;
 type ContextMenuState = {
@@ -163,16 +177,27 @@ const MINIMAP_WIDTH = 188;
 const MINIMAP_HEIGHT = 124;
 const newElementId = () => `el_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
-function shapeNode(shape: SymbolShape, key: number) {
-  if (shape.type === "line") return <line key={key} {...shape} />;
+function shapeNode(shape: SymbolShape, key: number, counterRotation = 0) {
+  const dashValue = "dash" in shape && shape.dash ? shape.dash.join(" ") : undefined;
+  const dash = dashValue ? { strokeDasharray: dashValue } : undefined;
+  if (shape.type === "line") return <line key={key} x1={shape.x1} y1={shape.y1} x2={shape.x2} y2={shape.y2} {...dash} />;
   if (shape.type === "polyline") {
     const points = shape.points.map((point) => point.join(",")).join(" ");
-    return shape.closed ? <polygon key={key} points={points} /> : <polyline key={key} points={points} />;
+    return shape.closed
+      ? <polygon key={key} points={points} fill={shape.fill ?? "none"} {...dash} />
+      : <polyline key={key} points={points} {...dash} />;
   }
-  if (shape.type === "rect") return <rect key={key} {...shape} />;
-  if (shape.type === "circle") return <circle key={key} {...shape} />;
-  if (shape.type === "path") return <path key={key} d={shape.d} />;
-  return <text key={key} x={shape.x} y={shape.y} fontSize={shape.font_size ?? 12} textAnchor="middle">{shape.text}</text>;
+  if (shape.type === "rect") return <rect key={key} x={shape.x} y={shape.y} width={shape.width} height={shape.height} rx={shape.rx ?? 0} {...dash} />;
+  if (shape.type === "circle") return <circle key={key} cx={shape.cx} cy={shape.cy} r={shape.r} {...dash} />;
+  if (shape.type === "path") return <path key={key} d={shape.d} {...dash} />;
+  return <text
+    key={key}
+    x={shape.x}
+    y={shape.y}
+    fontSize={shape.font_size ?? 12}
+    textAnchor={shape.anchor === "start" || shape.anchor === "end" ? shape.anchor : "middle"}
+    transform={counterRotation ? `rotate(${-counterRotation} ${shape.x} ${shape.y})` : undefined}
+  >{shape.text}</text>;
 }
 
 function previewTint(element: Element, stroke: string, dash: number[] = [7, 5], opacity = 0.88): Element {
@@ -215,9 +240,43 @@ function renderElement(element: Element, symbols: Map<string, SymbolDefinition>)
   if (!definition) return null;
   const scaleX = element.width / definition.width;
   const scaleY = element.height / definition.height;
+  const embeddedLabel = element.metadata.embedded_off_page_label;
+  const hasEmbeddedLabel = typeof embeddedLabel === "string" && embeddedLabel.length > 0;
+  const visibleShapes = hasEmbeddedLabel
+    ? definition.shapes.filter((shape) => shape.type !== "text")
+    : definition.shapes;
+  const textOverrides = element.metadata.text_overrides;
+  let embeddedNode = null;
+  if (hasEmbeddedLabel) {
+    const embeddedFontSize = Math.max(7, Math.min(13, 96 / Math.max(1, embeddedLabel.length)));
+    embeddedNode = (
+      <text
+        x={47}
+        y={30}
+        textAnchor="middle"
+        fontSize={embeddedFontSize}
+        fill={element.style.stroke}
+        transform={element.rotation ? `rotate(${-element.rotation} 47 30)` : undefined}
+      >{embeddedLabel}</text>
+    );
+  }
   return <g transform={`translate(${element.position.x} ${element.position.y}) rotate(${element.rotation} ${element.width / 2} ${element.height / 2}) scale(${scaleX} ${scaleY})`} {...style}>
-    {definition.shapes.map(shapeNode)}
-    {element.label ? <text x={definition.width / 2} y={definition.height + 15} textAnchor="middle" fontSize={12} fill={element.style.stroke}>{element.label}</text> : null}
+    {visibleShapes.map((shape, index) => {
+      if (!hasEmbeddedLabel && shape.type === "text" && textOverrides && typeof textOverrides === "object") {
+        const override = (textOverrides as Record<string, { x: number; y: number }>)[String(index)];
+        if (override) return shapeNode({ ...shape, x: override.x, y: override.y }, index, element.rotation);
+      }
+      return shapeNode(shape, index, element.rotation);
+    })}
+    {embeddedNode}
+    {element.label ? <text
+      x={definition.width / 2}
+      y={definition.height + 15}
+      textAnchor="middle"
+      fontSize={12}
+      fill={element.style.stroke}
+      transform={element.rotation ? `rotate(${-element.rotation} ${definition.width / 2} ${definition.height + 15})` : undefined}
+    >{element.label}</text> : null}
   </g>;
 }
 
@@ -568,6 +627,8 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   const [drag, setDrag] = useState<DragState>(null);
   const [segmentDrag, setSegmentDrag] = useState<SegmentDrag>(null);
   const [endpointDrag, setEndpointDrag] = useState<EndpointDrag>(null);
+  const [textDrag, setTextDrag] = useState<TextDrag>(null);
+  const [resizeDrag, setResizeDrag] = useState<ResizeDrag>(null);
   const [boxSelection, setBoxSelection] = useState<BoxSelection>(null);
   const [pan, setPan] = useState<{ start: Point; view: ViewBox } | null>(null);
   const [viewBox, setViewBox] = useState<ViewBox | null>(null);
@@ -575,6 +636,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [cursorPoint, setCursorPoint] = useState<Point>({ x: 0, y: 0 });
   const [canvasMessage, setCanvasMessage] = useState("");
+  const [minimapCollapsed, setMinimapCollapsed] = useState(false);
   const quickConnector = useRef(false);
   const minimapDragging = useRef(false);
   const commandHandlerRef = useRef<(id: CanvasCommandId) => void>(() => undefined);
@@ -585,6 +647,8 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     setDrag(null);
     setSegmentDrag(null);
     setEndpointDrag(null);
+    setTextDrag(null);
+    setResizeDrag(null);
     setBoxSelection(null);
     setHoveredElementId(null);
     setContextMenu(null);
@@ -681,6 +745,40 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   };
   const applyGrid = (point: Point): Point => gridEnabled ? snapToGrid(point) : point;
   const pointFromEvent = (event: React.PointerEvent | React.WheelEvent): Point => applyGrid(rawPointFromEvent(event));
+  const symbolDefToWorld = (symbol: SymbolElement, definition: SymbolDefinition, defPoint: Point): Point => {
+    const scaleX = symbol.width / definition.width;
+    const scaleY = symbol.height / definition.height;
+    const cx = symbol.width / 2;
+    const cy = symbol.height / 2;
+    const rad = (symbol.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const x1 = defPoint.x * scaleX;
+    const y1 = defPoint.y * scaleY;
+    const dx = x1 - cx;
+    const dy = y1 - cy;
+    return {
+      x: symbol.position.x + cx + dx * cos - dy * sin,
+      y: symbol.position.y + cy + dx * sin + dy * cos,
+    };
+  };
+  const worldToSymbolDef = (symbol: SymbolElement, definition: SymbolDefinition, world: Point): Point => {
+    const scaleX = symbol.width / definition.width;
+    const scaleY = symbol.height / definition.height;
+    const cx = symbol.width / 2;
+    const cy = symbol.height / 2;
+    const rad = (-symbol.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const qx = world.x - symbol.position.x;
+    const qy = world.y - symbol.position.y;
+    const dx = qx - cx;
+    const dy = qy - cy;
+    return {
+      x: (cx + dx * cos - dy * sin) / scaleX,
+      y: (cy + dx * sin + dy * cos) / scaleY,
+    };
+  };
   const snapTolerance = () => (14 * view.width) / (svgRef.current?.clientWidth || 1000);
   const nearbyElements = (point: Point, tolerance: number) => spatialIndex.queryPoint(point.x, point.y, tolerance * 2);
   const connectorPointFromEvent = (event: React.PointerEvent, excluded?: ConnectorEndpoint) => {
@@ -1096,6 +1194,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       const label = await requestTextInput({ title: "放置设备", label: "设备位号/标签", initialValue: "", allowEmpty: true, confirmLabel: "放置" });
       if (label === null) return;
       await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
+      setTool("select");
       return;
     }
     // shapePayload = "<tool>:<variety>", e.g. "line:dashed" / "rectangle:rounded" / "circle:filled"
@@ -1136,6 +1235,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       const label = await requestTextInput({ title: "放置设备", label: "设备位号/标签", initialValue: "", allowEmpty: true, confirmLabel: "放置" });
       if (label === null) return;
       await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
+      setTool("select");
       return;
     }
     if (tool === "text") {
@@ -1173,6 +1273,14 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       setSegmentDrag({ ...segmentDrag, current: pointFromEvent(event) });
       return;
     }
+    if (textDrag) {
+      setTextDrag({ ...textDrag, current: pointFromEvent(event) });
+      return;
+    }
+    if (resizeDrag) {
+      setResizeDrag({ ...resizeDrag, current: pointFromEvent(event) });
+      return;
+    }
     if (drag) {
       setDrag({ ...drag, current: pointFromEvent(event) });
       return;
@@ -1201,6 +1309,17 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       releaseCapture(event);
       return;
     }
+    if (resizeDrag) {
+      const next = computeResize(resizeDrag.orig, resizeDrag.corner, resizeDrag.current);
+      const symbolId = resizeDrag.symbol.id;
+      setResizeDrag(null);
+      await transact(
+        [{ op: "update_element", element_id: symbolId, patch: { position: { x: next.x, y: next.y }, width: next.w, height: next.h } }],
+        `Resize ${symbolId} to ${Math.round(next.w)}×${Math.round(next.h)}`,
+      );
+      releaseCapture(event);
+      return;
+    }
     if (endpointDrag) {
       const released = connectorPointFromEvent(event);
       const endpoint = released.hit ? endpointFromHit(released.hit) : { point: released.point };
@@ -1222,6 +1341,24 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       updated.routing = "manual";
       setSegmentDrag(null);
       await transact([{ op: "update_element", element_id: updated.id, patch: updatePatch(updated) }], "Edit connector route");
+      releaseCapture(event);
+      return;
+    }
+    if (textDrag) {
+      const definition = symbolMap.get(textDrag.symbol.symbol_key);
+      setTextDrag(null);
+      if (definition) {
+        const current = document.elements.find((item): item is SymbolElement => item.id === textDrag.symbol.id && item.type === "symbol");
+        if (current) {
+          const defPoint = worldToSymbolDef(textDrag.symbol, definition, textDrag.current);
+          const existing = (current.metadata.text_overrides ?? {}) as Record<string, { x: number; y: number }>;
+          const overrides = { ...existing, [String(textDrag.shapeIndex)]: { x: Math.round(defPoint.x * 10) / 10, y: Math.round(defPoint.y * 10) / 10 } };
+          await transact(
+            [{ op: "update_element", element_id: current.id, patch: { metadata: { ...current.metadata, text_overrides: overrides } } }],
+            `Move symbol text to (${Math.round(defPoint.x)}, ${Math.round(defPoint.y)})`,
+          );
+        }
+      }
       releaseCapture(event);
       return;
     }
@@ -1412,6 +1549,64 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     svgRef.current?.setPointerCapture(event.pointerId);
   };
 
+  const onTextHandlePointerDown = (event: React.PointerEvent, symbol: SymbolElement, shapeIndex: number, text: string) => {
+    event.stopPropagation();
+    if (event.button !== 0 || lockedLayerIds.has(symbol.layer_id) || isElementEditLocked(symbol)) return;
+    if (!selectedSet.has(symbol.id)) setSelection([symbol.id]);
+    setTextDrag({ symbol, shapeIndex, text, current: pointFromEvent(event) });
+    svgRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const MIN_RESIZE = 16;
+  const computeResize = (
+    orig: { x: number; y: number; w: number; h: number },
+    corner: ResizeCorner,
+    pointer: Point,
+  ) => {
+    const x2 = orig.x + orig.w;
+    const y2 = orig.y + orig.h;
+    let { x, y, w, h } = orig;
+    if (corner === "se") {
+      w = pointer.x - orig.x;
+      h = pointer.y - orig.y;
+    } else if (corner === "sw") {
+      w = x2 - pointer.x;
+      h = pointer.y - orig.y;
+      x = pointer.x;
+    } else if (corner === "ne") {
+      w = pointer.x - orig.x;
+      h = y2 - pointer.y;
+      y = pointer.y;
+    } else {
+      w = x2 - pointer.x;
+      h = y2 - pointer.y;
+      x = pointer.x;
+      y = pointer.y;
+    }
+    if (w < MIN_RESIZE) {
+      if (corner === "nw" || corner === "sw") x = x2 - MIN_RESIZE;
+      w = MIN_RESIZE;
+    }
+    if (h < MIN_RESIZE) {
+      if (corner === "nw" || corner === "ne") y = y2 - MIN_RESIZE;
+      h = MIN_RESIZE;
+    }
+    return { x, y, w, h };
+  };
+
+  const onResizeHandlePointerDown = (event: React.PointerEvent, symbol: SymbolElement, corner: ResizeCorner) => {
+    event.stopPropagation();
+    if (event.button !== 0 || lockedLayerIds.has(symbol.layer_id) || isElementEditLocked(symbol)) return;
+    if (!selectedSet.has(symbol.id)) setSelection([symbol.id]);
+    setResizeDrag({
+      symbol,
+      corner,
+      orig: { x: symbol.position.x, y: symbol.position.y, w: symbol.width, h: symbol.height },
+      current: pointFromEvent(event),
+    });
+    svgRef.current?.setPointerCapture(event.pointerId);
+  };
+
   const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1479,6 +1674,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
   })();
 
   const connectors = activeElements.filter((element): element is ConnectorElement => element.type === "connector");
+  const arrowConnectors = visibleFlowArrowConnectors(connectors);
   const portScale = view.width / (svgRef.current?.clientWidth || 1000);
   const portRadius = 5 * portScale;
   const hitPadding = 8 * portScale;
@@ -1626,7 +1822,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         onContextMenu={(event: React.MouseEvent<SVGGElement>) => onElementContextMenu(event, element)}
       >{renderHitTarget(element, hitPadding)}{renderElement(element, symbolMap)}</g>)}
       {connectors.map((connector) => <ConnectorJumps key={`jumps-${connector.id}`} connector={connector} connectors={connectors} background={document.canvas.background} />)}
-      {connectors.map((connector) => <FlowArrow key={`arrow-${connector.id}`} connector={connector} />)}
+      {arrowConnectors.map((connector) => <FlowArrow key={`arrow-${connector.id}`} connector={connector} />)}
       {agentSimulation?.ok ? <g data-testid="agent-ghost-preview" className="agent-ghost-preview" pointerEvents="none">
         {agentSimulation.deleted.map((change) => change.before ? <g key={`delete-${change.id}`} className="agent-ghost-deleted">{renderElement(previewTint(change.before, "#dc2626"), symbolMap)}</g> : null)}
         {agentSimulation.updated.map((change) => <g key={`update-${change.id}`}>
@@ -1664,6 +1860,59 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
           return <g key={port.id}><circle className="port-hit-target" data-port-element-id={element.id} data-port-id={port.id} cx={point.x} cy={point.y} r={portRadius * 2.5} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onPortPointerDown(event, hit)} /><circle cx={point.x} cy={point.y} r={active ? portRadius * 1.45 : portRadius} fill={active ? "#f97316" : "#ffffff"} stroke={active ? "#c2410c" : "#2563eb"} strokeWidth={2 * portScale} vectorEffect="non-scaling-stroke" pointerEvents="none" />{selectedSet.has(element.id) ? <text x={point.x + portRadius * 1.8} y={point.y - portRadius * 1.2} fontSize={11 * portScale} fill="#1d4ed8" pointerEvents="none">{port.name}</text> : null}</g>;
         })}</g>;
       })}
+      {activeElements.map((element) => {
+        if (element.type !== "symbol" || !selectedSet.has(element.id) || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) return null;
+        const definition = symbolMap.get(element.symbol_key);
+        if (!definition) return null;
+        if (typeof element.metadata.embedded_off_page_label === "string" && element.metadata.embedded_off_page_label) return null;
+        const overrides = (element.metadata.text_overrides ?? {}) as Record<string, { x: number; y: number }>;
+        const textShapes = definition.shapes
+          .map((shape, index) => ({ shape, index }))
+          .filter((item) => item.shape.type === "text");
+        if (!textShapes.length) return null;
+        return <g key={`text-handles-${element.id}`}>{textShapes.map(({ shape, index }) => {
+          const shapeText = shape.type === "text" ? shape.text : "";
+          const defPoint = overrides[String(index)] ?? { x: shape.type === "text" ? shape.x : 0, y: shape.type === "text" ? shape.y : 0 };
+          const world = symbolDefToWorld(element, definition, defPoint);
+          return <g key={`text-handle-${element.id}-${index}`}>
+            <circle cx={world.x} cy={world.y} r={portRadius * 2.2} fill="rgba(37, 99, 235, 0.12)" stroke="#2563eb" strokeWidth={1.5 * portScale} vectorEffect="non-scaling-stroke" pointerEvents="all" style={{ cursor: "move" }} onPointerDown={(event: React.PointerEvent<SVGCircleElement>) => onTextHandlePointerDown(event, element, index, shapeText)} />
+            <circle cx={world.x} cy={world.y} r={portRadius * 1.05} fill="#2563eb" pointerEvents="none" />
+          </g>;
+        })}</g>;
+      })}
+      {textDrag ? <text x={textDrag.current.x} y={textDrag.current.y} fontSize={13} textAnchor="middle" fill="#2563eb" pointerEvents="none" style={{ paintOrder: "stroke", stroke: "#ffffff", strokeWidth: 3 }}>{textDrag.text}</text> : null}
+      {activeElements.map((element) => {
+        if (element.type !== "symbol" || !selectedSet.has(element.id) || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) return null;
+        if (Math.abs(element.rotation) > 0.001) return null;
+        const corners: Array<{ corner: ResizeCorner; x: number; y: number }> = [
+          { corner: "nw", x: element.position.x, y: element.position.y },
+          { corner: "ne", x: element.position.x + element.width, y: element.position.y },
+          { corner: "sw", x: element.position.x, y: element.position.y + element.height },
+          { corner: "se", x: element.position.x + element.width, y: element.position.y + element.height },
+        ];
+        const size = 9 * portScale;
+        return <g key={`resize-handles-${element.id}`}>{corners.map(({ corner, x, y }) => (
+          <rect
+            key={`resize-${element.id}-${corner}`}
+            data-resize-for={element.id}
+            data-corner={corner}
+            x={x - size / 2}
+            y={y - size / 2}
+            width={size}
+            height={size}
+            fill="#ffffff"
+            stroke="#2563eb"
+            strokeWidth={1.5 * portScale}
+            vectorEffect="non-scaling-stroke"
+            style={{ cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize" }}
+            onPointerDown={(event: React.PointerEvent<SVGRectElement>) => onResizeHandlePointerDown(event, element, corner)}
+          />
+        ))}</g>;
+      })}
+      {resizeDrag ? (() => {
+        const next = computeResize(resizeDrag.orig, resizeDrag.corner, resizeDrag.current);
+        return <rect x={next.x} y={next.y} width={next.w} height={next.h} fill="rgba(37, 99, 235, 0.08)" stroke="#2563eb" strokeWidth={1.5 * portScale} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" pointerEvents="none" />;
+      })() : null}
       {activeElements.map((element) => {
         if (element.type !== "connector" || !selectedSet.has(element.id) || lockedLayerIds.has(element.layer_id) || isElementEditLocked(element)) return null;
         const source = element.points[0];
@@ -1705,8 +1954,12 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
       {draft ? <DraftPreview tool={quickConnector.current || draft.branch ? "connector" : tool} start={draft.start} current={draft.current} branch={Boolean(draft.branch)} /> : null}
       {boxSelection ? <SelectionBox start={boxSelection.start} current={boxSelection.current} /> : null}
     </svg>
-    {minimapTransform && minimapViewport ? <div data-testid="canvas-minimap" className="canvas-minimap" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
-      <div className="canvas-minimap-heading"><strong>导航</strong><span>{visibleElements.length} elements</span></div>
+    {minimapTransform && minimapViewport ? <div data-testid="canvas-minimap" className={`canvas-minimap ${minimapCollapsed ? "collapsed" : ""}`} onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
+      <div className="canvas-minimap-heading" role="button" title={minimapCollapsed ? "展开导航" : "折叠导航"} onClick={() => setMinimapCollapsed((value) => !value)}>
+        <strong>导航</strong>
+        <span>{minimapCollapsed ? "展开" : `${visibleElements.length} elements · 折叠`}</span>
+      </div>
+      {minimapCollapsed ? null : <>
       <svg
         viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}
         role="img"
@@ -1734,6 +1987,7 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
         })}
         <rect className="canvas-minimap-viewport" x={minimapViewport.x1} y={minimapViewport.y1} width={Math.max(3, minimapViewport.x2 - minimapViewport.x1)} height={Math.max(3, minimapViewport.y2 - minimapViewport.y1)} />
       </svg>
+      </>}
     </div> : null}
     <div data-testid="canvas-status-bar" className="canvas-status-bar" onPointerDown={(event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation()}>
       <div className={`canvas-status-message ${inlinePreview ? inlinePreview.result.ok ? "success" : "warning" : ""}`}>

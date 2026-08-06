@@ -30,13 +30,6 @@ export function simplifyOrthogonalPath(points: Point[]): Point[] {
   return result;
 }
 
-export function isOrthogonalPath(points: Point[]): boolean {
-  return points.length >= 2 && points.slice(0, -1).every((point, index) => {
-    const next = points[index + 1];
-    return point.x === next.x || point.y === next.y;
-  });
-}
-
 export function compactOrthogonalRoute(start: Point, end: Point): Point[] {
   if (start.x === end.x || start.y === end.y) return [{ ...start }, { ...end }];
   const dx = Math.abs(end.x - start.x);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { authorizedFetch, downloadApiResource } from "./api";
-import { useWorkspace } from "./store";
+import { messageFromError, useWorkspace } from "./store";
 import type { ConnectorElement, Document, SymbolElement } from "./types";
 import { requestTextInput } from "./editor/InputDialogHost";
 import {
@@ -66,6 +66,8 @@ function RuntimeEnhancementsEnabled() {
   const [symbolsOpen, setSymbolsOpen] = useState(true);
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [opcEditing, setOpcEditing] = useState<SymbolElement | null>(null);
+  const [opcDraft, setOpcDraft] = useState("");
 
   const definitionMap = useMemo(
     () => new Map(workspace.symbols.map((definition) => [definition.key, definition])),
@@ -121,12 +123,7 @@ function RuntimeEnhancementsEnabled() {
       if (!isOpcDefinition(definition, symbol.symbol_key)) return;
       event.preventDefault();
       event.stopPropagation();
-      const targetId = targetDocumentId(symbol);
-      if (!targetId) {
-        setRuntimeMessage("该 OPC 尚未关联目标 P&ID。请选中它后设置关联图纸。");
-        return;
-      }
-      void openDocument(targetId);
+      startOpcEdit(symbol);
     };
     document.addEventListener("dblclick", onDoubleClick, true);
     return () => document.removeEventListener("dblclick", onDoubleClick, true);
@@ -148,6 +145,38 @@ function RuntimeEnhancementsEnabled() {
         patch: { properties: { ...symbol.properties, ...patch } },
       }],
       label,
+    );
+  };
+
+  const startOpcEdit = (symbol: SymbolElement) => {
+    const current = useWorkspace.getState().document;
+    const latest = current?.elements.find(
+      (element): element is SymbolElement => element.id === symbol.id && element.type === "symbol",
+    );
+    const existing = latest?.metadata.embedded_off_page_label;
+    setOpcDraft(typeof existing === "string" ? existing : "");
+    setOpcEditing(symbol);
+  };
+
+  const saveOpcEdit = () => {
+    if (!opcEditing) return;
+    const symbolId = opcEditing.id;
+    const current = useWorkspace.getState().document;
+    const latest = current?.elements.find(
+      (element): element is SymbolElement => element.id === symbolId && element.type === "symbol",
+    );
+    setOpcEditing(null);
+    if (!latest) return;
+    const text = opcDraft.trim();
+    const metadata = { ...latest.metadata };
+    if (text) {
+      metadata.embedded_off_page_label = text;
+    } else {
+      delete metadata.embedded_off_page_label;
+    }
+    void workspace.transact(
+      [{ op: "update_element", element_id: symbolId, patch: { metadata } }],
+      text ? `Set OPC description to ${text}` : "Clear OPC description",
     );
   };
 
@@ -178,6 +207,8 @@ function RuntimeEnhancementsEnabled() {
       useWorkspace.setState({ document: updated });
       await useWorkspace.getState().refreshDocument();
       setRuntimeMessage(`图纸已重命名为“${updated.name}”。`);
+    } catch (error) {
+      setRuntimeMessage(`重命名失败：${messageFromError(error)}`);
     } finally {
       setRenaming(false);
     }
@@ -292,20 +323,20 @@ function RuntimeEnhancementsEnabled() {
                     event.stopPropagation();
                     workspace.setSelection([symbol.id]);
                   }}
-                  onDoubleClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void openDocument(targetId);
-                  }}
                 />
                 <text
                   className="runtime-opc-link-badge"
                   x={symbol.position.x + symbol.width / 2}
                   y={symbol.position.y - 7}
                   textAnchor="middle"
-                  pointerEvents="none"
+                  pointerEvents="all"
+                  style={{ cursor: "pointer" }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void openDocument(targetId);
+                  }}
                 >
-                  双击跳转
+                  打开关联图纸
                 </text>
               </g>
             );
@@ -402,11 +433,39 @@ function RuntimeEnhancementsEnabled() {
           disabled={!targetDocumentId(selectedOpc)}
           onClick={() => void openDocument(targetDocumentId(selectedOpc))}
         >跳转到关联 P&amp;ID</button>
-        <small>在画布上双击 OPC 可直接跨图跳转；在目标图放置相反方向 OPC 并链接回来即可往返。</small>
+        <small>在画布上双击 OPC 可编辑框内文字描述；关联图纸后可通过上方按钮跳转，往返需在目标图放置相反方向 OPC。</small>
       </section> : null}
 
       {canReturn ? <button type="button" onClick={() => void openDocument(returnDocumentId, false)}>返回上一张 P&amp;ID</button> : null}
       {runtimeMessage ? <div className="runtime-flow-message" role="status">{runtimeMessage}</div> : null}
     </aside> : null}
+    {opcEditing ? createPortal(
+      <div
+        className="runtime-opc-editor-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setOpcEditing(null);
+        }}
+      >
+        <div className="runtime-opc-editor" role="dialog" aria-label="OPC 文字描述">
+          <h3>OPC 文字描述</h3>
+          <input
+            autoFocus
+            value={opcDraft}
+            placeholder="输入描述，例如：尾气处理系统"
+            onChange={(event) => setOpcDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveOpcEdit();
+              if (event.key === "Escape") setOpcEditing(null);
+            }}
+          />
+          <small>文字将居中显示在 OPC 框内；清空后恢复默认箭头样式。</small>
+          <div className="runtime-opc-editor-actions">
+            <button type="button" onClick={() => setOpcEditing(null)}>取消</button>
+            <button type="button" className="primary" onClick={saveOpcEdit}>确定</button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    ) : null}
   </>;
 }

@@ -33,7 +33,7 @@ const newGroupId = () => `group_${crypto.randomUUID().replaceAll("-", "").slice(
 let documentRequestGeneration = 0;
 let mutationRequestGeneration = 0;
 
-function messageFromError(error: unknown): string {
+export function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -147,7 +147,13 @@ type State = {
   generate: (
     prompt: string,
     context: string,
-    provider?: { base_url?: string; model?: string; timeout_seconds?: number },
+    provider?: {
+      base_url?: string;
+      model?: string;
+      timeout_seconds?: number;
+      thinking_enabled?: boolean;
+      thinking_level?: "low" | "high" | "max";
+    },
   ) => Promise<string>;
 };
 
@@ -584,7 +590,7 @@ export const useWorkspace = create<State>((set, get) => ({
     };
     set({ isMutating: true, syncState: "checking", syncMessage: "正在撤销…" });
     try {
-      const updated = await api.undo(document.id);
+      const updated = await api.undo(document.id, document.revision);
       if (!mutationResponseCanApply(
         origin,
         get().document,
@@ -627,7 +633,7 @@ export const useWorkspace = create<State>((set, get) => ({
     };
     set({ isMutating: true, syncState: "checking", syncMessage: "正在重做…" });
     try {
-      const updated = await api.redo(document.id);
+      const updated = await api.redo(document.id, document.revision);
       if (!mutationResponseCanApply(
         origin,
         get().document,

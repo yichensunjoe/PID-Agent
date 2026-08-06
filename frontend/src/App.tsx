@@ -19,12 +19,16 @@ import { PropertyInspector } from "./editor/PropertyInspector";
 import { SymbolPalette } from "./editor/SymbolPalette";
 import { api, ApiError, clearServiceAccessToken, downloadApiResource, getServiceAccessToken, setServiceAccessToken, type ProviderConfig, type ProviderTestResult } from "./api";
 import { documentDeletionConfirmation } from "./documentDeletion";
-import { PROVIDER_PRESETS, presetForBaseUrl } from "./providerPresets";
+import {
+  PROVIDER_PRESETS,
+  defaultModelForPreset,
+  presetForBaseUrl,
+} from "./providerPresets";
 import { parseImportJson } from "./projectImport";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
 import { installE2EBridge } from "./e2eBridge";
 import { useWorkspace } from "./store";
-import type { CircleVariety, LineVariety, RectangleVariety, SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
+import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
 import { CIRCLE_VARIETIES, LINE_VARIETIES, RECTANGLE_VARIETIES, SHAPE_DRAG_MIME } from "./editor/shapeVarieties";
 import "./issue1.css";
 
@@ -156,7 +160,9 @@ export default function App() {
   const [serviceToken, setServiceToken] = useState(() => getServiceAccessToken());
   const [showServiceToken, setShowServiceToken] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
-  const [maxTimeoutSeconds, setMaxTimeoutSeconds] = useState(180);
+  const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [thinkingLevel, setThinkingLevel] = useState<ProviderConfig["thinking_level"]>("high");
+  const [maxTimeoutSeconds, setMaxTimeoutSeconds] = useState(600);
   const [testingProvider, setTestingProvider] = useState(false);
   const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
   const [providerTestError, setProviderTestError] = useState("");
@@ -260,6 +266,8 @@ export default function App() {
     model: model.trim() || undefined,
     api_key: apiKey.trim() || undefined,
     timeout_seconds: timeoutSeconds,
+    thinking_enabled: thinkingEnabled,
+    thinking_level: thinkingEnabled ? thinkingLevel : undefined,
   });
   const minimumTimeoutSeconds = Math.min(10, maxTimeoutSeconds);
   const defaultTimeoutSeconds = Math.min(120, maxTimeoutSeconds);
@@ -269,12 +277,26 @@ export default function App() {
     const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
     if (preset && preset.id !== "custom") {
       setBaseUrl(preset.baseUrl);
-      if (preset.defaultModel) setModel(preset.defaultModel);
+      setModel(defaultModelForPreset(presetId));
     }
-    if (presetId === "custom") setBaseUrl((current) => current);
+    if (presetId === "custom") setModel("");
+    setApiKey("");
     setAvailableModels([]);
     setModelDiscoveryError("");
     setProviderTest(null);
+    setProviderTestError("");
+  };
+
+  const changeProviderBaseUrl = (value: string) => {
+    const presetId = presetForBaseUrl(value);
+    setBaseUrl(value);
+    setProviderPreset(presetId);
+    setModel(defaultModelForPreset(presetId));
+    setApiKey("");
+    setAvailableModels([]);
+    setModelDiscoveryError("");
+    setProviderTest(null);
+    setProviderTestError("");
   };
 
   const discoverProviderModels = async (silent = false) => {
@@ -794,12 +816,14 @@ export default function App() {
             <details className="agent-provider-settings">
               <summary>模型服务与高级设置{model ? ` · ${model}` : ""}</summary>
               <label>服务预设<select value={providerPreset} onChange={(event: ChangeEvent<HTMLSelectElement>) => selectProviderPreset(event.target.value)}>{PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></label>
-              <label>Base URL<input value={baseUrl} onChange={(event: ChangeEvent<HTMLInputElement>) => { setBaseUrl(event.target.value); setProviderPreset(presetForBaseUrl(event.target.value)); }} placeholder="例如 http://127.0.0.1:11434/v1" /></label>
+              <label>Base URL<input value={baseUrl} onChange={(event: ChangeEvent<HTMLInputElement>) => changeProviderBaseUrl(event.target.value)} placeholder="例如 http://127.0.0.1:11434/v1" /></label>
               <label>API Key<div className="secret-input-row"><input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event: ChangeEvent<HTMLInputElement>) => setApiKey(event.target.value)} placeholder="只需输入当前服务的 API Key；本地服务可留空" autoComplete="off" spellCheck={false} /><button type="button" onClick={() => setShowApiKey(!showApiKey)}>{showApiKey ? "隐藏" : "显示"}</button></div></label>
               {loadingModels ? <div className="provider-model-status">正在读取模型列表…</div> : null}
               {availableModels.length ? <label>可用模型<select value={availableModels.some((item) => item.id === model) ? model : ""} onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}><option value="" disabled>选择模型</option>{availableModels.map((item) => <option key={item.id} value={item.id}>{item.id}{item.owned_by ? ` · ${item.owned_by}` : ""}</option>)}</select></label> : null}
               <label>Model name（可手工覆盖）<input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="从列表选择，或直接输入模型名称" /></label>
               <label>超时（秒）<input type="number" min={minimumTimeoutSeconds} max={maxTimeoutSeconds} value={timeoutSeconds} onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(maxTimeoutSeconds, Math.max(minimumTimeoutSeconds, Number(event.target.value) || defaultTimeoutSeconds)))} /></label>
+              <label className="provider-thinking-toggle"><span>思考模式</span><input type="checkbox" checked={thinkingEnabled} onChange={(event: ChangeEvent<HTMLInputElement>) => setThinkingEnabled(event.target.checked)} /></label>
+              <label>思考等级<select value={thinkingLevel ?? "high"} disabled={!thinkingEnabled} onChange={(event: ChangeEvent<HTMLSelectElement>) => setThinkingLevel(event.target.value as ProviderConfig["thinking_level"])}><option value="low">低</option><option value="high">高</option><option value="max">最大</option></select></label>
               <div className="provider-model-status">服务端有效上限：{maxTimeoutSeconds} 秒</div>
               <div className="provider-actions"><button type="button" onClick={() => void discoverProviderModels()} disabled={loadingModels || !baseUrl.trim()}>{loadingModels ? "读取中…" : "刷新模型列表"}</button><button type="button" onClick={() => void testCustomProvider()} disabled={testingProvider || !baseUrl.trim() || !model.trim()}>{testingProvider ? "正在测试…" : "测试连接"}</button></div>
               {modelDiscoveryError ? <div className="provider-test provider-test-error">{modelDiscoveryError}</div> : null}

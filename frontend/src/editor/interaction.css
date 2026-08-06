@@ -463,6 +463,20 @@
   border-bottom: 1px solid #e2e8f0;
   color: #475569;
   font-size: 9px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.canvas-minimap-heading:hover {
+  background: #f1f5f9;
+}
+
+.canvas-minimap.collapsed {
+  width: auto;
+}
+
+.canvas-minimap.collapsed .canvas-minimap-heading {
+  border-bottom: none;
 }
 
 .canvas-minimap-heading strong {

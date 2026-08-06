@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PROVIDER_PRESETS, presetForBaseUrl } from "../src/providerPresets.ts";
+import {
+  PROVIDER_PRESETS,
+  defaultModelForPreset,
+  presetForBaseUrl,
+} from "../src/providerPresets.ts";
 
 test("Kimi Code preset uses the OpenAI-compatible coding endpoint", () => {
   const preset = PROVIDER_PRESETS.find((item) => item.id === "kimi-code");
@@ -14,4 +18,11 @@ test("Kimi Coding base URL aliases select the Kimi preset", () => {
   assert.equal(presetForBaseUrl("https://api.kimi.com/coding/"), "kimi-code");
   assert.equal(presetForBaseUrl("https://api.kimi.com/coding/v1"), "kimi-code");
   assert.equal(presetForBaseUrl("https://provider.example/v1"), "custom");
+});
+
+test("provider changes never retain a model from another provider", () => {
+  assert.equal(defaultModelForPreset("kimi-code"), "kimi-for-coding");
+  assert.equal(defaultModelForPreset("deepseek"), "");
+  assert.equal(defaultModelForPreset("openai"), "");
+  assert.equal(defaultModelForPreset("custom"), "");
 });

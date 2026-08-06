@@ -125,11 +125,11 @@ export type HistoryEntry = {
 };
 
 export type SymbolShape =
-  | { type: "line"; x1: number; y1: number; x2: number; y2: number }
-  | { type: "polyline"; points: [number, number][]; closed?: boolean; fill?: string }
-  | { type: "rect"; x: number; y: number; width: number; height: number; rx?: number }
-  | { type: "circle"; cx: number; cy: number; r: number }
-  | { type: "path"; d: string }
+  | { type: "line"; x1: number; y1: number; x2: number; y2: number; dash?: number[] }
+  | { type: "polyline"; points: [number, number][]; closed?: boolean; fill?: string; dash?: number[] }
+  | { type: "rect"; x: number; y: number; width: number; height: number; rx?: number; dash?: number[] }
+  | { type: "circle"; cx: number; cy: number; r: number; dash?: number[] }
+  | { type: "path"; d: string; dash?: number[] }
   | { type: "text"; x: number; y: number; text: string; font_size?: number; anchor?: string };
 
 export type SymbolPort = {
@@ -241,6 +241,48 @@ export type AnnotationLayoutMetrics = {
   leader_line_ids: string[];
 };
 
+export type DiagramQualityIssue = {
+  severity: "warning" | "error";
+  code: string;
+  message: string;
+  element_ids: string[];
+  details: Record<string, unknown>;
+};
+
+export type DiagramQualityMetrics = {
+  symbol_count: number;
+  connector_count: number;
+  total_bends: number;
+  non_orthogonal_segments: number;
+  micro_segments: number;
+  unnecessary_bends: number;
+  excessive_bend_connectors: number;
+  node_overlaps: number;
+  crowded_node_pairs: number;
+  pipe_obstacle_intersections: number;
+  geometric_crossings: number;
+  unbridged_crossings: number;
+  port_direction_mismatches: number;
+  port_exit_mismatches: number;
+  port_facing_mismatches: number;
+  backward_flow_connectors: number;
+  out_of_bounds_symbols: number;
+  out_of_bounds_connector_points: number;
+  duplicate_label_count: number;
+  text_text_overlaps: number;
+  text_symbol_overlaps: number;
+  text_connector_intersections: number;
+};
+
+export type DiagramQualityReport = {
+  schema: "pid-agent.diagram-quality";
+  version: 2;
+  passed: boolean;
+  score: number;
+  metrics: DiagramQualityMetrics;
+  issues: DiagramQualityIssue[];
+};
+
 export type SemanticAgentPlanResult = {
   plan: SemanticAgentPlan;
   compiled_plan?: AgentPlan | null;
@@ -248,6 +290,7 @@ export type SemanticAgentPlanResult = {
   attempt: number;
   parent_plan_id?: string | null;
   annotation_metrics?: AnnotationLayoutMetrics | null;
+  diagram_quality?: DiagramQualityReport | null;
 };
 
 export type TransactionValidation = {
