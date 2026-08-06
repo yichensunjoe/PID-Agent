@@ -31,6 +31,9 @@ frontend/vite.config.d.ts
 .DS_Store
 Thumbs.db
 
+# Reasonix local session metadata
+.reasonix/
+
 # Generated exports
 *.svg
 *.png

@@ -1,73 +1,31 @@
 # Codex Handoff
 
-Date: 2026-07-27
+Date: 2026-08-06
 
 ## Current State
 
-The P&ID-Agent web and agent workflow fixes are ready to hand off and have been prepared for Git push.
-
-Main branch: `main`
+Main branch `main` 已包含本文件描述的工作批次（2026-08-06 提交）。
 
 Remote: `origin https://github.com/yichensunjoe/PID-Agent.git`
 
-Local service status:
+## What Changed (2026-08-06 batch)
 
-- Existing main service: `pid-agent serve --host 0.0.0.0 --port 8000`
-- Experience service relaunched: `pid-agent serve --host 0.0.0.0 --port 8001`
-- Experience service database: `/Users/joe/Documents/Codex/projects/active/P009-PID-Agent/data/pid-agent.db`
-- Experience service timeout: `PID_AGENT_AGENT_TIMEOUT_SECONDS=600`
-- Health check: `http://127.0.0.1:8001/health` returned ok
+- 图纸质量检查：新增 `backend/agentcad/diagram_quality.py`（旋转符号包围盒、Liang-Barsky 非正交段判定、排序索引交叉计数），经 `GET /documents/{id}/agent/harness-context` 与 semantic plan 响应暴露；`DRAFTING_CONTRACT_VERSION=2`。
+- 阀门图例按 GB/T 6567.4-2008 重画（`data/symbols.json`/`standard_symbols.json`，生成脚本 `update_valve_symbols.py`）。
+- 流向箭头去重：`_arrow_connectors`（后端 svg）+ `flowArrowSelection.ts`（前端），每个逻辑路由只画最长段箭头。
+- SVG 渲染：`embedded_off_page_label` 坐标按定义尺寸推导；PNG 导出统一走 `svg.render_png`（cairosvg 延迟导入）。
+- undo/redo 增加 `expected_revision` 校验；`_request_model_json` 用显式 `repair` 参数替代 prompt 前缀判定。
+- Web-agent 修复（2026-07-27 批次）：创建图纸对话框、runtime-config、provider 最小 completion 验证、instrument tap 语义收紧、OPC 方向修正、transmitter 符号从可见库隐藏。
 
-Runtime logs under `logs/` are intentionally ignored and should not be committed.
+## Verification
 
-## What Changed
-
-- Replaced `window.prompt()` document creation with an in-app create document dialog so the embedded browser can create drawings.
-- Added backend runtime config at `GET /api/v2/agent/runtime-config` and wired the frontend timeout input to the actual server-side limit.
-- Changed provider connection testing from `/models`-only to `/models` plus one minimal chat completion, reducing false positives when a model is listed but not usable.
-- Tightened semantic planner and compiler behavior for P&ID instrument taps:
-  - repeated instrument labels are rejected at planning/model validation time;
-  - instrument branch style now inherits the main line unless explicitly overridden;
-  - instrument and root valve placement uses actual rotated port coordinates for precise vertical alignment.
-- Corrected OPC-in visual direction while keeping the process port semantics intact.
-- Hid transmitter symbols from the visible built-in library and agent catalog while preserving the definitions for old documents.
-- Added regression tests for runtime config, provider completion tests, repeated instrument labels, instrument tap alignment, provider compatibility, and visible symbol library filtering.
-- Added documentation for the real web-agent experience, MCP/web coordination, and the LongCat exact reproduction prompt.
-
-## Important Documents
-
-- `docs/usage-experience-web-agent-2026-07-27.md`
-- `docs/usage-experience-mcp-web.md`
-- `docs/longcat-exact-condenser-replica-prompt.md`
-- `tasks/2026-07-27-web-agent-fixes.md`
-
-## LongCat Reproduction
-
-LongCat-2.0 generated `LongCat复现-严格对齐废气冷凝器-20260727` in one LLM revision without manual drawing edits.
-
-Key facts:
-
-- LongCat document ID: `doc_53d1ba949772`
-- Baseline document ID: `doc_9d09bcff3da0`
-- Revision history: `0 -> 1`, `source=llm`
-- Semantic operations: 48
-- Planning duration: about 106.8 seconds
-- Visual and topology comparison against the baseline: 0 differences in element IDs, coordinates, dimensions, rotations, ports, connector waypoints, flow direction, labels, and styles
-
-The two stored JSON snapshots are not byte-for-byte identical because the baseline carries extra non-rendering metadata and manual routing provenance. The visible drawing and engineering topology are identical.
-
-## Verification Already Run
-
-- Related backend tests: 21 passed
-- Frontend unit tests: 85 passed
-- Frontend production build: passed
-- Full backend suite: 220 passed, with 3 known local Cairo/PDF/PNG environment failures
-- Symbol quality harness: 3/3 passed, 57 visible symbols rendered
-- Web health check on `8001`: passed
+- 后端：259 passed（3 个本机 Cairo 环境失败：缺 `libcairo.2.dylib`，与 PDF/PNG 导出相关，CI 环境正常）。
+- 前端：`npm test` 87 passed；`tsc -b` + `vite build` 通过。
+- 注意：前端测试用 Node 原生 runner（`node --experimental-strip-types --test`），**不要用 npx vitest**（会拉取不兼容版本）。
 
 ## Follow-Up Ideas
 
-- Add a post-generation requirement checker so a legal transaction can still be rejected when it misses the user's engineering intent.
-- Improve long-running agent progress with elapsed time, active phase, effective timeout, and cancellation state.
-- Extend label collision checks across internal symbol labels, generated annotations, and independent text elements.
-- Consider a durable service launcher for the `8001` experience profile if it will remain a daily workflow.
+- 加 post-generation 意图满足检查器；agent 进度显示 elapsed/phase/取消态。
+- 标签碰撞检查扩展到内部符号标签 + 独立文本元素。
+- `diagram_quality.py` 的 T 形端点接触/共线重叠检测（当前为设计取舍，未实现）；`port_side` 与 `symbols.py` 重复实现待抽取。
+- 大图 `route_connector_points` 仍为 O(C²·O)，如需更极端规模再考虑空间网格。
