@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from agentcad.models import SymbolDefinition
+from agentcad.models import Document, Point, SymbolDefinition, SymbolElement
+from agentcad.svg import render_svg
 from agentcad.symbols import SymbolCatalogLoadError, SymbolRegistry
 
 DATA_DIR = Path(__file__).parents[1] / "agentcad" / "data"
@@ -30,7 +31,6 @@ LEGACY_KEYS = {
 HIDDEN_BUILTIN_KEYS = {
     "system_interface",
     "off_page_connector",
-    "pressure_transmitter",
     "temperature_transmitter",
     "flow_transmitter",
     "level_transmitter",
@@ -39,6 +39,7 @@ HIDDEN_BUILTIN_KEYS = {
 REQUIRED_STANDARD_KEYS = {
     "agitator",
     "air_cooler",
+    "analyzer_indicator",
     "basket_strainer",
     "blind_flange",
     "butterfly_valve",
@@ -62,6 +63,8 @@ REQUIRED_STANDARD_KEYS = {
     "separator_vessel",
     "steam_trap",
     "three_way_valve",
+    "temperature_element",
+    "pressure_transmitter",
     "vent_to_atmosphere",
 }
 
@@ -123,6 +126,27 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
     assert opc_in.shapes[0]["points"][2] == [100, 25]
     # Hidden transmitter definitions remain addressable for existing drawings.
     assert registry.get("pressure_transmitter").key == "pressure_transmitter"
+
+
+def test_rotated_opc_keeps_embedded_direction_text_upright():
+    registry = SymbolRegistry()
+    definition = registry.get("off_page_connector_in")
+    document = Document(
+        elements=[
+            SymbolElement(
+                id="reverse_inlet",
+                symbol_key=definition.key,
+                position=Point(x=100, y=100),
+                width=definition.width,
+                height=definition.height,
+                rotation=180,
+            )
+        ]
+    )
+
+    svg = render_svg(document, registry)
+
+    assert 'transform="rotate(-180.0 47 30)"' in svg
 
 
 def test_external_symbol_override_does_not_inherit_builtin_library_metadata(

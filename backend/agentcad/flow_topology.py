@@ -4,6 +4,12 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from .diagram_quality import (
+    analyze_diagram_quality,
+    definition_port_side,
+    drafting_contract,
+    port_outward_normal,
+)
 from .models import ConnectorElement, Document, SymbolElement
 from .symbols import SymbolRegistry
 
@@ -226,11 +232,24 @@ def build_agent_harness_context(document: Document, registry: SymbolRegistry) ->
                 "id": element.id,
                 "symbol_key": element.symbol_key,
                 "label": element.label,
+                "position": element.position.model_dump(mode="json"),
+                "width": element.width,
+                "height": element.height,
+                "rotation": element.rotation,
                 "ports": [
                     {
                         "id": port.id,
                         "direction": port.direction,
                         "medium": port.medium,
+                        "side": definition_port_side(
+                            definition.width,
+                            definition.height,
+                            port.x,
+                            port.y,
+                        ),
+                        "outward_normal": list(
+                            port_outward_normal(element, port.id, registry) or ()
+                        ),
                     }
                     for port in (definition.ports if definition else [])
                 ],
@@ -263,11 +282,16 @@ def build_agent_harness_context(document: Document, registry: SymbolRegistry) ->
             )
     return {
         "schema": "pid-agent.agent-harness-context",
-        "version": 1,
+        "version": 2,
         "document_id": document.id,
         "revision": document.revision,
         "symbols": symbols,
         "connectors": connectors,
+        "drafting_contract": drafting_contract(document),
+        "diagram_quality": analyze_diagram_quality(document, registry).model_dump(
+            mode="json",
+            by_alias=True,
+        ),
         "flow_findings": [
             {
                 "severity": finding.severity,
@@ -279,14 +303,17 @@ def build_agent_harness_context(document: Document, registry: SymbolRegistry) ->
             for finding in findings
         ],
         "engineering_contract": [
-            "Use real symbol ports and semantic connector operations; never fake connectivity with decorative lines or arrow text.",
-            "Connector medium should be water, gas, or an explicit project medium; use flow_direction for visual direction.",
-            "Valve properties.valve_state is open or closed; a missing value means normally open.",
-            "A closed valve stops directed downstream medium flow, but operating state must never reject or block drawing edits.",
-            "Use junction elements as semantic tees when process connectors intentionally join.",
-            "Geometric crossings without a shared junction are non-connecting crossings and should use a jump bridge.",
-            "Use 5-unit coordinate increments for precise alignment unless a real symbol port or connector intersection supplies the exact point.",
-            "Use off_page_connector_in/out for cross-drawing boundaries and set properties.target_document_id.",
-            "Preserve document_id and expected_revision and avoid changing unrelated elements.",
+            "Resolve topology and exact symbol types before choosing coordinates.",
+            "Read the main process left-to-right; keep primary process lines direct and uninterrupted.",
+            "Use real ports and connect_ports; align actual port coordinates rather than symbol top-left coordinates.",
+            "Forward flow connects out/bidirectional to in/bidirectional; reverse flow reverses that rule.",
+            "Leave and approach each symbol through the outward side of the selected port.",
+            "Never use micro-doglegs or needless bends when endpoints are axis-aligned.",
+            "Use junction elements as semantic tees only for intentional topology; use a jump bridge for a non-connecting crossing.",
+            "Use 5-unit coordinate increments for manual placement unless an exact real port or intersection coordinate takes priority.",
+            "Keep symbols, pipes and labels separated with uniform visual density.",
+            "A closed valve stops directed downstream medium flow, but valve state must never reject or block drawing edits.",
+            "Use off_page_connector_in/out for cross-drawing boundaries and set target_document_id.",
+            "Preserve document_id, expected_revision and unrelated elements.",
         ],
     }

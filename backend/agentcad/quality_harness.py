@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from .agent_semantic_models import SemanticAgentPlan
+from .diagram_quality import analyze_diagram_quality
 from .models import (
     AddElementOperation,
     ConnectorElement,
@@ -31,7 +32,7 @@ from .svg import render_svg
 from .symbols import SymbolCatalogLoadError, SymbolRegistry
 
 QUALITY_HARNESS_SCHEMA = "pid-agent.quality-harness"
-QUALITY_HARNESS_VERSION = 1
+QUALITY_HARNESS_VERSION = 2
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 _SUPPORTED_SHAPES = {"line", "polyline", "rect", "circle", "path", "text"}
 _EPSILON = 1e-6
@@ -56,7 +57,7 @@ class QualityHarnessReport(StrictModel):
         default=QUALITY_HARNESS_SCHEMA,
         alias="schema",
     )
-    version: Literal[1] = QUALITY_HARNESS_VERSION
+    version: Literal[2] = QUALITY_HARNESS_VERSION
     passed: bool
     total_cases: int
     passed_cases: int
@@ -97,6 +98,23 @@ def _shape_findings(symbol: SymbolDefinition, index: int, shape: dict[str, Any])
         ]
 
     findings: list[QualityHarnessFinding] = []
+    raw_dash = shape.get("dash")
+    if raw_dash is not None:
+        if (
+            not isinstance(raw_dash, list)
+            or not raw_dash
+            or not all(_is_number(value) and value > 0 for value in raw_dash)
+        ):
+            findings.append(
+                QualityHarnessFinding(
+                    code="SYMBOL_DASH_INVALID",
+                    message=(
+                        f"{prefix}.dash must be a non-empty list of positive "
+                        "finite numbers"
+                    ),
+                    symbol_key=symbol.key,
+                )
+            )
 
     def require_numbers(*fields: str) -> None:
         for field in fields:
@@ -795,6 +813,118 @@ def _semantic_agent_case(symbols: SymbolRegistry) -> QualityHarnessCaseResult:
     )
 
 
+def _drafting_quality_case(symbols: SymbolRegistry) -> QualityHarnessCaseResult:
+    through, inlet_id, outlet_id = _through_symbol(symbols)
+    with TemporaryDirectory(prefix="pid-agent-quality-drafting-") as directory:
+        service = DocumentService(
+            SQLiteDocumentStore(Path(directory) / "drafting.db"),
+            symbols,
+        )
+        document = service.create_document(
+            CreateDocumentRequest(name="Offline drafting-quality harness"),
+            source="system",
+        )
+        source = _symbol_element("draft_source", through, 120, 280, "S-D1")
+        source_out = service._symbol_port_point(source, outlet_id)
+        inlet = next(port for port in through.ports if port.id == inlet_id)
+        target = _symbol_element(
+            "draft_target",
+            through,
+            720,
+            source_out.y - inlet.y,
+            "T-D1",
+        )
+        seeded = service.apply_transaction(
+            document.id,
+            TransactionRequest(
+                expected_revision=document.revision,
+                source="system",
+                label="Seed drafting harness",
+                operations=[
+                    AddElementOperation(element=source),
+                    AddElementOperation(element=target),
+                ],
+            ),
+            source="system",
+        ).document
+        plan = SemanticAgentPlan.model_validate(
+            {
+                "explanation": "One aligned process connection.",
+                "transaction": {
+                    "expected_revision": seeded.revision,
+                    "label": "Drafting-quality route",
+                    "operations": [
+                        {
+                            "op": "connect_ports",
+                            "connector_id": "draft_pipe",
+                            "source_element_id": source.id,
+                            "source_port_id": outlet_id,
+                            "target_element_id": target.id,
+                            "target_port_id": inlet_id,
+                            "flow_direction": "forward",
+                        }
+                    ],
+                },
+            }
+        )
+        compiled = SemanticTransactionCompiler(service).compile(
+            document.id,
+            plan.transaction,
+        )
+        _require(
+            compiled.assessment.valid and compiled.transaction is not None,
+            "DRAFTING_VALID_ROUTE_REJECTED",
+            "an aligned semantic connection must compile",
+        )
+        applied = service.apply_transaction(
+            document.id,
+            compiled.transaction,
+            source="llm",
+        ).document
+        good = analyze_diagram_quality(applied, symbols)
+        _require(
+            good.passed and good.score == 100,
+            "DRAFTING_GOOD_ROUTE_FAILED",
+            f"canonical aligned route scored {good.score}: {[item.code for item in good.issues]}",
+        )
+
+        bad = Document.model_validate(applied.model_dump(mode="python"))
+        pipe = next(
+            element
+            for element in bad.elements
+            if element.id == "draft_pipe" and element.type == "connector"
+        )
+        start, end = pipe.points[0], pipe.points[-1]
+        pipe.points = [
+            start,
+            Point(x=start.x + 5, y=start.y),
+            Point(x=start.x + 5, y=start.y + 5),
+            Point(x=end.x, y=start.y + 5),
+            end,
+        ]
+        pipe.routing = "manual"
+        bad = Document.model_validate(bad.model_dump(mode="python"))
+        rejected = analyze_diagram_quality(bad, symbols)
+        rejected_codes = {issue.code for issue in rejected.issues}
+        _require(
+            not rejected.passed
+            and {"MICRO_SEGMENT", "UNNECESSARY_BEND"}.issubset(rejected_codes),
+            "DRAFTING_BAD_ROUTE_ACCEPTED",
+            "sub-grid doglegs on aligned endpoints must fail deterministic drafting quality",
+        )
+
+    return QualityHarnessCaseResult(
+        name="drafting_quality_contract",
+        status="passed",
+        summary="canonical route scored 100; micro-dogleg fixture was deterministically rejected",
+        details={
+            "good_score": good.score,
+            "good_bends": good.metrics.total_bends,
+            "rejected_issue_codes": sorted(rejected_codes),
+        },
+    )
+
+
 def _capture_case(
     name: str,
     runner: Callable[[SymbolRegistry], QualityHarnessCaseResult],
@@ -830,6 +960,7 @@ def run_quality_harness(symbols: SymbolRegistry | None = None) -> QualityHarness
         _capture_case("symbol_catalog_integrity", _catalog_case, registry),
         _capture_case("atomic_topology_transaction", _atomic_topology_case, registry),
         _capture_case("semantic_agent_output_contract", _semantic_agent_case, registry),
+        _capture_case("drafting_quality_contract", _drafting_quality_case, registry),
     ]
     passed_cases = sum(case.status == "passed" for case in cases)
     return QualityHarnessReport(

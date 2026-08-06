@@ -4,7 +4,7 @@
       "key": "ball_valve",
       "name": "球阀",
       "category": "阀门",
-      "description": "通用两通球阀占位图例，可由单位标准图例替换。",
+      "description": "球阀。GB/T 6567.4-2008 图形：圆形 + 两条对角斜线。",
       "width": 60,
       "height": 40,
       "ports": [
@@ -12,17 +12,18 @@
         {"id": "out", "name": "出口", "x": 60, "y": 20, "direction": "out"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 20, "x2": 20, "y2": 20},
-        {"type": "polyline", "points": [[20, 5], [30, 20], [20, 35]], "closed": true},
-        {"type": "polyline", "points": [[40, 5], [30, 20], [40, 35]], "closed": true},
-        {"type": "line", "x1": 40, "y1": 20, "x2": 60, "y2": 20}
+        {"type": "line", "x1": 0, "y1": 20, "x2": 16, "y2": 20},
+        {"type": "circle", "cx": 30, "cy": 20, "r": 14},
+        {"type": "line", "x1": 20, "y1": 10, "x2": 40, "y2": 30},
+        {"type": "line", "x1": 20, "y1": 30, "x2": 40, "y2": 10},
+        {"type": "line", "x1": 44, "y1": 20, "x2": 60, "y2": 20}
       ]
     },
     {
       "key": "gate_valve",
       "name": "闸阀",
       "category": "阀门",
-      "description": "通用闸阀占位图例。",
+      "description": "闸阀。GB/T 6567.4-2008 图形：两个空心三角形对接。",
       "width": 60,
       "height": 50,
       "ports": [
@@ -30,18 +31,17 @@
         {"id": "out", "name": "出口", "x": 60, "y": 30, "direction": "out"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 18, "y2": 30},
-        {"type": "polyline", "points": [[18, 15], [30, 30], [18, 45], [42, 15], [30, 30], [42, 45]], "closed": false},
-        {"type": "line", "x1": 42, "y1": 30, "x2": 60, "y2": 30},
-        {"type": "line", "x1": 30, "y1": 15, "x2": 30, "y2": 5},
-        {"type": "line", "x1": 20, "y1": 5, "x2": 40, "y2": 5}
+        {"type": "line", "x1": 0, "y1": 30, "x2": 15, "y2": 30},
+        {"type": "polyline", "points": [[15, 18], [30, 30], [15, 42]], "closed": true},
+        {"type": "polyline", "points": [[45, 18], [30, 30], [45, 42]], "closed": true},
+        {"type": "line", "x1": 45, "y1": 30, "x2": 60, "y2": 30}
       ]
     },
     {
       "key": "control_valve",
       "name": "调节阀",
       "category": "阀门",
-      "description": "带执行机构的调节阀占位图例。",
+      "description": "调节阀。沙漏 + 顶部膜头圆（GB/T 6567.4 未含，按行业画法）。",
       "width": 70,
       "height": 80,
       "ports": [
@@ -49,12 +49,12 @@
         {"id": "out", "name": "出口", "x": 70, "y": 55, "direction": "out"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 55, "x2": 22, "y2": 55},
-        {"type": "polyline", "points": [[22, 40], [35, 55], [22, 70]], "closed": true},
-        {"type": "polyline", "points": [[48, 40], [35, 55], [48, 70]], "closed": true},
-        {"type": "line", "x1": 48, "y1": 55, "x2": 70, "y2": 55},
-        {"type": "line", "x1": 35, "y1": 40, "x2": 35, "y2": 28},
-        {"type": "rect", "x": 20, "y": 3, "width": 30, "height": 25, "rx": 3}
+        {"type": "line", "x1": 0, "y1": 55, "x2": 17, "y2": 55},
+        {"type": "polyline", "points": [[17, 42], [35, 55], [17, 68]], "closed": true},
+        {"type": "polyline", "points": [[53, 42], [35, 55], [53, 68]], "closed": true},
+        {"type": "line", "x1": 53, "y1": 55, "x2": 70, "y2": 55},
+        {"type": "line", "x1": 35, "y1": 42, "x2": 35, "y2": 26},
+        {"type": "circle", "cx": 35, "cy": 16, "r": 10}
       ]
     },
     {

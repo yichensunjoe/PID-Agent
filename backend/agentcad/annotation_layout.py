@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass
 from math import hypot
 
@@ -254,6 +253,12 @@ def _parent_candidates(text: TextElement, parent: Element) -> list[tuple[TextEle
         rect.y2 + font + close,
         "middle",
     )
+    stacked_below = _text_candidate(
+        text,
+        (rect.x1 + rect.x2) / 2,
+        rect.y2 + font + 38,
+        "middle",
+    )
     right = _text_candidate(text, rect.x2 + close, center_y, "start")
     left = _text_candidate(text, rect.x1 - close, center_y, "end")
     far_above = _text_candidate(text, (rect.x1 + rect.x2) / 2, rect.y1 - far, "middle")
@@ -265,25 +270,86 @@ def _parent_candidates(text: TextElement, parent: Element) -> list[tuple[TextEle
     )
     far_right = _text_candidate(text, rect.x2 + far, center_y, "start")
     far_left = _text_candidate(text, rect.x1 - far, center_y, "end")
+    very_far = 120.0
+    very_far_candidates = [
+        _text_candidate(text, (rect.x1 + rect.x2) / 2, rect.y1 - very_far, "middle"),
+        _text_candidate(
+            text,
+            (rect.x1 + rect.x2) / 2,
+            rect.y2 + font + very_far,
+            "middle",
+        ),
+        _text_candidate(text, rect.x2 + very_far, center_y, "start"),
+        _text_candidate(text, rect.x1 - very_far, center_y, "end"),
+    ]
+    search_candidates: list[TextElement] = []
+    center_x = (rect.x1 + rect.x2) / 2
+    for distance in (90.0, 120.0, 160.0, 200.0):
+        search_candidates.extend(
+            [
+                _text_candidate(text, center_x - distance, rect.y1 - distance, "middle"),
+                _text_candidate(text, center_x + distance, rect.y1 - distance, "middle"),
+                _text_candidate(
+                    text,
+                    center_x - distance,
+                    rect.y2 + font + distance,
+                    "middle",
+                ),
+                _text_candidate(
+                    text,
+                    center_x + distance,
+                    rect.y2 + font + distance,
+                    "middle",
+                ),
+            ]
+        )
 
     instrument = parent.metadata.get("assembly") == "instrument_tap" and parent.metadata.get(
         "role"
     ) == "instrument"
-    close_candidates = [above, right, left, below] if instrument else [below, above, right, left]
+    close_candidates = (
+        [above, right, left, below]
+        if instrument
+        else [below, stacked_below, above, right, left]
+    )
     far_candidates = (
         [far_above, far_right, far_left, far_below]
         if instrument
         else [far_below, far_above, far_right, far_left]
     )
-    return [(candidate, False) for candidate in close_candidates] + [
-        (candidate, True) for candidate in far_candidates
-    ]
+    return (
+        [(candidate, False) for candidate in close_candidates]
+        + [(candidate, True) for candidate in far_candidates]
+        + [(candidate, True) for candidate in very_far_candidates]
+        + [(candidate, True) for candidate in search_candidates]
+    )
 
 
 def _free_candidates(text: TextElement) -> list[tuple[TextElement, bool]]:
     x = text.position.x
     y = text.position.y
-    offsets = [(0, 0), (0, -28), (0, 28), (40, 0), (-40, 0), (60, -36), (-60, -36)]
+    offsets = [
+        (0, 0),
+        (0, -28),
+        (0, 28),
+        (40, 0),
+        (-40, 0),
+        (60, -36),
+        (-60, -36),
+    ]
+    for distance in (60, 90, 120, 160):
+        offsets.extend(
+            [
+                (0, -distance),
+                (0, distance),
+                (distance, 0),
+                (-distance, 0),
+                (distance, -distance),
+                (-distance, -distance),
+                (distance, distance),
+                (-distance, distance),
+            ]
+        )
     return [(_text_candidate(text, x + dx, y + dy, text.anchor), False) for dx, dy in offsets]
 
 
@@ -500,11 +566,7 @@ def polish_full_diagram_transaction(
         after=after,
         generated_text_ids=generated_text_ids,
         moved_text_ids=sorted(set(moved_text_ids)),
-        deleted_text_ids=deleted_text_ids,
+        deleted_text_ids=sorted(set(deleted_text_ids)),
         leader_line_ids=leader_line_ids,
     )
     return polished, metrics
-
-
-def iter_annotation_rects(document: Document, registry: SymbolRegistry) -> Iterable[Rect]:
-    return (text_bounds(text) for text in _annotations(document, registry))

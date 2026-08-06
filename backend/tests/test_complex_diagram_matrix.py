@@ -30,7 +30,7 @@ def _provider() -> ProviderConfig:
     return ProviderConfig(base_url="http://model.test/v1", model="complex-matrix")
 
 
-def _symbol(symbols, element_id, key, x, y, label=""):
+def _symbol(symbols, element_id, key, x, y, label="", rotation=0):
     definition = symbols.get(key)
     return SymbolElement(
         id=element_id,
@@ -39,23 +39,55 @@ def _symbol(symbols, element_id, key, x, y, label=""):
         width=definition.width,
         height=definition.height,
         label=label,
+        rotation=rotation,
     )
 
 
 def _complex_operations(planner: SemanticAgentPlanner):
     symbols = planner.symbols
     operations = [
-        AddElementOperation(element=_symbol(symbols, "waste_in", "system_interface", 80, 380)),
+        AddElementOperation(
+            element=_symbol(symbols, "waste_in", "off_page_connector_in", 80, 375)
+        ),
         AddElementOperation(element=_symbol(symbols, "v101", "ball_valve", 260, 380, "V-101")),
-        AddElementOperation(element=_symbol(symbols, "e101", "heat_exchanger", 700, 340, "E-101")),
+        AddElementOperation(
+            element=_symbol(
+                symbols,
+                "e101",
+                "heat_exchanger_horizontal_shell",
+                700,
+                372,
+                "E-101",
+            )
+        ),
         AddElementOperation(element=_symbol(symbols, "v102", "ball_valve", 1180, 380, "V-102")),
-        AddElementOperation(element=_symbol(symbols, "waste_out", "system_interface", 1400, 380)),
-        AddElementOperation(element=_symbol(symbols, "air_out", "system_interface", 480, 600)),
-        AddElementOperation(element=_symbol(symbols, "air_in", "system_interface", 1000, 600)),
+        AddElementOperation(
+            element=_symbol(symbols, "waste_out", "off_page_connector_out", 1400, 375)
+        ),
+        AddElementOperation(
+            element=_symbol(
+                symbols,
+                "air_out",
+                "off_page_connector_out",
+                480,
+                409,
+                rotation=180,
+            )
+        ),
+        AddElementOperation(
+            element=_symbol(
+                symbols,
+                "air_in",
+                "off_page_connector_in",
+                1000,
+                409,
+                rotation=180,
+            )
+        ),
         ConnectPortsOperation(
             connector_id="pipe_inlet",
             source_element_id="waste_in",
-            source_port_id="right",
+            source_port_id="process",
             target_element_id="v101",
             target_port_id="in",
             medium="waste_gas",
@@ -67,7 +99,6 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_port_id="out",
             target_element_id="e101",
             target_port_id="tube_in",
-            waypoints=[Point(x=650, y=400), Point(x=650, y=360)],
             medium="waste_gas",
             flow_direction="forward",
         ),
@@ -77,7 +108,6 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_port_id="tube_out",
             target_element_id="v102",
             target_port_id="in",
-            waypoints=[Point(x=870, y=390), Point(x=870, y=400)],
             medium="waste_gas",
             flow_direction="forward",
         ),
@@ -86,7 +116,7 @@ def _complex_operations(planner: SemanticAgentPlanner):
             source_element_id="v102",
             source_port_id="out",
             target_element_id="waste_out",
-            target_port_id="left",
+            target_port_id="process",
             medium="waste_gas",
             flow_direction="forward",
         ),
@@ -141,27 +171,25 @@ def _complex_operations(planner: SemanticAgentPlanner):
         ConnectPortsOperation(
             connector_id="air_inlet_pipe",
             source_element_id="air_in",
-            source_port_id="left",
+            source_port_id="process",
             target_element_id="e101",
-            target_port_id="shell_out",
-            waypoints=[Point(x=1000, y=540), Point(x=765, y=540)],
+            target_port_id="shell_in",
             medium="cooling_air",
             flow_direction="forward",
         ),
         ConnectPortsOperation(
             connector_id="air_outlet_pipe",
             source_element_id="e101",
-            source_port_id="shell_in",
+            source_port_id="shell_out",
             target_element_id="air_out",
-            target_port_id="right",
-            waypoints=[Point(x=765, y=540), Point(x=600, y=540)],
+            target_port_id="process",
             medium="cooling_air",
             flow_direction="forward",
         ),
     ]
     for element_id, parent_id, text in [
         ("txt_waste_in", "waste_in", "上游废气来气"),
-        ("txt_e101_name", "e101", "气体冷凝器 E-101"),
+        ("txt_e101_name", "e101", "气体冷凝器"),
         ("txt_waste_out", "waste_out", "尾气处理系统"),
         ("txt_air_out", "air_out", "空气出口"),
         ("txt_air_in", "air_in", "空气进口"),
@@ -276,6 +304,14 @@ def test_complex_operations_compile_to_polished_transaction(tmp_path):
         element.type == "text" and element.text.strip() in {"→", "←"}
         for element in generated
     )
+    instrument_branches = [
+        element
+        for element in generated
+        if element.type == "connector"
+        and element.metadata.get("assembly") == "instrument_tap"
+    ]
+    assert instrument_branches
+    assert all(connector.flow_direction == "none" for connector in instrument_branches)
 
 
 def test_optional_complex_matrix_adds_one_49_element_case(monkeypatch):

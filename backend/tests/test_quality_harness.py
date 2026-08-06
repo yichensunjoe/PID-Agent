@@ -11,13 +11,14 @@ def test_offline_quality_harness_passes_without_provider():
     report = run_quality_harness(SymbolRegistry())
 
     assert report.passed is True
-    assert report.total_cases == 3
-    assert report.passed_cases == 3
+    assert report.total_cases == 4
+    assert report.passed_cases == 4
     assert report.failed_cases == 0
     assert [case.name for case in report.cases] == [
         "symbol_catalog_integrity",
         "atomic_topology_transaction",
         "semantic_agent_output_contract",
+        "drafting_quality_contract",
     ]
     semantic = report.cases[2]
     assert semantic.details["junction_degree"] == 3

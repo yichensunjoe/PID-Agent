@@ -112,6 +112,23 @@ pid-agent model-matrix \
   --output reports/ollama-qwen.json
 ```
 
+DeepSeek V4 Flash（包含复杂 P&ID 图面质量场景）示例：
+
+```bash
+read -s PID_AGENT_MATRIX_API_KEY
+export PID_AGENT_MATRIX_API_KEY
+echo
+
+pid-agent model-matrix \
+  --base-url https://api.deepseek.com \
+  --model deepseek-v4-flash \
+  --timeout 180 \
+  --repetitions 3 \
+  --max-replans 3 \
+  --include-complex-diagram \
+  --output reports/deepseek-v4-flash.json
+```
+
 退出码：
 
 - `0`：该 Provider 达到正式验收阈值；
@@ -130,7 +147,9 @@ Content-Type: application/json
     "base_url": "https://apihub.agnes-ai.com/v1",
     "model": "agnes-2.0-flash",
     "api_key": "request-memory-only",
-    "timeout_seconds": 180
+    "timeout_seconds": 600,
+    "thinking_enabled": true,
+    "thinking_level": "high"
   },
   "repetitions": 3,
   "max_replans": 3
@@ -144,7 +163,7 @@ Content-Type: application/json
 - passed、failed、blocked 数量；
 - pass rate；
 - 重规划 convergence rate；
-- 每个场景的尝试次数、issue code、耗时和最终拓扑断言结果；
+- 每个场景的尝试次数、issue code、耗时、最终拓扑断言、图面质量分和质量 issue code；
 - `accepted`。
 
 不包含 API Key、Authorization、完整 Prompt、完整工程上下文或模型原始正文。

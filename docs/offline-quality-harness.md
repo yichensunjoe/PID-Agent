@@ -38,7 +38,7 @@ Python traceback。错误位于 `symbol_catalog_load` case，并带稳定的 fin
 文件内重复 `key` 通常是复制错误，因此会失败；不同文件或内置/单位/项目层之间相同 `key`
 仍按加载顺序合法覆盖。
 
-## 三个检查
+## 四个检查
 
 ### 1. `symbol_catalog_integrity`
 
@@ -82,11 +82,28 @@ Python traceback。错误位于 `symbol_catalog_load` case，并带稳定的 fin
 
 这能验证“模型输出之后”的确定性安全边界，但不会证明某个真实模型能稳定理解自然语言。
 
+### 4. `drafting_quality_contract`
+
+这个 case 专门验证“图连对了但画得难看”的失败模式。它先让生产语义编译器连接一组已对齐
+的真实端口，要求确定性路由得到零折点、100 分的图面；再注入一条只有 5 单位高差的阶梯形
+管线，要求质量门禁稳定拒绝 `MICRO_SEGMENT` 和 `UNNECESSARY_BEND`。
+
+同一套质量分析还会检查：
+
+- 斜线、微小线段、不必要折点和超过三折的管线；
+- 端口方向、端口外法线、入口/出口朝向及主流程反向；
+- 图例重叠、管线穿设备、图元或管线越出画布；
+- 几何相交却没有跨线桥的管线；
+- 重复标签，以及文字与文字、图例或管线的重叠。
+
+完整新图必须没有阻断项且达到 95 分；不达标会以结构化 issue 反馈给模型重规划。局部编辑仍
+保留宽容编译，避免一处历史遗留排版问题阻止无关修改。
+
 ## 与其他验收的关系
 
 | 层次 | 命令 | 是否联网 | 主要回答的问题 |
 |---|---|---:|---|
-| 离线质量 Harness | `pid-agent quality-harness` | 否 | 图例、存储、端口拓扑和 Agent 事务契约是否完好 |
+| 离线质量 Harness | `pid-agent quality-harness` | 否 | 图例、存储、端口拓扑、Agent 事务和确定性绘图质量门禁是否完好 |
 | 浏览器验收 | `cd frontend && npm run test:e2e` | 否 | 人工编辑、刷新持久化、视觉和交互是否正常 |
 | 真实模型矩阵 | `pid-agent model-matrix ...` | 是或本地模型 | 指定模型能否多次从自然语言生成并修复正确事务 |
 | 大图基准 | `PYTHONPATH=backend python backend/benchmarks/benchmark_large_documents.py` | 否 | 500–5000 图元的导出耗时和内存是否退化 |

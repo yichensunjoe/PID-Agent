@@ -51,14 +51,18 @@ Harness 使用 `VALVE_CLOSED_FLOW_ISOLATION` 信息 finding，并在受影响 co
 
 ## Agent Harness
 
-语义 Agent 每次规划与重规划都会附加 `pid-agent.agent-harness-context` v1，包括：
+语义 Agent 每次规划与重规划都会附加 `pid-agent.agent-harness-context` v2，包括：
 
 - 当前 document ID 与 revision；
-- 符号真实端口、方向和介质；
+- 符号位置、尺寸、旋转角，以及真实端口的方向、介质、所在边和旋转后的外法线；
 - connector 的介质、方向、上下游元素、`main_route_id` 和 `flow_blocked`；
 - 阀门状态及关闭阀门造成的下游流动隔离；
 - 连接点作为三通、无连接点交叉使用跨线桥，以及 5 单位精细坐标约束；
 - OPC 方向与目标 document ID。
+- `pid-agent.drafting-contract`：主流程从左到右、先骨架后细节、端口对齐、正交路由、跨线与
+  三通语义、最小线段长度和 95 分验收阈值；
+- 当前 `pid-agent.diagram-quality` 报告，包含折点、错位、穿设备、跨线、端口朝向和标注碰撞
+  等可重现指标。
 
 调试接口：
 
@@ -66,7 +70,9 @@ Harness 使用 `VALVE_CLOSED_FLOW_ISOLATION` 信息 finding，并在受影响 co
 GET /api/v2/documents/{document_id}/agent/harness-context
 ```
 
-模型绘图继续采用宽容编译：有效操作可以落图，无效绘图操作会被跳过；revision 冲突、鉴权、数据库完整性和共享部署安全边界仍然保留。
+已有图纸的局部编辑继续采用宽容编译：有效操作可以落图，无效绘图操作会被跳过。空白画布上
+生成完整 P&ID 时采用严格编译：拓扑或绘图质量不合格就不落半张图，而是把结构化问题交给模型
+重规划。revision 冲突、鉴权、数据库完整性和共享部署安全边界始终保留。
 
 ## 其他运行功能
 

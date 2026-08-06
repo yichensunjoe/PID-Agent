@@ -150,7 +150,9 @@ Content-Type: application/json
   "provider": {
     "base_url": "http://localhost:11434/v1",
     "model": "your-model",
-    "timeout_seconds": 180
+    "timeout_seconds": 600,
+    "thinking_enabled": true,
+    "thinking_level": "high"
   }
 }
 ```
@@ -217,6 +219,7 @@ API key 只用于当前请求或环境变量，不写入数据库。旧 `AGENTCA
 ```
 
 超时发生在 transaction 应用之前，因此不会留下部分图纸修改。
+服务端超时上限为 600 秒，网页会读取该上限并限制输入框。思考模式使用 OpenAI 兼容的 `thinking` 和 `reasoning_effort` 字段；不支持这些字段的服务会自动回退到普通请求。
 
 ## MCP
 

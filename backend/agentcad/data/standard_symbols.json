@@ -350,7 +350,7 @@
       "key": "globe_valve",
       "name": "截止阀",
       "category": "阀门",
-      "description": "手动截止阀。入口在左、出口在右，适用于切断或节流。",
+      "description": "截止阀。GB/T 6567.4-2008 图形：小圆阀体 + 两端连接线。",
       "width": 70,
       "height": 65,
       "ports": [
@@ -358,19 +358,16 @@
         {"id": "out", "name": "出口", "x": 70, "y": 40, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 40, "x2": 18, "y2": 40},
-        {"type": "polyline", "points": [[18, 25], [35, 40], [18, 55], [52, 25], [35, 40], [52, 55]], "closed": false},
-        {"type": "circle", "cx": 35, "cy": 40, "r": 6},
-        {"type": "line", "x1": 52, "y1": 40, "x2": 70, "y2": 40},
-        {"type": "line", "x1": 35, "y1": 34, "x2": 35, "y2": 12},
-        {"type": "path", "d": "M 20 12 Q 35 0 50 12"}
+        {"type": "line", "x1": 0, "y1": 40, "x2": 22, "y2": 40},
+        {"type": "circle", "cx": 35, "cy": 40, "r": 13},
+        {"type": "line", "x1": 48, "y1": 40, "x2": 70, "y2": 40}
       ]
     },
     {
       "key": "check_valve",
       "name": "止回阀",
       "category": "阀门",
-      "description": "单向止回阀，默认允许介质从左向右流动。",
+      "description": "止回阀。GB/T 6567.4-2008 图形：喇叭三角 + 竖线挡板，流向左→右。",
       "width": 80,
       "height": 50,
       "ports": [
@@ -378,17 +375,17 @@
         {"id": "out", "name": "出口", "x": 80, "y": 25, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 18, "y2": 25},
-        {"type": "polyline", "points": [[18, 8], [52, 25], [18, 42]], "closed": true},
-        {"type": "line", "x1": 54, "y1": 8, "x2": 54, "y2": 42},
-        {"type": "line", "x1": 54, "y1": 25, "x2": 80, "y2": 25}
+        {"type": "line", "x1": 0, "y1": 25, "x2": 22, "y2": 25},
+        {"type": "polyline", "points": [[22, 13], [40, 25], [22, 37]], "closed": true},
+        {"type": "line", "x1": 40, "y1": 13, "x2": 40, "y2": 37},
+        {"type": "line", "x1": 40, "y1": 25, "x2": 80, "y2": 25}
       ]
     },
     {
       "key": "safety_relief_valve",
       "name": "安全泄放阀",
       "category": "安全附件",
-      "description": "弹簧加载安全泄放阀。底部为受保护设备入口，右侧为泄放出口。",
+      "description": "安全阀（弹簧式）。GB/T 6567.4-2008 图形：沙漏 + 左上弹簧折线 + 箭头。",
       "width": 80,
       "height": 90,
       "ports": [
@@ -396,20 +393,22 @@
         {"id": "outlet", "name": "泄放出口", "x": 80, "y": 55, "direction": "out", "medium": "relief"}
       ],
       "shapes": [
-        {"type": "line", "x1": 35, "y1": 90, "x2": 35, "y2": 66},
-        {"type": "polyline", "points": [[18, 66], [35, 48], [52, 66]], "closed": true},
-        {"type": "polyline", "points": [[35, 48], [52, 32], [52, 55]], "closed": true},
-        {"type": "line", "x1": 52, "y1": 55, "x2": 80, "y2": 55},
-        {"type": "line", "x1": 35, "y1": 48, "x2": 35, "y2": 36},
-        {"type": "polyline", "points": [[35, 36], [29, 30], [41, 24], [29, 18], [41, 12], [35, 6]], "closed": false},
-        {"type": "line", "x1": 25, "y1": 4, "x2": 45, "y2": 4}
+        {"type": "polyline", "points": [[22, 45], [48, 45], [35, 60]], "closed": true},
+        {"type": "polyline", "points": [[22, 75], [48, 75], [35, 60]], "closed": true},
+        {"type": "line", "x1": 35, "y1": 75, "x2": 35, "y2": 90},
+        {"type": "line", "x1": 48, "y1": 60, "x2": 80, "y2": 55},
+        {"type": "line", "x1": 22, "y1": 48, "x2": 14, "y2": 38},
+        {"type": "line", "x1": 14, "y1": 38, "x2": 20, "y2": 30},
+        {"type": "line", "x1": 20, "y1": 30, "x2": 12, "y2": 20},
+        {"type": "line", "x1": 12, "y1": 20, "x2": 18, "y2": 10},
+        {"type": "polyline", "points": [[18, 10], [24, 16], [14, 18]], "closed": true}
       ]
     },
     {
       "key": "butterfly_valve",
       "name": "蝶阀",
       "category": "阀门",
-      "description": "通用蝶阀。圆内斜线表示阀板，左右端口接入主管。",
+      "description": "蝶阀。GB/T 6567.4-2008 图形：两条相对弧线。",
       "width": 80,
       "height": 60,
       "ports": [
@@ -417,19 +416,17 @@
         {"id": "out", "name": "出口", "x": 80, "y": 35, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 20, "y2": 35},
-        {"type": "circle", "cx": 40, "cy": 35, "r": 20},
-        {"type": "line", "x1": 27, "y1": 50, "x2": 53, "y2": 20},
-        {"type": "line", "x1": 60, "y1": 35, "x2": 80, "y2": 35},
-        {"type": "line", "x1": 40, "y1": 15, "x2": 40, "y2": 3},
-        {"type": "line", "x1": 30, "y1": 3, "x2": 50, "y2": 3}
+        {"type": "line", "x1": 0, "y1": 35, "x2": 28, "y2": 35},
+        {"type": "path", "d": "M 28 20 Q 40 35 28 50"},
+        {"type": "path", "d": "M 52 20 Q 40 35 52 50"},
+        {"type": "line", "x1": 52, "y1": 35, "x2": 80, "y2": 35}
       ]
     },
     {
       "key": "needle_valve",
       "name": "针型阀",
       "category": "阀门",
-      "description": "针型阀，适用于仪表根部隔离、小流量调节和取样支路。",
+      "description": "针型阀（采用 GB/T 6567.4-2008 节流阀画法）：两个实心黑色三角形对接。",
       "width": 70,
       "height": 70,
       "ports": [
@@ -437,19 +434,17 @@
         {"id": "out", "name": "出口", "x": 70, "y": 45, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 45, "x2": 18, "y2": 45},
-        {"type": "polyline", "points": [[18, 30], [35, 45], [18, 60], [52, 30], [35, 45], [52, 60]], "closed": false},
-        {"type": "line", "x1": 52, "y1": 45, "x2": 70, "y2": 45},
-        {"type": "polyline", "points": [[35, 45], [35, 20], [30, 29], [40, 29]], "closed": false},
-        {"type": "line", "x1": 25, "y1": 12, "x2": 45, "y2": 12},
-        {"type": "line", "x1": 35, "y1": 12, "x2": 35, "y2": 20}
+        {"type": "line", "x1": 0, "y1": 45, "x2": 17, "y2": 45},
+        {"type": "polyline", "points": [[17, 32], [35, 45], [17, 58]], "closed": true, "fill": "#111827"},
+        {"type": "polyline", "points": [[53, 32], [35, 45], [53, 58]], "closed": true, "fill": "#111827"},
+        {"type": "line", "x1": 53, "y1": 45, "x2": 70, "y2": 45}
       ]
     },
     {
       "key": "plug_valve",
       "name": "旋塞阀",
       "category": "阀门",
-      "description": "通用旋塞阀。小圆表示旋塞，左右端口接入主管。",
+      "description": "旋塞阀。GB/T 6567.4-2008 图形：沙漏 + 顶部 T 形横杆。",
       "width": 70,
       "height": 55,
       "ports": [
@@ -457,18 +452,19 @@
         {"id": "out", "name": "出口", "x": 70, "y": 30, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 18, "y2": 30},
-        {"type": "polyline", "points": [[18, 15], [35, 30], [18, 45], [52, 15], [35, 30], [52, 45]], "closed": false},
-        {"type": "circle", "cx": 35, "cy": 30, "r": 5},
-        {"type": "line", "x1": 52, "y1": 30, "x2": 70, "y2": 30},
-        {"type": "line", "x1": 35, "y1": 25, "x2": 35, "y2": 5}
+        {"type": "line", "x1": 0, "y1": 30, "x2": 17, "y2": 30},
+        {"type": "polyline", "points": [[17, 18], [35, 30], [17, 42]], "closed": true},
+        {"type": "polyline", "points": [[53, 18], [35, 30], [53, 42]], "closed": true},
+        {"type": "line", "x1": 53, "y1": 30, "x2": 70, "y2": 30},
+        {"type": "line", "x1": 35, "y1": 18, "x2": 35, "y2": 8},
+        {"type": "line", "x1": 25, "y1": 8, "x2": 45, "y2": 8}
       ]
     },
     {
       "key": "three_way_valve",
       "name": "三通阀",
       "category": "阀门",
-      "description": "三通切换或混合阀。左、右、下方均为真实工艺端口。",
+      "description": "三通阀。GB/T 6567.4-2008 图形：三个三角形顶点汇聚中心。",
       "width": 70,
       "height": 75,
       "ports": [
@@ -477,19 +473,19 @@
         {"id": "branch", "name": "支路接口", "x": 35, "y": 75, "direction": "bidirectional", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 18, "y2": 35},
-        {"type": "line", "x1": 52, "y1": 35, "x2": 70, "y2": 35},
-        {"type": "line", "x1": 35, "y1": 52, "x2": 35, "y2": 75},
-        {"type": "polyline", "points": [[18, 20], [35, 35], [18, 50]], "closed": true},
-        {"type": "polyline", "points": [[52, 20], [35, 35], [52, 50]], "closed": true},
-        {"type": "polyline", "points": [[20, 52], [35, 35], [50, 52]], "closed": true}
+        {"type": "line", "x1": 0, "y1": 35, "x2": 15, "y2": 35},
+        {"type": "polyline", "points": [[15, 23], [35, 35], [15, 47]], "closed": true},
+        {"type": "polyline", "points": [[55, 23], [35, 35], [55, 47]], "closed": true},
+        {"type": "polyline", "points": [[23, 60], [35, 35], [47, 60]], "closed": true},
+        {"type": "line", "x1": 55, "y1": 35, "x2": 70, "y2": 35},
+        {"type": "line", "x1": 35, "y1": 60, "x2": 35, "y2": 75}
       ]
     },
     {
       "key": "motor_operated_valve",
       "name": "电动阀",
       "category": "阀门",
-      "description": "电动执行机构驱动的两通阀。执行机构只表达驱动方式，不提供工艺端口。",
+      "description": "电动阀。沙漏 + 顶部执行机构矩形（GB/T 6567.4 未含，按行业画法）。",
       "width": 70,
       "height": 80,
       "ports": [
@@ -497,19 +493,19 @@
         {"id": "out", "name": "出口", "x": 70, "y": 58, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 58, "x2": 18, "y2": 58},
-        {"type": "polyline", "points": [[18, 43], [35, 58], [18, 73], [52, 43], [35, 58], [52, 73]], "closed": false},
-        {"type": "line", "x1": 52, "y1": 58, "x2": 70, "y2": 58},
-        {"type": "line", "x1": 35, "y1": 43, "x2": 35, "y2": 27},
-        {"type": "rect", "x": 22, "y": 3, "width": 26, "height": 24},
-        {"type": "text", "x": 35, "y": 20, "text": "M", "font_size": 14, "anchor": "middle"}
+        {"type": "line", "x1": 0, "y1": 58, "x2": 17, "y2": 58},
+        {"type": "polyline", "points": [[17, 46], [35, 58], [17, 70]], "closed": true},
+        {"type": "polyline", "points": [[53, 46], [35, 58], [53, 70]], "closed": true},
+        {"type": "line", "x1": 53, "y1": 58, "x2": 70, "y2": 58},
+        {"type": "line", "x1": 35, "y1": 46, "x2": 35, "y2": 24},
+        {"type": "rect", "x": 23, "y": 10, "width": 24, "height": 14, "rx": 0}
       ]
     },
     {
       "key": "solenoid_valve",
       "name": "电磁阀",
       "category": "阀门",
-      "description": "电磁执行机构驱动的两通阀，默认端口方向从左向右。",
+      "description": "电磁阀。沙漏 + 顶部矩形 + S（GB/T 6567.4 未含，按行业画法）。",
       "width": 70,
       "height": 80,
       "ports": [
@@ -517,19 +513,20 @@
         {"id": "out", "name": "出口", "x": 70, "y": 58, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 58, "x2": 18, "y2": 58},
-        {"type": "polyline", "points": [[18, 43], [35, 58], [18, 73], [52, 43], [35, 58], [52, 73]], "closed": false},
-        {"type": "line", "x1": 52, "y1": 58, "x2": 70, "y2": 58},
-        {"type": "line", "x1": 35, "y1": 43, "x2": 35, "y2": 27},
-        {"type": "rect", "x": 22, "y": 3, "width": 26, "height": 24},
-        {"type": "text", "x": 35, "y": 20, "text": "S", "font_size": 14, "anchor": "middle"}
+        {"type": "line", "x1": 0, "y1": 58, "x2": 17, "y2": 58},
+        {"type": "polyline", "points": [[17, 46], [35, 58], [17, 70]], "closed": true},
+        {"type": "polyline", "points": [[53, 46], [35, 58], [53, 70]], "closed": true},
+        {"type": "line", "x1": 53, "y1": 58, "x2": 70, "y2": 58},
+        {"type": "line", "x1": 35, "y1": 46, "x2": 35, "y2": 24},
+        {"type": "rect", "x": 23, "y": 10, "width": 24, "height": 14, "rx": 0},
+        {"type": "text", "x": 35, "y": 20, "text": "S", "font_size": 11, "anchor": "middle"}
       ]
     },
     {
       "key": "diaphragm_valve",
       "name": "隔膜阀",
       "category": "阀门",
-      "description": "隔膜阀，适用于腐蚀性、洁净或含固体颗粒介质。",
+      "description": "隔膜阀。GB/T 6567.4-2008 图形：沙漏 + 顶部小横矩形手轮。",
       "width": 70,
       "height": 65,
       "ports": [
@@ -537,11 +534,12 @@
         {"id": "out", "name": "出口", "x": 70, "y": 42, "direction": "out", "medium": "process"}
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 42, "x2": 18, "y2": 42},
-        {"type": "polyline", "points": [[18, 28], [35, 42], [18, 56], [52, 28], [35, 42], [52, 56]], "closed": false},
-        {"type": "line", "x1": 52, "y1": 42, "x2": 70, "y2": 42},
-        {"type": "path", "d": "M 22 28 Q 35 5 48 28"},
-        {"type": "line", "x1": 35, "y1": 16, "x2": 35, "y2": 4}
+        {"type": "line", "x1": 0, "y1": 42, "x2": 17, "y2": 42},
+        {"type": "polyline", "points": [[17, 30], [35, 42], [17, 54]], "closed": true},
+        {"type": "polyline", "points": [[53, 30], [35, 42], [53, 54]], "closed": true},
+        {"type": "line", "x1": 53, "y1": 42, "x2": 70, "y2": 42},
+        {"type": "line", "x1": 35, "y1": 30, "x2": 35, "y2": 16},
+        {"type": "rect", "x": 26, "y": 6, "width": 18, "height": 10, "rx": 0}
       ]
     },
     {
@@ -669,7 +667,7 @@
       "key": "steam_trap",
       "name": "疏水器",
       "category": "管道附件",
-      "description": "通用疏水器符号。默认凝结水从左向右流动。",
+      "description": "疏水阀。GB/T 6567.4-2008 图形：沙漏 + 左右竖线外框。",
       "width": 100,
       "height": 70,
       "ports": [
@@ -677,8 +675,12 @@
         {"id": "out", "name": "出口", "x": 100, "y": 20, "direction": "out", "medium": "condensate"}
       ],
       "shapes": [
-        {"type": "path", "d": "M 0 20 L 20 20 Q 20 60 50 60 Q 80 60 80 20 L 100 20"},
-        {"type": "path", "d": "M 32 32 Q 50 48 68 32"}
+        {"type": "line", "x1": 0, "y1": 20, "x2": 35, "y2": 20},
+        {"type": "polyline", "points": [[35, 10], [50, 20], [35, 30]], "closed": true},
+        {"type": "polyline", "points": [[65, 10], [50, 20], [65, 30]], "closed": true},
+        {"type": "line", "x1": 65, "y1": 20, "x2": 100, "y2": 20},
+        {"type": "line", "x1": 28, "y1": 6, "x2": 28, "y2": 34},
+        {"type": "line", "x1": 72, "y1": 6, "x2": 72, "y2": 34}
       ]
     },
     {
@@ -937,6 +939,38 @@
       ]
     },
     {
+      "key": "temperature_element",
+      "name": "温度检测元件",
+      "category": "仪表",
+      "description": "温度检测元件（TE）。底部过程口连接温度套管或测量支路。",
+      "width": 50,
+      "height": 60,
+      "ports": [
+        {"id": "process", "name": "过程接口", "x": 25, "y": 60, "direction": "in", "medium": "process"}
+      ],
+      "shapes": [
+        {"type": "circle", "cx": 25, "cy": 25, "r": 22},
+        {"type": "text", "x": 25, "y": 30, "text": "TE", "font_size": 14, "anchor": "middle"},
+        {"type": "line", "x1": 25, "y1": 47, "x2": 25, "y2": 60}
+      ]
+    },
+    {
+      "key": "analyzer_indicator",
+      "name": "分析指示仪",
+      "category": "仪表",
+      "description": "分析指示仪（AI）。底部过程口连接水分、氧含量等分析取样支路。",
+      "width": 50,
+      "height": 60,
+      "ports": [
+        {"id": "process", "name": "过程接口", "x": 25, "y": 60, "direction": "in", "medium": "process"}
+      ],
+      "shapes": [
+        {"type": "circle", "cx": 25, "cy": 25, "r": 22},
+        {"type": "text", "x": 25, "y": 30, "text": "AI", "font_size": 14, "anchor": "middle"},
+        {"type": "line", "x1": 25, "y1": 47, "x2": 25, "y2": 60}
+      ]
+    },
+    {
       "key": "off_page_connector",
       "name": "跨图连接符",
       "category": "排放与边界",
@@ -965,6 +999,74 @@
         {"type": "polyline", "points": [[20, 25], [40, 5], [60, 25]], "closed": false},
         {"type": "line", "x1": 18, "y1": 25, "x2": 62, "y2": 25},
         {"type": "line", "x1": 24, "y1": 32, "x2": 56, "y2": 32}
+      ]
+    },
+    {
+      "key": "dashed_cabinet",
+      "name": "设备柜（虚线框）",
+      "category": "工艺设备",
+      "description": "虚线矩形柜框，用于表示供气柜、纯化柜等包络边界。框内为自由画布，可放置任意图例；仅边缘留有连接接口，左右各五个接口，其中边缘居中位置必有一个接口。",
+      "width": 160,
+      "height": 120,
+      "ports": [
+        {"id": "l1", "name": "左接口1", "x": 0, "y": 12, "direction": "bidirectional", "medium": "process"},
+        {"id": "l2", "name": "左接口2", "x": 0, "y": 36, "direction": "bidirectional", "medium": "process"},
+        {"id": "l3", "name": "左接口3（居中）", "x": 0, "y": 60, "direction": "bidirectional", "medium": "process"},
+        {"id": "l4", "name": "左接口4", "x": 0, "y": 84, "direction": "bidirectional", "medium": "process"},
+        {"id": "l5", "name": "左接口5", "x": 0, "y": 108, "direction": "bidirectional", "medium": "process"},
+        {"id": "r1", "name": "右接口1", "x": 160, "y": 12, "direction": "bidirectional", "medium": "process"},
+        {"id": "r2", "name": "右接口2", "x": 160, "y": 36, "direction": "bidirectional", "medium": "process"},
+        {"id": "r3", "name": "右接口3（居中）", "x": 160, "y": 60, "direction": "bidirectional", "medium": "process"},
+        {"id": "r4", "name": "右接口4", "x": 160, "y": 84, "direction": "bidirectional", "medium": "process"},
+        {"id": "r5", "name": "右接口5", "x": 160, "y": 108, "direction": "bidirectional", "medium": "process"}
+      ],
+      "shapes": [
+        {"type": "rect", "x": 0, "y": 0, "width": 160, "height": 120, "rx": 6, "dash": [14, 8]}
+      ]
+    },
+    {
+      "key": "purifier",
+      "name": "纯化器",
+      "category": "过滤设备",
+      "description": "矩形纯化器。左右两端各一个接口，介质流向由连接管线方向设定。",
+      "width": 60,
+      "height": 40,
+      "ports": [
+        {"id": "in", "name": "入口", "x": 0, "y": 20, "direction": "in", "medium": "process"},
+        {"id": "out", "name": "出口", "x": 60, "y": 20, "direction": "out", "medium": "process"}
+      ],
+      "shapes": [
+        {"type": "rect", "x": 0, "y": 0, "width": 60, "height": 40}
+      ]
+    },
+    {
+      "key": "booster_pump",
+      "name": "增压泵",
+      "category": "泵",
+      "description": "矩形增压泵。左右两端各一个接口，介质流向由连接管线方向设定。",
+      "width": 60,
+      "height": 40,
+      "ports": [
+        {"id": "in", "name": "入口", "x": 0, "y": 20, "direction": "in", "medium": "process"},
+        {"id": "out", "name": "出口", "x": 60, "y": 20, "direction": "out", "medium": "process"}
+      ],
+      "shapes": [
+        {"type": "rect", "x": 0, "y": 0, "width": 60, "height": 40}
+      ]
+    },
+    {
+      "key": "buffer_tank",
+      "name": "缓冲罐",
+      "category": "容器",
+      "description": "竖直胶囊形缓冲罐（矩形罐体上下圆弧，无内部线）。左右两端各一个接口。",
+      "width": 70,
+      "height": 100,
+      "ports": [
+        {"id": "in", "name": "入口", "x": 0, "y": 50, "direction": "in", "medium": "process"},
+        {"id": "out", "name": "出口", "x": 70, "y": 50, "direction": "out", "medium": "process"}
+      ],
+      "shapes": [
+        {"type": "path", "d": "M 0 35 A 35 35 0 0 1 70 35 L 70 65 A 35 35 0 0 1 0 65 Z"}
       ]
     }
   ]

@@ -13,7 +13,6 @@ HIDDEN_BUILTIN_SYMBOL_KEYS: dict[str, frozenset[str]] = {
     "standard_symbols.json": frozenset(
         {
             "off_page_connector",
-            "pressure_transmitter",
             "temperature_transmitter",
             "flow_transmitter",
             "level_transmitter",
@@ -161,11 +160,23 @@ class SymbolRegistry:
             raise KeyError(f"unknown symbol: {key}") from exc
 
     def as_prompt_catalog(self) -> str:
+        def port_side(symbol: SymbolDefinition, x: float, y: float) -> str:
+            distances = {
+                "left": abs(x),
+                "right": abs(symbol.width - x),
+                "top": abs(y),
+                "bottom": abs(symbol.height - y),
+            }
+            side, distance = min(distances.items(), key=lambda item: (item[1], item[0]))
+            tolerance = max(1.0, min(symbol.width, symbol.height) * 0.08)
+            return side if distance <= tolerance else "interior"
+
         rows = [
-            "Harness conventions:",
+            "Catalog and selection contract:",
+            "- Match the user's exact equipment and valve function; never use a visually similar generic symbol when an exact catalog symbol exists.",
+            "- ball_valve: explicit ball valve or generic quick isolation only; gate_valve: gate/full-bore isolation; globe_valve: globe/manual throttling; control_valve: actuated process control; check_valve: one-way non-return; butterfly_valve: butterfly/large-line isolation; needle_valve: instrument root or fine throttling; safety_relief_valve: overpressure protection.",
+            "- Port direction is process semantics. Forward flow is out/bidirectional → in/bidirectional. Port side is spatial geometry and controls how the pipe must leave/approach the symbol.",
             "- Build connectivity with real ports and semantic connectors; never draw decorative pipes or standalone arrow text.",
-            "- Connector medium should be water, gas, or a precise project medium; flow_direction controls direction and animation.",
-            "- Valve properties.valve_state is open or closed; missing means normally open.",
             "- Use off_page_connector_in/out for cross-drawing boundaries and set properties.target_document_id.",
             "- Preserve unrelated elements, document identity and expected_revision.",
             "",
@@ -173,7 +184,9 @@ class SymbolRegistry:
         ]
         for symbol in self.list():
             ports = ", ".join(
-                f"{port.id}:{port.name}[{port.direction},{port.medium}]" for port in symbol.ports
+                f"{port.id}:{port.name}[flow={port.direction},medium={port.medium},"
+                f"side={port_side(symbol, port.x, port.y)},offset=({port.x},{port.y})]"
+                for port in symbol.ports
             ) or "none"
             capabilities = ", ".join(
                 f"{key}={value}"

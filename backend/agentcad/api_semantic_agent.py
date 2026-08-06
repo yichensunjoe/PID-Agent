@@ -102,6 +102,11 @@ def _operation_types(plan, compiled) -> dict[str, Any]:
             if compiled.annotation_metrics is not None
             else None
         ),
+        "diagram_quality": (
+            compiled.diagram_quality.model_dump(mode="json", by_alias=True)
+            if compiled.diagram_quality is not None
+            else None
+        ),
     }
 
 
@@ -124,6 +129,7 @@ def _result(
         attempt=attempt,
         parent_plan_id=parent_plan_id,
         annotation_metrics=compiled.annotation_metrics,
+        diagram_quality=compiled.diagram_quality,
     )
 
 

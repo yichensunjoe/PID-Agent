@@ -9,6 +9,7 @@ from pydantic import Field
 
 from .agent_semantic_models import SemanticAgentReplanRequest
 from .annotation_layout import measure_annotation_quality
+from .diagram_quality import analyze_diagram_quality
 from .llm import PlannerError
 from .models import (
     AddElementOperation,
@@ -45,6 +46,8 @@ class ModelMatrixCaseResult(StrictModel):
     attempts: int = 0
     duration_ms: float = 0
     issue_codes: list[str] = Field(default_factory=list)
+    quality_score: float | None = Field(default=None, ge=0, le=100)
+    quality_issue_codes: list[str] = Field(default_factory=list)
     message: str = ""
 
 
@@ -151,6 +154,20 @@ def _complex_diagram_check(document, symbols: SymbolRegistry) -> bool:
     }
     if not required.issubset(elements):
         return False
+    expected_interfaces = {
+        "waste_in": ("off_page_connector_in", 0),
+        "waste_out": ("off_page_connector_out", 0),
+        "air_in": ("off_page_connector_in", 180),
+        "air_out": ("off_page_connector_out", 180),
+    }
+    for element_id, (symbol_key, rotation) in expected_interfaces.items():
+        element = elements[element_id]
+        if (
+            element.type != "symbol"
+            or element.symbol_key != symbol_key
+            or round(element.rotation) % 360 != rotation
+        ):
+            return False
     if not 30 <= len(document.elements) <= 50:
         return False
     for instrument_id, label in {
@@ -200,8 +217,8 @@ def _complex_diagram_check(document, symbols: SymbolRegistry) -> bool:
         and connector.target.element_id
     }
     utility_pairs = {
-        ("air_in", "left", "e101", "shell_out"),
-        ("e101", "shell_in", "air_out", "right"),
+        ("air_in", "process", "e101", "shell_in"),
+        ("e101", "shell_out", "air_out", "process"),
     }
     if not utility_pairs.issubset(actual_pairs):
         return False
@@ -245,7 +262,12 @@ def _scenario(name: str, primary, replacement, symbols: SymbolRegistry) -> tuple
         prompt = (
             "生成复杂冷凝流程图：上游废气接口经 V-101、E-101、V-102 到尾气处理接口；"
             "E-101 上下游分别建立 PT 和 TE instrument_tap，共四个真实 junction；"
-            "增加使用 E-101 shell_in/shell_out 的冷却空气线路；添加工艺说明文字。"
+            "E-101 使用 heat_exchanger_horizontal_shell；waste_in 必须使用 "
+            "off_page_connector_in，waste_out 必须使用 off_page_connector_out；"
+            "增加从 air_in 到 shell_in、再从 shell_out 到 air_out 的右向左冷却空气线路，"
+            "air_in 使用旋转 180 度的 off_page_connector_in，air_out 使用旋转 180 度的 "
+            "off_page_connector_out；所有 OPC 都连接 process 端口；设备名称文字只写气体冷凝器，"
+            "不要在名称中重复 E-101；添加工艺说明文字。"
             "使用给定固定 element id，保持正交连接并避免重复标签。"
         )
         return prompt, lambda document: _complex_diagram_check(document, symbols)
@@ -365,7 +387,27 @@ def _run_case(
                     message="semantic plan did not converge to a valid transaction",
                 )
             result = service.apply_transaction(document.id, compiled.transaction, source="llm")
-            passed = bool(check(result.document))
+            topology_passed = bool(check(result.document))
+            quality = analyze_diagram_quality(result.document, symbols)
+            quality_issue_codes = [issue.code for issue in quality.issues]
+            structural_codes = {
+                "NON_ORTHOGONAL_SEGMENT",
+                "MICRO_SEGMENT",
+                "UNNECESSARY_BEND",
+                "NODE_OVERLAP",
+                "PIPE_THROUGH_EQUIPMENT",
+                "UNBRIDGED_CROSSING",
+                "PORT_DIRECTION_MISMATCH",
+                "PORT_EXIT_MISMATCH",
+                "PORT_FACING_MISMATCH",
+                "CONNECTOR_OUT_OF_BOUNDS",
+            }
+            structural_quality_passed = not any(
+                issue.severity == "error" and issue.code in structural_codes
+                for issue in quality.issues
+            )
+            quality_passed = quality.passed if scenario == "complex_full_diagram" else structural_quality_passed
+            passed = topology_passed and quality_passed
             return ModelMatrixCaseResult(
                 scenario=scenario,
                 repetition=repetition,
@@ -373,10 +415,12 @@ def _run_case(
                 attempts=attempts,
                 duration_ms=round((perf_counter() - started) * 1000, 2),
                 issue_codes=issue_codes,
+                quality_score=quality.score,
+                quality_issue_codes=quality_issue_codes,
                 message=(
                     "topology assertion passed"
                     if passed
-                    else "transaction applied but final topology assertion failed"
+                    else "transaction applied but final topology or drafting-quality assertion failed"
                 ),
             )
     except PlannerError as exc:

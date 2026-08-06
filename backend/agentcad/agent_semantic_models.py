@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from pydantic import Field, model_validator
 
+from .diagram_quality_models import DiagramQualityReport
 from .models import (
     AddElementOperation,
     AddLayerOperation,
@@ -317,6 +318,7 @@ class SemanticAgentPlanResult(StrictModel):
     attempt: int = Field(default=0, ge=0, le=5)
     parent_plan_id: str | None = None
     annotation_metrics: AnnotationLayoutMetrics | None = None
+    diagram_quality: DiagramQualityReport | None = None
 
 
 class SemanticAgentReplanRequest(StrictModel):
@@ -339,3 +341,4 @@ class CompiledSemanticTransaction(StrictModel):
     transaction: TransactionRequest | None = None
     assessment: AgentTransactionAssessment
     annotation_metrics: AnnotationLayoutMetrics | None = None
+    diagram_quality: DiagramQualityReport | None = None
