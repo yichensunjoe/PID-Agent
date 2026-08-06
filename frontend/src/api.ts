@@ -62,7 +62,16 @@ export function authorizedFetch(input: RequestInfo | URL, init?: RequestInit): P
 
 export async function downloadApiResource(path: string, fallbackFilename: string): Promise<void> {
   const response = await authorizedFetch(path);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload.message === "string") detail = payload.message;
+    } catch {
+      // keep the status text when the body is not JSON
+    }
+    throw new Error(detail);
+  }
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const match = disposition.match(/filename="?([^";]+)"?/i);
   const objectUrl = URL.createObjectURL(await response.blob());

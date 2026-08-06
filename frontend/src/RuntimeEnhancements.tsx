@@ -214,13 +214,17 @@ function RuntimeEnhancementsEnabled() {
     }
   };
 
-  const exportPng = () => {
+  const exportPng = async () => {
     const current = workspace.document;
     if (!current) return;
-    void downloadApiResource(
-      `/api/v2/documents/${encodeURIComponent(current.id)}/export.png?scale=1`,
-      `${safeFilename(current.name)}.png`,
-    );
+    try {
+      await downloadApiResource(
+        `/api/v2/documents/${encodeURIComponent(current.id)}/export.png?scale=1`,
+        `${safeFilename(current.name)}.png`,
+      );
+    } catch (error) {
+      setRuntimeMessage(`PNG 导出失败：${messageFromError(error)}`);
+    }
   };
 
   const returnDocumentId = sessionStorage.getItem("pid-agent:opc-return-document") ?? "";
