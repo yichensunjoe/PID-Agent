@@ -18,16 +18,63 @@
       "width": 90,
       "height": 70,
       "ports": [
-        {"id": "suction", "name": "吸入口", "x": 0, "y": 35, "direction": "in", "medium": "process"},
-        {"id": "discharge", "name": "排出口", "x": 90, "y": 35, "direction": "out", "medium": "process"}
+        {
+          "id": "suction",
+          "name": "吸入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "discharge",
+          "name": "排出口",
+          "x": 90,
+          "y": 35,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 15, "y2": 35},
-        {"type": "circle", "cx": 45, "cy": 35, "r": 30},
-        {"type": "circle", "cx": 35, "cy": 35, "r": 10},
-        {"type": "circle", "cx": 55, "cy": 35, "r": 10},
-        {"type": "line", "x1": 75, "y1": 35, "x2": 90, "y2": 35},
-        {"type": "line", "x1": 24, "y1": 68, "x2": 76, "y2": 68}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 15,
+          "y2": 35
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 35,
+          "r": 30
+        },
+        {
+          "type": "circle",
+          "cx": 35,
+          "cy": 35,
+          "r": 10
+        },
+        {
+          "type": "circle",
+          "cx": 55,
+          "cy": 35,
+          "r": 10
+        },
+        {
+          "type": "line",
+          "x1": 75,
+          "y1": 35,
+          "x2": 90,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 24,
+          "y1": 68,
+          "x2": 76,
+          "y2": 68
+        }
       ]
     },
     {
@@ -38,15 +85,54 @@
       "width": 85,
       "height": 75,
       "ports": [
-        {"id": "suction", "name": "吸入口", "x": 0, "y": 44, "direction": "in", "medium": "process"},
-        {"id": "discharge", "name": "排出口", "x": 45, "y": 0, "direction": "out", "medium": "process"}
+        {
+          "id": "suction",
+          "name": "吸入口",
+          "x": 0,
+          "y": 44,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "discharge",
+          "name": "排出口",
+          "x": 45,
+          "y": 0,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 44, "x2": 16, "y2": 44},
-        {"type": "circle", "cx": 45, "cy": 44, "r": 28},
-        {"type": "circle", "cx": 45, "cy": 44, "r": 12},
-        {"type": "path", "d": "M 45 44 Q 70 20 55 16 Q 45 12 45 0"},
-        {"type": "line", "x1": 16, "y1": 73, "x2": 78, "y2": 73}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 44,
+          "x2": 16,
+          "y2": 44
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 44,
+          "r": 28
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 44,
+          "r": 12
+        },
+        {
+          "type": "path",
+          "d": "M 45 44 Q 70 20 55 16 Q 45 12 45 0"
+        },
+        {
+          "type": "line",
+          "x1": 16,
+          "y1": 73,
+          "x2": 78,
+          "y2": 73
+        }
       ]
     },
     {
@@ -57,16 +143,87 @@
       "width": 90,
       "height": 70,
       "ports": [
-        {"id": "in", "name": "气体入口", "x": 0, "y": 35, "direction": "in", "medium": "gas"},
-        {"id": "out", "name": "气体出口", "x": 90, "y": 35, "direction": "out", "medium": "gas"}
+        {
+          "id": "in",
+          "name": "气体入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "gas"
+        },
+        {
+          "id": "out",
+          "name": "气体出口",
+          "x": 90,
+          "y": 35,
+          "direction": "out",
+          "medium": "gas"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 12, "y2": 35},
-        {"type": "rect", "x": 12, "y": 5, "width": 66, "height": 60},
-        {"type": "circle", "cx": 45, "cy": 35, "r": 24},
-        {"type": "polyline", "points": [[27, 22], [45, 35], [63, 48]], "closed": false},
-        {"type": "polyline", "points": [[63, 22], [45, 35], [27, 48]], "closed": false},
-        {"type": "line", "x1": 78, "y1": 35, "x2": 90, "y2": 35}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 12,
+          "y2": 35
+        },
+        {
+          "type": "rect",
+          "x": 12,
+          "y": 5,
+          "width": 66,
+          "height": 60
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 35,
+          "r": 24
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              27,
+              22
+            ],
+            [
+              45,
+              35
+            ],
+            [
+              63,
+              48
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              63,
+              22
+            ],
+            [
+              45,
+              35
+            ],
+            [
+              27,
+              48
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 78,
+          "y1": 35,
+          "x2": 90,
+          "y2": 35
+        }
       ]
     },
     {
@@ -77,19 +234,113 @@
       "width": 140,
       "height": 100,
       "ports": [
-        {"id": "process_in", "name": "工艺入口", "x": 0, "y": 34, "direction": "in", "medium": "process"},
-        {"id": "process_out", "name": "工艺出口", "x": 140, "y": 34, "direction": "out", "medium": "process"},
-        {"id": "utility_in", "name": "冷却介质入口", "x": 140, "y": 70, "direction": "in", "medium": "utility"},
-        {"id": "utility_out", "name": "冷却介质出口", "x": 0, "y": 70, "direction": "out", "medium": "utility"}
+        {
+          "id": "process_in",
+          "name": "工艺入口",
+          "x": 0,
+          "y": 34,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "process_out",
+          "name": "工艺出口",
+          "x": 140,
+          "y": 34,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "utility_in",
+          "name": "冷却介质入口",
+          "x": 140,
+          "y": 70,
+          "direction": "in",
+          "medium": "utility"
+        },
+        {
+          "id": "utility_out",
+          "name": "冷却介质出口",
+          "x": 0,
+          "y": 70,
+          "direction": "out",
+          "medium": "utility"
+        }
       ],
       "shapes": [
-        {"type": "rect", "x": 10, "y": 10, "width": 120, "height": 80, "rx": 40},
-        {"type": "line", "x1": 0, "y1": 34, "x2": 140, "y2": 34},
-        {"type": "line", "x1": 0, "y1": 70, "x2": 22, "y2": 70},
-        {"type": "polyline", "points": [[22, 70], [40, 56], [58, 82], [76, 56], [94, 82], [118, 70]], "closed": false},
-        {"type": "line", "x1": 118, "y1": 70, "x2": 140, "y2": 70},
-        {"type": "line", "x1": 22, "y1": 18, "x2": 22, "y2": 82},
-        {"type": "line", "x1": 118, "y1": 18, "x2": 118, "y2": 82}
+        {
+          "type": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 120,
+          "height": 80,
+          "rx": 40
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 34,
+          "x2": 140,
+          "y2": 34
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 70,
+          "x2": 22,
+          "y2": 70
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              22,
+              70
+            ],
+            [
+              40,
+              56
+            ],
+            [
+              58,
+              82
+            ],
+            [
+              76,
+              56
+            ],
+            [
+              94,
+              82
+            ],
+            [
+              118,
+              70
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 118,
+          "y1": 70,
+          "x2": 140,
+          "y2": 70
+        },
+        {
+          "type": "line",
+          "x1": 22,
+          "y1": 18,
+          "x2": 22,
+          "y2": 82
+        },
+        {
+          "type": "line",
+          "x1": 118,
+          "y1": 18,
+          "x2": 118,
+          "y2": 82
+        }
       ]
     },
     {
@@ -100,19 +351,119 @@
       "width": 120,
       "height": 90,
       "ports": [
-        {"id": "process_in", "name": "工艺入口", "x": 0, "y": 25, "direction": "in", "medium": "process"},
-        {"id": "process_out", "name": "工艺出口", "x": 120, "y": 25, "direction": "out", "medium": "process"},
-        {"id": "utility_in", "name": "公用工程入口", "x": 120, "y": 65, "direction": "in", "medium": "utility"},
-        {"id": "utility_out", "name": "公用工程出口", "x": 0, "y": 65, "direction": "out", "medium": "utility"}
+        {
+          "id": "process_in",
+          "name": "工艺入口",
+          "x": 0,
+          "y": 25,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "process_out",
+          "name": "工艺出口",
+          "x": 120,
+          "y": 25,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "utility_in",
+          "name": "公用工程入口",
+          "x": 120,
+          "y": 65,
+          "direction": "in",
+          "medium": "utility"
+        },
+        {
+          "id": "utility_out",
+          "name": "公用工程出口",
+          "x": 0,
+          "y": 65,
+          "direction": "out",
+          "medium": "utility"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 10, "y2": 25},
-        {"type": "line", "x1": 110, "y1": 25, "x2": 120, "y2": 25},
-        {"type": "line", "x1": 0, "y1": 65, "x2": 10, "y2": 65},
-        {"type": "line", "x1": 110, "y1": 65, "x2": 120, "y2": 65},
-        {"type": "rect", "x": 10, "y": 8, "width": 100, "height": 74},
-        {"type": "polyline", "points": [[20, 15], [100, 75], [20, 75], [100, 15]], "closed": false},
-        {"type": "polyline", "points": [[32, 15], [100, 66], [20, 66], [88, 15]], "closed": false}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 10,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 110,
+          "y1": 25,
+          "x2": 120,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 65,
+          "x2": 10,
+          "y2": 65
+        },
+        {
+          "type": "line",
+          "x1": 110,
+          "y1": 65,
+          "x2": 120,
+          "y2": 65
+        },
+        {
+          "type": "rect",
+          "x": 10,
+          "y": 8,
+          "width": 100,
+          "height": 74
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              20,
+              15
+            ],
+            [
+              100,
+              75
+            ],
+            [
+              20,
+              75
+            ],
+            [
+              100,
+              15
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              32,
+              15
+            ],
+            [
+              100,
+              66
+            ],
+            [
+              20,
+              66
+            ],
+            [
+              88,
+              15
+            ]
+          ],
+          "closed": false
+        }
       ]
     },
     {
@@ -123,21 +474,147 @@
       "width": 120,
       "height": 110,
       "ports": [
-        {"id": "process_in", "name": "工艺入口", "x": 0, "y": 32, "direction": "in", "medium": "process"},
-        {"id": "process_out", "name": "工艺出口", "x": 120, "y": 32, "direction": "out", "medium": "process"},
-        {"id": "air_in", "name": "空气入口", "x": 60, "y": 110, "direction": "in", "medium": "cooling_air"},
-        {"id": "air_out", "name": "空气出口", "x": 60, "y": 0, "direction": "out", "medium": "cooling_air"}
+        {
+          "id": "process_in",
+          "name": "工艺入口",
+          "x": 0,
+          "y": 32,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "process_out",
+          "name": "工艺出口",
+          "x": 120,
+          "y": 32,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "air_in",
+          "name": "空气入口",
+          "x": 60,
+          "y": 110,
+          "direction": "in",
+          "medium": "cooling_air"
+        },
+        {
+          "id": "air_out",
+          "name": "空气出口",
+          "x": 60,
+          "y": 0,
+          "direction": "out",
+          "medium": "cooling_air"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 32, "x2": 10, "y2": 32},
-        {"type": "rect", "x": 10, "y": 10, "width": 100, "height": 45},
-        {"type": "polyline", "points": [[18, 20], [35, 44], [52, 20], [69, 44], [86, 20], [103, 44]], "closed": false},
-        {"type": "line", "x1": 110, "y1": 32, "x2": 120, "y2": 32},
-        {"type": "line", "x1": 60, "y1": 0, "x2": 60, "y2": 10},
-        {"type": "circle", "cx": 60, "cy": 80, "r": 20},
-        {"type": "polyline", "points": [[47, 67], [60, 80], [73, 93]], "closed": false},
-        {"type": "polyline", "points": [[73, 67], [60, 80], [47, 93]], "closed": false},
-        {"type": "line", "x1": 60, "y1": 100, "x2": 60, "y2": 110}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 32,
+          "x2": 10,
+          "y2": 32
+        },
+        {
+          "type": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 100,
+          "height": 45
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              18,
+              20
+            ],
+            [
+              35,
+              44
+            ],
+            [
+              52,
+              20
+            ],
+            [
+              69,
+              44
+            ],
+            [
+              86,
+              20
+            ],
+            [
+              103,
+              44
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 110,
+          "y1": 32,
+          "x2": 120,
+          "y2": 32
+        },
+        {
+          "type": "line",
+          "x1": 60,
+          "y1": 0,
+          "x2": 60,
+          "y2": 10
+        },
+        {
+          "type": "circle",
+          "cx": 60,
+          "cy": 80,
+          "r": 20
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              47,
+              67
+            ],
+            [
+              60,
+              80
+            ],
+            [
+              73,
+              93
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              73,
+              67
+            ],
+            [
+              60,
+              80
+            ],
+            [
+              47,
+              93
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 60,
+          "y1": 100,
+          "x2": 60,
+          "y2": 110
+        }
       ]
     },
     {
@@ -148,14 +625,79 @@
       "width": 110,
       "height": 70,
       "ports": [
-        {"id": "in", "name": "工艺入口", "x": 0, "y": 35, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "工艺出口", "x": 110, "y": 35, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "工艺入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "工艺出口",
+          "x": 110,
+          "y": 35,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 10, "y2": 35},
-        {"type": "rect", "x": 10, "y": 5, "width": 90, "height": 60},
-        {"type": "polyline", "points": [[20, 35], [32, 18], [44, 52], [56, 18], [68, 52], [80, 18], [92, 35]], "closed": false},
-        {"type": "line", "x1": 100, "y1": 35, "x2": 110, "y2": 35}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 10,
+          "y2": 35
+        },
+        {
+          "type": "rect",
+          "x": 10,
+          "y": 5,
+          "width": 90,
+          "height": 60
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              20,
+              35
+            ],
+            [
+              32,
+              18
+            ],
+            [
+              44,
+              52
+            ],
+            [
+              56,
+              18
+            ],
+            [
+              68,
+              52
+            ],
+            [
+              80,
+              18
+            ],
+            [
+              92,
+              35
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 100,
+          "y1": 35,
+          "x2": 110,
+          "y2": 35
+        }
       ]
     },
     {
@@ -166,19 +708,108 @@
       "width": 130,
       "height": 80,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 40, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 130, "y": 40, "direction": "out", "medium": "process"},
-        {"id": "top", "name": "顶部接口", "x": 65, "y": 0, "direction": "bidirectional", "medium": "process"},
-        {"id": "drain", "name": "底部排放", "x": 65, "y": 80, "direction": "out", "medium": "drain"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 40,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 130,
+          "y": 40,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "top",
+          "name": "顶部接口",
+          "x": 65,
+          "y": 0,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "drain",
+          "name": "底部排放",
+          "x": 65,
+          "y": 80,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "path", "d": "M 20 5 Q 0 40 20 75 L 110 75 Q 130 40 110 5 Z"},
-        {"type": "line", "x1": 0, "y1": 40, "x2": 8, "y2": 40},
-        {"type": "line", "x1": 122, "y1": 40, "x2": 130, "y2": 40},
-        {"type": "line", "x1": 65, "y1": 0, "x2": 65, "y2": 5},
-        {"type": "line", "x1": 65, "y1": 75, "x2": 65, "y2": 80},
-        {"type": "polyline", "points": [[28, 75], [24, 79], [38, 79]], "closed": false},
-        {"type": "polyline", "points": [[102, 75], [106, 79], [92, 79]], "closed": false}
+        {
+          "type": "path",
+          "d": "M 20 5 Q 0 40 20 75 L 110 75 Q 130 40 110 5 Z"
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 40,
+          "x2": 8,
+          "y2": 40
+        },
+        {
+          "type": "line",
+          "x1": 122,
+          "y1": 40,
+          "x2": 130,
+          "y2": 40
+        },
+        {
+          "type": "line",
+          "x1": 65,
+          "y1": 0,
+          "x2": 65,
+          "y2": 5
+        },
+        {
+          "type": "line",
+          "x1": 65,
+          "y1": 75,
+          "x2": 65,
+          "y2": 80
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              28,
+              75
+            ],
+            [
+              24,
+              79
+            ],
+            [
+              38,
+              79
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              102,
+              75
+            ],
+            [
+              106,
+              79
+            ],
+            [
+              92,
+              79
+            ]
+          ],
+          "closed": false
+        }
       ]
     },
     {
@@ -189,19 +820,101 @@
       "width": 90,
       "height": 140,
       "ports": [
-        {"id": "feed", "name": "混相入口", "x": 0, "y": 65, "direction": "in", "medium": "process"},
-        {"id": "side_out", "name": "侧线出口", "x": 90, "y": 65, "direction": "out", "medium": "process"},
-        {"id": "gas_out", "name": "气相出口", "x": 45, "y": 0, "direction": "out", "medium": "gas"},
-        {"id": "liquid_out", "name": "液相出口", "x": 45, "y": 140, "direction": "out", "medium": "liquid"}
+        {
+          "id": "feed",
+          "name": "混相入口",
+          "x": 0,
+          "y": 65,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "side_out",
+          "name": "侧线出口",
+          "x": 90,
+          "y": 65,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "gas_out",
+          "name": "气相出口",
+          "x": 45,
+          "y": 0,
+          "direction": "out",
+          "medium": "gas"
+        },
+        {
+          "id": "liquid_out",
+          "name": "液相出口",
+          "x": 45,
+          "y": 140,
+          "direction": "out",
+          "medium": "liquid"
+        }
       ],
       "shapes": [
-        {"type": "path", "d": "M 15 20 Q 45 0 75 20 L 75 120 Q 45 140 15 120 Z"},
-        {"type": "line", "x1": 0, "y1": 65, "x2": 15, "y2": 65},
-        {"type": "line", "x1": 75, "y1": 65, "x2": 90, "y2": 65},
-        {"type": "line", "x1": 45, "y1": 0, "x2": 45, "y2": 10},
-        {"type": "line", "x1": 45, "y1": 130, "x2": 45, "y2": 140},
-        {"type": "line", "x1": 15, "y1": 88, "x2": 75, "y2": 88},
-        {"type": "polyline", "points": [[20, 42], [35, 50], [50, 42], [65, 50]], "closed": false}
+        {
+          "type": "path",
+          "d": "M 15 20 Q 45 0 75 20 L 75 120 Q 45 140 15 120 Z"
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 65,
+          "x2": 15,
+          "y2": 65
+        },
+        {
+          "type": "line",
+          "x1": 75,
+          "y1": 65,
+          "x2": 90,
+          "y2": 65
+        },
+        {
+          "type": "line",
+          "x1": 45,
+          "y1": 0,
+          "x2": 45,
+          "y2": 10
+        },
+        {
+          "type": "line",
+          "x1": 45,
+          "y1": 130,
+          "x2": 45,
+          "y2": 140
+        },
+        {
+          "type": "line",
+          "x1": 15,
+          "y1": 88,
+          "x2": 75,
+          "y2": 88
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              20,
+              42
+            ],
+            [
+              35,
+              50
+            ],
+            [
+              50,
+              42
+            ],
+            [
+              65,
+              50
+            ]
+          ],
+          "closed": false
+        }
       ]
     },
     {
@@ -212,16 +925,82 @@
       "width": 110,
       "height": 100,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 35, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 110, "y": 70, "direction": "out", "medium": "process"},
-        {"id": "drain", "name": "排放口", "x": 55, "y": 100, "direction": "out", "medium": "drain"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 110,
+          "y": 70,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "drain",
+          "name": "排放口",
+          "x": 55,
+          "y": 100,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "polyline", "points": [[10, 10], [10, 90], [100, 90], [100, 10]], "closed": false},
-        {"type": "line", "x1": 0, "y1": 35, "x2": 10, "y2": 35},
-        {"type": "line", "x1": 100, "y1": 70, "x2": 110, "y2": 70},
-        {"type": "line", "x1": 55, "y1": 90, "x2": 55, "y2": 100},
-        {"type": "line", "x1": 10, "y1": 65, "x2": 100, "y2": 65}
+        {
+          "type": "polyline",
+          "points": [
+            [
+              10,
+              10
+            ],
+            [
+              10,
+              90
+            ],
+            [
+              100,
+              90
+            ],
+            [
+              100,
+              10
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 10,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 100,
+          "y1": 70,
+          "x2": 110,
+          "y2": 70
+        },
+        {
+          "type": "line",
+          "x1": 55,
+          "y1": 90,
+          "x2": 55,
+          "y2": 100
+        },
+        {
+          "type": "line",
+          "x1": 10,
+          "y1": 65,
+          "x2": 100,
+          "y2": 65
+        }
       ]
     },
     {
@@ -232,20 +1011,104 @@
       "width": 100,
       "height": 150,
       "ports": [
-        {"id": "feed", "name": "进料口", "x": 0, "y": 55, "direction": "in", "medium": "process"},
-        {"id": "product", "name": "出料口", "x": 100, "y": 95, "direction": "out", "medium": "process"},
-        {"id": "vent", "name": "顶部放空", "x": 75, "y": 0, "direction": "out", "medium": "vent"},
-        {"id": "drain", "name": "底部排放", "x": 50, "y": 150, "direction": "out", "medium": "drain"}
+        {
+          "id": "feed",
+          "name": "进料口",
+          "x": 0,
+          "y": 55,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "product",
+          "name": "出料口",
+          "x": 100,
+          "y": 95,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "vent",
+          "name": "顶部放空",
+          "x": 75,
+          "y": 0,
+          "direction": "out",
+          "medium": "vent"
+        },
+        {
+          "id": "drain",
+          "name": "底部排放",
+          "x": 50,
+          "y": 150,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "path", "d": "M 15 25 Q 50 5 85 25 L 85 125 Q 50 145 15 125 Z"},
-        {"type": "line", "x1": 0, "y1": 55, "x2": 15, "y2": 55},
-        {"type": "line", "x1": 85, "y1": 95, "x2": 100, "y2": 95},
-        {"type": "line", "x1": 75, "y1": 0, "x2": 75, "y2": 17},
-        {"type": "line", "x1": 50, "y1": 135, "x2": 50, "y2": 150},
-        {"type": "rect", "x": 39, "y": 0, "width": 22, "height": 12},
-        {"type": "line", "x1": 50, "y1": 12, "x2": 50, "y2": 104},
-        {"type": "polyline", "points": [[28, 92], [50, 104], [72, 92]], "closed": false}
+        {
+          "type": "path",
+          "d": "M 15 25 Q 50 5 85 25 L 85 125 Q 50 145 15 125 Z"
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 55,
+          "x2": 15,
+          "y2": 55
+        },
+        {
+          "type": "line",
+          "x1": 85,
+          "y1": 95,
+          "x2": 100,
+          "y2": 95
+        },
+        {
+          "type": "line",
+          "x1": 75,
+          "y1": 0,
+          "x2": 75,
+          "y2": 17
+        },
+        {
+          "type": "line",
+          "x1": 50,
+          "y1": 135,
+          "x2": 50,
+          "y2": 150
+        },
+        {
+          "type": "rect",
+          "x": 39,
+          "y": 0,
+          "width": 22,
+          "height": 12
+        },
+        {
+          "type": "line",
+          "x1": 50,
+          "y1": 12,
+          "x2": 50,
+          "y2": 104
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              28,
+              92
+            ],
+            [
+              50,
+              104
+            ],
+            [
+              72,
+              92
+            ]
+          ],
+          "closed": false
+        }
       ]
     },
     {
@@ -256,18 +1119,83 @@
       "width": 120,
       "height": 70,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 35, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 120, "y": 35, "direction": "out", "medium": "process"},
-        {"id": "top", "name": "顶部接口", "x": 60, "y": 0, "direction": "bidirectional", "medium": "process"},
-        {"id": "drain", "name": "排液口", "x": 60, "y": 70, "direction": "out", "medium": "drain"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 120,
+          "y": 35,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "top",
+          "name": "顶部接口",
+          "x": 60,
+          "y": 0,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "drain",
+          "name": "排液口",
+          "x": 60,
+          "y": 70,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "rect", "x": 10, "y": 5, "width": 100, "height": 60, "rx": 30},
-        {"type": "line", "x1": 0, "y1": 35, "x2": 10, "y2": 35},
-        {"type": "line", "x1": 110, "y1": 35, "x2": 120, "y2": 35},
-        {"type": "line", "x1": 60, "y1": 0, "x2": 60, "y2": 5},
-        {"type": "line", "x1": 60, "y1": 65, "x2": 60, "y2": 70},
-        {"type": "line", "x1": 20, "y1": 48, "x2": 100, "y2": 48}
+        {
+          "type": "rect",
+          "x": 10,
+          "y": 5,
+          "width": 100,
+          "height": 60,
+          "rx": 30
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 10,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 110,
+          "y1": 35,
+          "x2": 120,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 60,
+          "y1": 0,
+          "x2": 60,
+          "y2": 5
+        },
+        {
+          "type": "line",
+          "x1": 60,
+          "y1": 65,
+          "x2": 60,
+          "y2": 70
+        },
+        {
+          "type": "line",
+          "x1": 20,
+          "y1": 48,
+          "x2": 100,
+          "y2": 48
+        }
       ]
     },
     {
@@ -278,14 +1206,67 @@
       "width": 100,
       "height": 60,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 30, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 100, "y": 30, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 30,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 100,
+          "y": 30,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 20, "y2": 30},
-        {"type": "rect", "x": 20, "y": 5, "width": 60, "height": 50},
-        {"type": "polyline", "points": [[24, 12], [76, 48], [24, 48], [76, 12]], "closed": false},
-        {"type": "line", "x1": 80, "y1": 30, "x2": 100, "y2": 30}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 20,
+          "y2": 30
+        },
+        {
+          "type": "rect",
+          "x": 20,
+          "y": 5,
+          "width": 60,
+          "height": 50
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              24,
+              12
+            ],
+            [
+              76,
+              48
+            ],
+            [
+              24,
+              48
+            ],
+            [
+              76,
+              12
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 80,
+          "y1": 30,
+          "x2": 100,
+          "y2": 30
+        }
       ]
     },
     {
@@ -296,16 +1277,97 @@
       "width": 100,
       "height": 75,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 25, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 100, "y": 25, "direction": "out", "medium": "process"},
-        {"id": "drain", "name": "排污口", "x": 62, "y": 75, "direction": "out", "medium": "drain"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 25,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 100,
+          "y": 25,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "drain",
+          "name": "排污口",
+          "x": 62,
+          "y": 75,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 100, "y2": 25},
-        {"type": "line", "x1": 45, "y1": 25, "x2": 62, "y2": 42},
-        {"type": "polyline", "points": [[48, 38], [72, 38], [68, 65], [56, 65]], "closed": true},
-        {"type": "polyline", "points": [[53, 44], [68, 44], [65, 58], [58, 58]], "closed": false},
-        {"type": "line", "x1": 62, "y1": 65, "x2": 62, "y2": 75}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 100,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 45,
+          "y1": 25,
+          "x2": 62,
+          "y2": 42
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              48,
+              38
+            ],
+            [
+              72,
+              38
+            ],
+            [
+              68,
+              65
+            ],
+            [
+              56,
+              65
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              53,
+              44
+            ],
+            [
+              68,
+              44
+            ],
+            [
+              65,
+              58
+            ],
+            [
+              58,
+              58
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 62,
+          "y1": 65,
+          "x2": 62,
+          "y2": 75
+        }
       ]
     },
     {
@@ -316,18 +1378,82 @@
       "width": 80,
       "height": 120,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 55, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 80, "y": 55, "direction": "out", "medium": "process"},
-        {"id": "drain", "name": "排污口", "x": 40, "y": 120, "direction": "out", "medium": "drain"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 55,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 80,
+          "y": 55,
+          "direction": "out",
+          "medium": "process"
+        },
+        {
+          "id": "drain",
+          "name": "排污口",
+          "x": 40,
+          "y": 120,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 55, "x2": 20, "y2": 55},
-        {"type": "rect", "x": 20, "y": 10, "width": 40, "height": 95, "rx": 20},
-        {"type": "line", "x1": 60, "y1": 55, "x2": 80, "y2": 55},
-        {"type": "line", "x1": 40, "y1": 105, "x2": 40, "y2": 120},
-        {"type": "line", "x1": 30, "y1": 28, "x2": 30, "y2": 90},
-        {"type": "line", "x1": 40, "y1": 22, "x2": 40, "y2": 94},
-        {"type": "line", "x1": 50, "y1": 28, "x2": 50, "y2": 90}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 55,
+          "x2": 20,
+          "y2": 55
+        },
+        {
+          "type": "rect",
+          "x": 20,
+          "y": 10,
+          "width": 40,
+          "height": 95,
+          "rx": 20
+        },
+        {
+          "type": "line",
+          "x1": 60,
+          "y1": 55,
+          "x2": 80,
+          "y2": 55
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 105,
+          "x2": 40,
+          "y2": 120
+        },
+        {
+          "type": "line",
+          "x1": 30,
+          "y1": 28,
+          "x2": 30,
+          "y2": 90
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 22,
+          "x2": 40,
+          "y2": 94
+        },
+        {
+          "type": "line",
+          "x1": 50,
+          "y1": 28,
+          "x2": 50,
+          "y2": 90
+        }
       ]
     },
     {
@@ -339,11 +1465,49 @@
       "height": 110,
       "ports": [],
       "shapes": [
-        {"type": "rect", "x": 25, "y": 0, "width": 20, "height": 18},
-        {"type": "line", "x1": 35, "y1": 18, "x2": 35, "y2": 90},
-        {"type": "polyline", "points": [[12, 80], [35, 90], [58, 80]], "closed": false},
-        {"type": "path", "d": "M 14 104 Q 35 94 56 104"},
-        {"type": "line", "x1": 14, "y1": 104, "x2": 56, "y2": 104}
+        {
+          "type": "rect",
+          "x": 25,
+          "y": 0,
+          "width": 20,
+          "height": 18
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 18,
+          "x2": 35,
+          "y2": 90
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              12,
+              80
+            ],
+            [
+              35,
+              90
+            ],
+            [
+              58,
+              80
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "path",
+          "d": "M 14 104 Q 35 94 56 104"
+        },
+        {
+          "type": "line",
+          "x1": 14,
+          "y1": 104,
+          "x2": 56,
+          "y2": 104
+        }
       ]
     },
     {
@@ -354,13 +1518,44 @@
       "width": 70,
       "height": 65,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 40, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 40, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 40,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 40,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 40, "x2": 22, "y2": 40},
-        {"type": "circle", "cx": 35, "cy": 40, "r": 13},
-        {"type": "line", "x1": 48, "y1": 40, "x2": 70, "y2": 40}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 40,
+          "x2": 22,
+          "y2": 40
+        },
+        {
+          "type": "circle",
+          "cx": 35,
+          "cy": 40,
+          "r": 13
+        },
+        {
+          "type": "line",
+          "x1": 48,
+          "y1": 40,
+          "x2": 70,
+          "y2": 40
+        }
       ]
     },
     {
@@ -371,14 +1566,63 @@
       "width": 80,
       "height": 50,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 25, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 80, "y": 25, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 25,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 80,
+          "y": 25,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 22, "y2": 25},
-        {"type": "polyline", "points": [[22, 13], [40, 25], [22, 37]], "closed": true},
-        {"type": "line", "x1": 40, "y1": 13, "x2": 40, "y2": 37},
-        {"type": "line", "x1": 40, "y1": 25, "x2": 80, "y2": 25}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 22,
+          "y2": 25
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              22,
+              13
+            ],
+            [
+              40,
+              25
+            ],
+            [
+              22,
+              37
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 13,
+          "x2": 40,
+          "y2": 37
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 25,
+          "x2": 80,
+          "y2": 25
+        }
       ]
     },
     {
@@ -389,19 +1633,120 @@
       "width": 80,
       "height": 90,
       "ports": [
-        {"id": "inlet", "name": "入口", "x": 35, "y": 90, "direction": "in", "medium": "process"},
-        {"id": "outlet", "name": "泄放出口", "x": 80, "y": 55, "direction": "out", "medium": "relief"}
+        {
+          "id": "inlet",
+          "name": "入口",
+          "x": 35,
+          "y": 90,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "outlet",
+          "name": "泄放出口",
+          "x": 80,
+          "y": 55,
+          "direction": "out",
+          "medium": "relief"
+        }
       ],
       "shapes": [
-        {"type": "polyline", "points": [[22, 45], [48, 45], [35, 60]], "closed": true},
-        {"type": "polyline", "points": [[22, 75], [48, 75], [35, 60]], "closed": true},
-        {"type": "line", "x1": 35, "y1": 75, "x2": 35, "y2": 90},
-        {"type": "line", "x1": 48, "y1": 60, "x2": 80, "y2": 55},
-        {"type": "line", "x1": 22, "y1": 48, "x2": 14, "y2": 38},
-        {"type": "line", "x1": 14, "y1": 38, "x2": 20, "y2": 30},
-        {"type": "line", "x1": 20, "y1": 30, "x2": 12, "y2": 20},
-        {"type": "line", "x1": 12, "y1": 20, "x2": 18, "y2": 10},
-        {"type": "polyline", "points": [[18, 10], [24, 16], [14, 18]], "closed": true}
+        {
+          "type": "polyline",
+          "points": [
+            [
+              22,
+              45
+            ],
+            [
+              48,
+              45
+            ],
+            [
+              35,
+              60
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              22,
+              75
+            ],
+            [
+              48,
+              75
+            ],
+            [
+              35,
+              60
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 75,
+          "x2": 35,
+          "y2": 90
+        },
+        {
+          "type": "line",
+          "x1": 48,
+          "y1": 60,
+          "x2": 80,
+          "y2": 55
+        },
+        {
+          "type": "line",
+          "x1": 22,
+          "y1": 48,
+          "x2": 14,
+          "y2": 38
+        },
+        {
+          "type": "line",
+          "x1": 14,
+          "y1": 38,
+          "x2": 20,
+          "y2": 30
+        },
+        {
+          "type": "line",
+          "x1": 20,
+          "y1": 30,
+          "x2": 12,
+          "y2": 20
+        },
+        {
+          "type": "line",
+          "x1": 12,
+          "y1": 20,
+          "x2": 18,
+          "y2": 10
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              18,
+              10
+            ],
+            [
+              24,
+              16
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "closed": true
+        }
       ]
     },
     {
@@ -412,14 +1757,46 @@
       "width": 80,
       "height": 60,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 35, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 80, "y": 35, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 80,
+          "y": 35,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 28, "y2": 35},
-        {"type": "path", "d": "M 28 20 Q 40 35 28 50"},
-        {"type": "path", "d": "M 52 20 Q 40 35 52 50"},
-        {"type": "line", "x1": 52, "y1": 35, "x2": 80, "y2": 35}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 28,
+          "y2": 35
+        },
+        {
+          "type": "path",
+          "d": "M 28 20 Q 40 35 28 50"
+        },
+        {
+          "type": "path",
+          "d": "M 52 20 Q 40 35 52 50"
+        },
+        {
+          "type": "line",
+          "x1": 52,
+          "y1": 35,
+          "x2": 80,
+          "y2": 35
+        }
       ]
     },
     {
@@ -430,14 +1807,76 @@
       "width": 70,
       "height": 70,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 45, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 45, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 45,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 45,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 45, "x2": 17, "y2": 45},
-        {"type": "polyline", "points": [[17, 32], [35, 45], [17, 58]], "closed": true, "fill": "#111827"},
-        {"type": "polyline", "points": [[53, 32], [35, 45], [53, 58]], "closed": true, "fill": "#111827"},
-        {"type": "line", "x1": 53, "y1": 45, "x2": 70, "y2": 45}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 45,
+          "x2": 17,
+          "y2": 45
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              17,
+              32
+            ],
+            [
+              35,
+              45
+            ],
+            [
+              17,
+              58
+            ]
+          ],
+          "closed": true,
+          "fill": "#111827"
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              53,
+              32
+            ],
+            [
+              35,
+              45
+            ],
+            [
+              53,
+              58
+            ]
+          ],
+          "closed": true,
+          "fill": "#111827"
+        },
+        {
+          "type": "line",
+          "x1": 53,
+          "y1": 45,
+          "x2": 70,
+          "y2": 45
+        }
       ]
     },
     {
@@ -448,16 +1887,88 @@
       "width": 70,
       "height": 55,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 30, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 30, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 30,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 30,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 17, "y2": 30},
-        {"type": "polyline", "points": [[17, 18], [35, 30], [17, 42]], "closed": true},
-        {"type": "polyline", "points": [[53, 18], [35, 30], [53, 42]], "closed": true},
-        {"type": "line", "x1": 53, "y1": 30, "x2": 70, "y2": 30},
-        {"type": "line", "x1": 35, "y1": 18, "x2": 35, "y2": 8},
-        {"type": "line", "x1": 25, "y1": 8, "x2": 45, "y2": 8}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 17,
+          "y2": 30
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              17,
+              18
+            ],
+            [
+              35,
+              30
+            ],
+            [
+              17,
+              42
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              53,
+              18
+            ],
+            [
+              35,
+              30
+            ],
+            [
+              53,
+              42
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 53,
+          "y1": 30,
+          "x2": 70,
+          "y2": 30
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 18,
+          "x2": 35,
+          "y2": 8
+        },
+        {
+          "type": "line",
+          "x1": 25,
+          "y1": 8,
+          "x2": 45,
+          "y2": 8
+        }
       ]
     },
     {
@@ -468,17 +1979,107 @@
       "width": 70,
       "height": 75,
       "ports": [
-        {"id": "left", "name": "左接口", "x": 0, "y": 35, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右接口", "x": 70, "y": 35, "direction": "bidirectional", "medium": "process"},
-        {"id": "branch", "name": "支路接口", "x": 35, "y": 75, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左接口",
+          "x": 0,
+          "y": 35,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右接口",
+          "x": 70,
+          "y": 35,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "branch",
+          "name": "支路接口",
+          "x": 35,
+          "y": 75,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 15, "y2": 35},
-        {"type": "polyline", "points": [[15, 23], [35, 35], [15, 47]], "closed": true},
-        {"type": "polyline", "points": [[55, 23], [35, 35], [55, 47]], "closed": true},
-        {"type": "polyline", "points": [[23, 60], [35, 35], [47, 60]], "closed": true},
-        {"type": "line", "x1": 55, "y1": 35, "x2": 70, "y2": 35},
-        {"type": "line", "x1": 35, "y1": 60, "x2": 35, "y2": 75}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 15,
+          "y2": 35
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              15,
+              23
+            ],
+            [
+              35,
+              35
+            ],
+            [
+              15,
+              47
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              55,
+              23
+            ],
+            [
+              35,
+              35
+            ],
+            [
+              55,
+              47
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              23,
+              60
+            ],
+            [
+              35,
+              35
+            ],
+            [
+              47,
+              60
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 55,
+          "y1": 35,
+          "x2": 70,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 60,
+          "x2": 35,
+          "y2": 75
+        }
       ]
     },
     {
@@ -489,16 +2090,89 @@
       "width": 70,
       "height": 80,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 58, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 58, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 58,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 58,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 58, "x2": 17, "y2": 58},
-        {"type": "polyline", "points": [[17, 46], [35, 58], [17, 70]], "closed": true},
-        {"type": "polyline", "points": [[53, 46], [35, 58], [53, 70]], "closed": true},
-        {"type": "line", "x1": 53, "y1": 58, "x2": 70, "y2": 58},
-        {"type": "line", "x1": 35, "y1": 46, "x2": 35, "y2": 24},
-        {"type": "rect", "x": 23, "y": 10, "width": 24, "height": 14, "rx": 0}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 58,
+          "x2": 17,
+          "y2": 58
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              17,
+              46
+            ],
+            [
+              35,
+              58
+            ],
+            [
+              17,
+              70
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              53,
+              46
+            ],
+            [
+              35,
+              58
+            ],
+            [
+              53,
+              70
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 53,
+          "y1": 58,
+          "x2": 70,
+          "y2": 58
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 46,
+          "x2": 35,
+          "y2": 24
+        },
+        {
+          "type": "rect",
+          "x": 23,
+          "y": 10,
+          "width": 24,
+          "height": 14,
+          "rx": 0
+        }
       ]
     },
     {
@@ -509,17 +2183,97 @@
       "width": 70,
       "height": 80,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 58, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 58, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 58,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 58,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 58, "x2": 17, "y2": 58},
-        {"type": "polyline", "points": [[17, 46], [35, 58], [17, 70]], "closed": true},
-        {"type": "polyline", "points": [[53, 46], [35, 58], [53, 70]], "closed": true},
-        {"type": "line", "x1": 53, "y1": 58, "x2": 70, "y2": 58},
-        {"type": "line", "x1": 35, "y1": 46, "x2": 35, "y2": 24},
-        {"type": "rect", "x": 23, "y": 10, "width": 24, "height": 14, "rx": 0},
-        {"type": "text", "x": 35, "y": 20, "text": "S", "font_size": 11, "anchor": "middle"}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 58,
+          "x2": 17,
+          "y2": 58
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              17,
+              46
+            ],
+            [
+              35,
+              58
+            ],
+            [
+              17,
+              70
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              53,
+              46
+            ],
+            [
+              35,
+              58
+            ],
+            [
+              53,
+              70
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 53,
+          "y1": 58,
+          "x2": 70,
+          "y2": 58
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 46,
+          "x2": 35,
+          "y2": 24
+        },
+        {
+          "type": "rect",
+          "x": 23,
+          "y": 10,
+          "width": 24,
+          "height": 14,
+          "rx": 0
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 20,
+          "text": "S",
+          "font_size": 11,
+          "anchor": "middle"
+        }
       ]
     },
     {
@@ -530,16 +2284,89 @@
       "width": 70,
       "height": 65,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 42, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 42, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 42,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 42,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 42, "x2": 17, "y2": 42},
-        {"type": "polyline", "points": [[17, 30], [35, 42], [17, 54]], "closed": true},
-        {"type": "polyline", "points": [[53, 30], [35, 42], [53, 54]], "closed": true},
-        {"type": "line", "x1": 53, "y1": 42, "x2": 70, "y2": 42},
-        {"type": "line", "x1": 35, "y1": 30, "x2": 35, "y2": 16},
-        {"type": "rect", "x": 26, "y": 6, "width": 18, "height": 10, "rx": 0}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 42,
+          "x2": 17,
+          "y2": 42
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              17,
+              30
+            ],
+            [
+              35,
+              42
+            ],
+            [
+              17,
+              54
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              53,
+              30
+            ],
+            [
+              35,
+              42
+            ],
+            [
+              53,
+              54
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 53,
+          "y1": 42,
+          "x2": 70,
+          "y2": 42
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 30,
+          "x2": 35,
+          "y2": 16
+        },
+        {
+          "type": "rect",
+          "x": 26,
+          "y": 6,
+          "width": 18,
+          "height": 10,
+          "rx": 0
+        }
       ]
     },
     {
@@ -550,15 +2377,59 @@
       "width": 80,
       "height": 50,
       "ports": [
-        {"id": "left", "name": "左接口", "x": 0, "y": 25, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右接口", "x": 80, "y": 25, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左接口",
+          "x": 0,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右接口",
+          "x": 80,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 80, "y2": 25},
-        {"type": "line", "x1": 32, "y1": 5, "x2": 32, "y2": 45},
-        {"type": "line", "x1": 37, "y1": 5, "x2": 37, "y2": 45},
-        {"type": "line", "x1": 43, "y1": 5, "x2": 43, "y2": 45},
-        {"type": "line", "x1": 48, "y1": 5, "x2": 48, "y2": 45}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 80,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 32,
+          "y1": 5,
+          "x2": 32,
+          "y2": 45
+        },
+        {
+          "type": "line",
+          "x1": 37,
+          "y1": 5,
+          "x2": 37,
+          "y2": 45
+        },
+        {
+          "type": "line",
+          "x1": 43,
+          "y1": 5,
+          "x2": 43,
+          "y2": 45
+        },
+        {
+          "type": "line",
+          "x1": 48,
+          "y1": 5,
+          "x2": 48,
+          "y2": 45
+        }
       ]
     },
     {
@@ -569,12 +2440,37 @@
       "width": 55,
       "height": 60,
       "ports": [
-        {"id": "connection", "name": "管线接口", "x": 0, "y": 30, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "connection",
+          "name": "管线接口",
+          "x": 0,
+          "y": 30,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 34, "y2": 30},
-        {"type": "line", "x1": 34, "y1": 5, "x2": 34, "y2": 55},
-        {"type": "line", "x1": 40, "y1": 5, "x2": 40, "y2": 55}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 34,
+          "y2": 30
+        },
+        {
+          "type": "line",
+          "x1": 34,
+          "y1": 5,
+          "x2": 34,
+          "y2": 55
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 5,
+          "x2": 40,
+          "y2": 55
+        }
       ]
     },
     {
@@ -585,13 +2481,60 @@
       "width": 100,
       "height": 60,
       "ports": [
-        {"id": "large_end", "name": "大端", "x": 0, "y": 30, "direction": "bidirectional", "medium": "process"},
-        {"id": "small_end", "name": "小端", "x": 100, "y": 30, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "large_end",
+          "name": "大端",
+          "x": 0,
+          "y": 30,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "small_end",
+          "name": "小端",
+          "x": 100,
+          "y": 30,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 10, "y2": 30},
-        {"type": "polyline", "points": [[10, 5], [90, 20], [90, 40], [10, 55]], "closed": true},
-        {"type": "line", "x1": 90, "y1": 30, "x2": 100, "y2": 30}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 10,
+          "y2": 30
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              10,
+              5
+            ],
+            [
+              90,
+              20
+            ],
+            [
+              90,
+              40
+            ],
+            [
+              10,
+              55
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 90,
+          "y1": 30,
+          "x2": 100,
+          "y2": 30
+        }
       ]
     },
     {
@@ -602,13 +2545,60 @@
       "width": 100,
       "height": 60,
       "ports": [
-        {"id": "large_end", "name": "大端", "x": 0, "y": 32, "direction": "bidirectional", "medium": "process"},
-        {"id": "small_end", "name": "小端", "x": 100, "y": 22, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "large_end",
+          "name": "大端",
+          "x": 0,
+          "y": 32,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "small_end",
+          "name": "小端",
+          "x": 100,
+          "y": 22,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 32, "x2": 10, "y2": 32},
-        {"type": "polyline", "points": [[10, 10], [90, 10], [90, 34], [10, 54]], "closed": true},
-        {"type": "line", "x1": 90, "y1": 22, "x2": 100, "y2": 22}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 32,
+          "x2": 10,
+          "y2": 32
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              10,
+              10
+            ],
+            [
+              90,
+              10
+            ],
+            [
+              90,
+              34
+            ],
+            [
+              10,
+              54
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 90,
+          "y1": 22,
+          "x2": 100,
+          "y2": 22
+        }
       ]
     },
     {
@@ -619,13 +2609,46 @@
       "width": 80,
       "height": 70,
       "ports": [
-        {"id": "left", "name": "左主管口", "x": 0, "y": 25, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右主管口", "x": 80, "y": 25, "direction": "bidirectional", "medium": "process"},
-        {"id": "branch", "name": "支路口", "x": 40, "y": 70, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左主管口",
+          "x": 0,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右主管口",
+          "x": 80,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "branch",
+          "name": "支路口",
+          "x": 40,
+          "y": 70,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 80, "y2": 25},
-        {"type": "line", "x1": 40, "y1": 25, "x2": 40, "y2": 70}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 80,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 25,
+          "x2": 40,
+          "y2": 70
+        }
       ]
     },
     {
@@ -636,13 +2659,42 @@
       "width": 100,
       "height": 50,
       "ports": [
-        {"id": "left", "name": "左接口", "x": 0, "y": 25, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右接口", "x": 100, "y": 25, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左接口",
+          "x": 0,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右接口",
+          "x": 100,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "path", "d": "M 0 25 L 15 25 Q 25 5 35 25 Q 45 45 55 25 Q 65 5 75 25 L 100 25"},
-        {"type": "line", "x1": 8, "y1": 15, "x2": 8, "y2": 35},
-        {"type": "line", "x1": 92, "y1": 15, "x2": 92, "y2": 35}
+        {
+          "type": "path",
+          "d": "M 0 25 L 15 25 Q 25 5 35 25 Q 45 45 55 25 Q 65 5 75 25 L 100 25"
+        },
+        {
+          "type": "line",
+          "x1": 8,
+          "y1": 15,
+          "x2": 8,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 92,
+          "y1": 15,
+          "x2": 92,
+          "y2": 35
+        }
       ]
     },
     {
@@ -653,14 +2705,106 @@
       "width": 110,
       "height": 55,
       "ports": [
-        {"id": "left", "name": "左接口", "x": 0, "y": 28, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右接口", "x": 110, "y": 28, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左接口",
+          "x": 0,
+          "y": 28,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右接口",
+          "x": 110,
+          "y": 28,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 28, "x2": 20, "y2": 28},
-        {"type": "polyline", "points": [[20, 12], [32, 28], [44, 12], [56, 28], [68, 12], [80, 28], [92, 12]], "closed": false},
-        {"type": "polyline", "points": [[20, 44], [32, 28], [44, 44], [56, 28], [68, 44], [80, 28], [92, 44]], "closed": false},
-        {"type": "line", "x1": 92, "y1": 28, "x2": 110, "y2": 28}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 28,
+          "x2": 20,
+          "y2": 28
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              20,
+              12
+            ],
+            [
+              32,
+              28
+            ],
+            [
+              44,
+              12
+            ],
+            [
+              56,
+              28
+            ],
+            [
+              68,
+              12
+            ],
+            [
+              80,
+              28
+            ],
+            [
+              92,
+              12
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              20,
+              44
+            ],
+            [
+              32,
+              28
+            ],
+            [
+              44,
+              44
+            ],
+            [
+              56,
+              28
+            ],
+            [
+              68,
+              44
+            ],
+            [
+              80,
+              28
+            ],
+            [
+              92,
+              44
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 92,
+          "y1": 28,
+          "x2": 110,
+          "y2": 28
+        }
       ]
     },
     {
@@ -671,16 +2815,88 @@
       "width": 100,
       "height": 70,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 20, "direction": "in", "medium": "condensate"},
-        {"id": "out", "name": "出口", "x": 100, "y": 20, "direction": "out", "medium": "condensate"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 20,
+          "direction": "in",
+          "medium": "condensate"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 100,
+          "y": 20,
+          "direction": "out",
+          "medium": "condensate"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 20, "x2": 35, "y2": 20},
-        {"type": "polyline", "points": [[35, 10], [50, 20], [35, 30]], "closed": true},
-        {"type": "polyline", "points": [[65, 10], [50, 20], [65, 30]], "closed": true},
-        {"type": "line", "x1": 65, "y1": 20, "x2": 100, "y2": 20},
-        {"type": "line", "x1": 28, "y1": 6, "x2": 28, "y2": 34},
-        {"type": "line", "x1": 72, "y1": 6, "x2": 72, "y2": 34}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 20,
+          "x2": 35,
+          "y2": 20
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              35,
+              10
+            ],
+            [
+              50,
+              20
+            ],
+            [
+              35,
+              30
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              65,
+              10
+            ],
+            [
+              50,
+              20
+            ],
+            [
+              65,
+              30
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 65,
+          "y1": 20,
+          "x2": 100,
+          "y2": 20
+        },
+        {
+          "type": "line",
+          "x1": 28,
+          "y1": 6,
+          "x2": 28,
+          "y2": 34
+        },
+        {
+          "type": "line",
+          "x1": 72,
+          "y1": 6,
+          "x2": 72,
+          "y2": 34
+        }
       ]
     },
     {
@@ -691,14 +2907,51 @@
       "width": 80,
       "height": 60,
       "ports": [
-        {"id": "in", "name": "上游", "x": 0, "y": 30, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "下游", "x": 80, "y": 30, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "上游",
+          "x": 0,
+          "y": 30,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "下游",
+          "x": 80,
+          "y": 30,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 80, "y2": 30},
-        {"type": "line", "x1": 37, "y1": 5, "x2": 37, "y2": 55},
-        {"type": "line", "x1": 43, "y1": 5, "x2": 43, "y2": 55},
-        {"type": "circle", "cx": 40, "cy": 30, "r": 4}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 80,
+          "y2": 30
+        },
+        {
+          "type": "line",
+          "x1": 37,
+          "y1": 5,
+          "x2": 37,
+          "y2": 55
+        },
+        {
+          "type": "line",
+          "x1": 43,
+          "y1": 5,
+          "x2": 43,
+          "y2": 55
+        },
+        {
+          "type": "circle",
+          "cx": 40,
+          "cy": 30,
+          "r": 4
+        }
       ]
     },
     {
@@ -709,15 +2962,57 @@
       "width": 90,
       "height": 70,
       "ports": [
-        {"id": "left", "name": "左接口", "x": 0, "y": 48, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右接口", "x": 90, "y": 48, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左接口",
+          "x": 0,
+          "y": 48,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右接口",
+          "x": 90,
+          "y": 48,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 48, "x2": 90, "y2": 48},
-        {"type": "line", "x1": 42, "y1": 25, "x2": 42, "y2": 65},
-        {"type": "line", "x1": 48, "y1": 25, "x2": 48, "y2": 65},
-        {"type": "circle", "cx": 45, "cy": 14, "r": 11},
-        {"type": "circle", "cx": 45, "cy": 14, "r": 5}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 48,
+          "x2": 90,
+          "y2": 48
+        },
+        {
+          "type": "line",
+          "x1": 42,
+          "y1": 25,
+          "x2": 42,
+          "y2": 65
+        },
+        {
+          "type": "line",
+          "x1": 48,
+          "y1": 25,
+          "x2": 48,
+          "y2": 65
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 14,
+          "r": 11
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 14,
+          "r": 5
+        }
       ]
     },
     {
@@ -728,16 +3023,65 @@
       "width": 90,
       "height": 70,
       "ports": [
-        {"id": "left", "name": "左接口", "x": 0, "y": 48, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右接口", "x": 90, "y": 48, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左接口",
+          "x": 0,
+          "y": 48,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右接口",
+          "x": 90,
+          "y": 48,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 48, "x2": 42, "y2": 48},
-        {"type": "line", "x1": 48, "y1": 48, "x2": 90, "y2": 48},
-        {"type": "line", "x1": 42, "y1": 25, "x2": 42, "y2": 65},
-        {"type": "line", "x1": 48, "y1": 25, "x2": 48, "y2": 65},
-        {"type": "circle", "cx": 45, "cy": 14, "r": 11},
-        {"type": "line", "x1": 37, "y1": 6, "x2": 53, "y2": 22}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 48,
+          "x2": 42,
+          "y2": 48
+        },
+        {
+          "type": "line",
+          "x1": 48,
+          "y1": 48,
+          "x2": 90,
+          "y2": 48
+        },
+        {
+          "type": "line",
+          "x1": 42,
+          "y1": 25,
+          "x2": 42,
+          "y2": 65
+        },
+        {
+          "type": "line",
+          "x1": 48,
+          "y1": 25,
+          "x2": 48,
+          "y2": 65
+        },
+        {
+          "type": "circle",
+          "cx": 45,
+          "cy": 14,
+          "r": 11
+        },
+        {
+          "type": "line",
+          "x1": 37,
+          "y1": 6,
+          "x2": 53,
+          "y2": 22
+        }
       ]
     },
     {
@@ -748,15 +3092,70 @@
       "width": 80,
       "height": 80,
       "ports": [
-        {"id": "inlet", "name": "排液入口", "x": 40, "y": 0, "direction": "in", "medium": "drain"},
-        {"id": "drain", "name": "排水出口", "x": 40, "y": 80, "direction": "out", "medium": "drain"}
+        {
+          "id": "inlet",
+          "name": "排液入口",
+          "x": 40,
+          "y": 0,
+          "direction": "in",
+          "medium": "drain"
+        },
+        {
+          "id": "drain",
+          "name": "排水出口",
+          "x": 40,
+          "y": 80,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 10, "y1": 8, "x2": 70, "y2": 8},
-        {"type": "polyline", "points": [[18, 8], [40, 42], [62, 8]], "closed": false},
-        {"type": "line", "x1": 40, "y1": 0, "x2": 40, "y2": 8},
-        {"type": "line", "x1": 40, "y1": 42, "x2": 40, "y2": 80},
-        {"type": "line", "x1": 18, "y1": 18, "x2": 62, "y2": 18}
+        {
+          "type": "line",
+          "x1": 10,
+          "y1": 8,
+          "x2": 70,
+          "y2": 8
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              18,
+              8
+            ],
+            [
+              40,
+              42
+            ],
+            [
+              62,
+              8
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 0,
+          "x2": 40,
+          "y2": 8
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 42,
+          "x2": 40,
+          "y2": 80
+        },
+        {
+          "type": "line",
+          "x1": 18,
+          "y1": 18,
+          "x2": 62,
+          "y2": 18
+        }
       ]
     },
     {
@@ -767,12 +3166,48 @@
       "width": 80,
       "height": 80,
       "ports": [
-        {"id": "drain", "name": "排水出口", "x": 40, "y": 80, "direction": "out", "medium": "drain"}
+        {
+          "id": "drain",
+          "name": "排水出口",
+          "x": 40,
+          "y": 80,
+          "direction": "out",
+          "medium": "drain"
+        }
       ],
       "shapes": [
-        {"type": "polyline", "points": [[10, 8], [40, 42], [70, 8]], "closed": false},
-        {"type": "line", "x1": 10, "y1": 8, "x2": 70, "y2": 8},
-        {"type": "line", "x1": 40, "y1": 42, "x2": 40, "y2": 80}
+        {
+          "type": "polyline",
+          "points": [
+            [
+              10,
+              8
+            ],
+            [
+              40,
+              42
+            ],
+            [
+              70,
+              8
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 10,
+          "y1": 8,
+          "x2": 70,
+          "y2": 8
+        },
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 42,
+          "x2": 40,
+          "y2": 80
+        }
       ]
     },
     {
@@ -783,14 +3218,62 @@
       "width": 100,
       "height": 70,
       "ports": [
-        {"id": "inlet", "name": "入口", "x": 0, "y": 35, "direction": "in", "medium": "process"}
+        {
+          "id": "inlet",
+          "name": "入口",
+          "x": 0,
+          "y": 35,
+          "direction": "in",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 35, "x2": 30, "y2": 35},
-        {"type": "polyline", "points": [[30, 24], [48, 35], [30, 46]], "closed": true},
-        {"type": "line", "x1": 50, "y1": 35, "x2": 95, "y2": 35},
-        {"type": "line", "x1": 52, "y1": 30, "x2": 92, "y2": 12},
-        {"type": "line", "x1": 52, "y1": 40, "x2": 92, "y2": 58}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 35,
+          "x2": 30,
+          "y2": 35
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              30,
+              24
+            ],
+            [
+              48,
+              35
+            ],
+            [
+              30,
+              46
+            ]
+          ],
+          "closed": true
+        },
+        {
+          "type": "line",
+          "x1": 50,
+          "y1": 35,
+          "x2": 95,
+          "y2": 35
+        },
+        {
+          "type": "line",
+          "x1": 52,
+          "y1": 30,
+          "x2": 92,
+          "y2": 12
+        },
+        {
+          "type": "line",
+          "x1": 52,
+          "y1": 40,
+          "x2": 92,
+          "y2": 58
+        }
       ]
     },
     {
@@ -801,14 +3284,52 @@
       "width": 100,
       "height": 50,
       "ports": [
-        {"id": "left", "name": "左侧接口", "x": 0, "y": 25, "direction": "bidirectional", "medium": "process"},
-        {"id": "right", "name": "右侧接口", "x": 100, "y": 25, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "left",
+          "name": "左侧接口",
+          "x": 0,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "right",
+          "name": "右侧接口",
+          "x": 100,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 35, "y2": 25},
-        {"type": "line", "x1": 35, "y1": 25, "x2": 47, "y2": 12},
-        {"type": "line", "x1": 53, "y1": 38, "x2": 65, "y2": 25},
-        {"type": "line", "x1": 65, "y1": 25, "x2": 100, "y2": 25}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 35,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 35,
+          "y1": 25,
+          "x2": 47,
+          "y2": 12
+        },
+        {
+          "type": "line",
+          "x1": 53,
+          "y1": 38,
+          "x2": 65,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 65,
+          "y1": 25,
+          "x2": 100,
+          "y2": 25
+        }
       ]
     },
     {
@@ -819,14 +3340,46 @@
       "width": 80,
       "height": 60,
       "ports": [
-        {"id": "in", "name": "受压侧", "x": 0, "y": 30, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "泄放侧", "x": 80, "y": 30, "direction": "out", "medium": "relief"}
+        {
+          "id": "in",
+          "name": "受压侧",
+          "x": 0,
+          "y": 30,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "泄放侧",
+          "x": 80,
+          "y": 30,
+          "direction": "out",
+          "medium": "relief"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 25, "y2": 30},
-        {"type": "path", "d": "M 25 12 Q 40 30 25 48"},
-        {"type": "path", "d": "M 55 12 Q 40 30 55 48"},
-        {"type": "line", "x1": 55, "y1": 30, "x2": 80, "y2": 30}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 25,
+          "y2": 30
+        },
+        {
+          "type": "path",
+          "d": "M 25 12 Q 40 30 25 48"
+        },
+        {
+          "type": "path",
+          "d": "M 55 12 Q 40 30 55 48"
+        },
+        {
+          "type": "line",
+          "x1": 55,
+          "y1": 30,
+          "x2": 80,
+          "y2": 30
+        }
       ]
     },
     {
@@ -837,32 +3390,75 @@
       "width": 100,
       "height": 65,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 32, "direction": "in", "medium": "gas"},
-        {"id": "out", "name": "出口", "x": 100, "y": 32, "direction": "out", "medium": "gas"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 32,
+          "direction": "in",
+          "medium": "gas"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 100,
+          "y": 32,
+          "direction": "out",
+          "medium": "gas"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 32, "x2": 20, "y2": 32},
-        {"type": "rect", "x": 20, "y": 8, "width": 60, "height": 48},
-        {"type": "line", "x1": 80, "y1": 32, "x2": 100, "y2": 32},
-        {"type": "polyline", "points": [[25, 50], [35, 14], [45, 50], [55, 14], [65, 50], [75, 14]], "closed": false}
-      ]
-    },
-    {
-      "key": "pressure_transmitter",
-      "name": "压力变送器",
-      "category": "仪表",
-      "description": "压力变送器。底部过程口接取压支路，右侧信号口接仪表信号线。",
-      "width": 70,
-      "height": 75,
-      "ports": [
-        {"id": "process", "name": "过程接口", "x": 30, "y": 75, "direction": "in", "medium": "process"},
-        {"id": "signal", "name": "信号接口", "x": 70, "y": 28, "direction": "out", "medium": "signal"}
-      ],
-      "shapes": [
-        {"type": "circle", "cx": 30, "cy": 28, "r": 24},
-        {"type": "text", "x": 30, "y": 33, "text": "PT", "font_size": 14, "anchor": "middle"},
-        {"type": "line", "x1": 30, "y1": 52, "x2": 30, "y2": 75},
-        {"type": "line", "x1": 54, "y1": 28, "x2": 70, "y2": 28}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 32,
+          "x2": 20,
+          "y2": 32
+        },
+        {
+          "type": "rect",
+          "x": 20,
+          "y": 8,
+          "width": 60,
+          "height": 48
+        },
+        {
+          "type": "line",
+          "x1": 80,
+          "y1": 32,
+          "x2": 100,
+          "y2": 32
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              25,
+              50
+            ],
+            [
+              35,
+              14
+            ],
+            [
+              45,
+              50
+            ],
+            [
+              55,
+              14
+            ],
+            [
+              65,
+              50
+            ],
+            [
+              75,
+              14
+            ]
+          ],
+          "closed": false
+        }
       ]
     },
     {
@@ -873,14 +3469,52 @@
       "width": 70,
       "height": 75,
       "ports": [
-        {"id": "process", "name": "过程接口", "x": 30, "y": 75, "direction": "in", "medium": "process"},
-        {"id": "signal", "name": "信号接口", "x": 70, "y": 28, "direction": "out", "medium": "signal"}
+        {
+          "id": "process",
+          "name": "过程接口",
+          "x": 30,
+          "y": 75,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "signal",
+          "name": "信号接口",
+          "x": 70,
+          "y": 28,
+          "direction": "out",
+          "medium": "signal"
+        }
       ],
       "shapes": [
-        {"type": "circle", "cx": 30, "cy": 28, "r": 24},
-        {"type": "text", "x": 30, "y": 33, "text": "TT", "font_size": 14, "anchor": "middle"},
-        {"type": "line", "x1": 30, "y1": 52, "x2": 30, "y2": 75},
-        {"type": "line", "x1": 54, "y1": 28, "x2": 70, "y2": 28}
+        {
+          "type": "circle",
+          "cx": 30,
+          "cy": 28,
+          "r": 24
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 33,
+          "text": "TT",
+          "font_size": 14,
+          "anchor": "middle"
+        },
+        {
+          "type": "line",
+          "x1": 30,
+          "y1": 52,
+          "x2": 30,
+          "y2": 75
+        },
+        {
+          "type": "line",
+          "x1": 54,
+          "y1": 28,
+          "x2": 70,
+          "y2": 28
+        }
       ]
     },
     {
@@ -891,14 +3525,52 @@
       "width": 70,
       "height": 75,
       "ports": [
-        {"id": "process", "name": "过程接口", "x": 30, "y": 75, "direction": "in", "medium": "process"},
-        {"id": "signal", "name": "信号接口", "x": 70, "y": 28, "direction": "out", "medium": "signal"}
+        {
+          "id": "process",
+          "name": "过程接口",
+          "x": 30,
+          "y": 75,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "signal",
+          "name": "信号接口",
+          "x": 70,
+          "y": 28,
+          "direction": "out",
+          "medium": "signal"
+        }
       ],
       "shapes": [
-        {"type": "circle", "cx": 30, "cy": 28, "r": 24},
-        {"type": "text", "x": 30, "y": 33, "text": "FT", "font_size": 14, "anchor": "middle"},
-        {"type": "line", "x1": 30, "y1": 52, "x2": 30, "y2": 75},
-        {"type": "line", "x1": 54, "y1": 28, "x2": 70, "y2": 28}
+        {
+          "type": "circle",
+          "cx": 30,
+          "cy": 28,
+          "r": 24
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 33,
+          "text": "FT",
+          "font_size": 14,
+          "anchor": "middle"
+        },
+        {
+          "type": "line",
+          "x1": 30,
+          "y1": 52,
+          "x2": 30,
+          "y2": 75
+        },
+        {
+          "type": "line",
+          "x1": 54,
+          "y1": 28,
+          "x2": 70,
+          "y2": 28
+        }
       ]
     },
     {
@@ -909,14 +3581,52 @@
       "width": 75,
       "height": 60,
       "ports": [
-        {"id": "process", "name": "过程接口", "x": 0, "y": 30, "direction": "in", "medium": "process"},
-        {"id": "signal", "name": "信号接口", "x": 75, "y": 30, "direction": "out", "medium": "signal"}
+        {
+          "id": "process",
+          "name": "过程接口",
+          "x": 0,
+          "y": 30,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "signal",
+          "name": "信号接口",
+          "x": 75,
+          "y": 30,
+          "direction": "out",
+          "medium": "signal"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 30, "x2": 12, "y2": 30},
-        {"type": "circle", "cx": 37, "cy": 30, "r": 24},
-        {"type": "text", "x": 37, "y": 35, "text": "LT", "font_size": 14, "anchor": "middle"},
-        {"type": "line", "x1": 61, "y1": 30, "x2": 75, "y2": 30}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 30,
+          "x2": 12,
+          "y2": 30
+        },
+        {
+          "type": "circle",
+          "cx": 37,
+          "cy": 30,
+          "r": 24
+        },
+        {
+          "type": "text",
+          "x": 37,
+          "y": 35,
+          "text": "LT",
+          "font_size": 14,
+          "anchor": "middle"
+        },
+        {
+          "type": "line",
+          "x1": 61,
+          "y1": 30,
+          "x2": 75,
+          "y2": 30
+        }
       ]
     },
     {
@@ -927,15 +3637,60 @@
       "width": 70,
       "height": 110,
       "ports": [
-        {"id": "upper", "name": "上取口", "x": 0, "y": 25, "direction": "bidirectional", "medium": "process"},
-        {"id": "lower", "name": "下取口", "x": 0, "y": 85, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "upper",
+          "name": "上取口",
+          "x": 0,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "lower",
+          "name": "下取口",
+          "x": 0,
+          "y": 85,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 0, "y1": 25, "x2": 20, "y2": 25},
-        {"type": "line", "x1": 0, "y1": 85, "x2": 20, "y2": 85},
-        {"type": "rect", "x": 20, "y": 10, "width": 32, "height": 90, "rx": 16},
-        {"type": "line", "x1": 36, "y1": 22, "x2": 36, "y2": 88},
-        {"type": "line", "x1": 25, "y1": 62, "x2": 47, "y2": 62}
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 25,
+          "x2": 20,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 0,
+          "y1": 85,
+          "x2": 20,
+          "y2": 85
+        },
+        {
+          "type": "rect",
+          "x": 20,
+          "y": 10,
+          "width": 32,
+          "height": 90,
+          "rx": 16
+        },
+        {
+          "type": "line",
+          "x1": 36,
+          "y1": 22,
+          "x2": 36,
+          "y2": 88
+        },
+        {
+          "type": "line",
+          "x1": 25,
+          "y1": 62,
+          "x2": 47,
+          "y2": 62
+        }
       ]
     },
     {
@@ -946,12 +3701,37 @@
       "width": 50,
       "height": 60,
       "ports": [
-        {"id": "process", "name": "过程接口", "x": 25, "y": 60, "direction": "in", "medium": "process"}
+        {
+          "id": "process",
+          "name": "过程接口",
+          "x": 25,
+          "y": 60,
+          "direction": "in",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "circle", "cx": 25, "cy": 25, "r": 22},
-        {"type": "text", "x": 25, "y": 30, "text": "TE", "font_size": 14, "anchor": "middle"},
-        {"type": "line", "x1": 25, "y1": 47, "x2": 25, "y2": 60}
+        {
+          "type": "circle",
+          "cx": 25,
+          "cy": 25,
+          "r": 22
+        },
+        {
+          "type": "text",
+          "x": 25,
+          "y": 30,
+          "text": "TE",
+          "font_size": 14,
+          "anchor": "middle"
+        },
+        {
+          "type": "line",
+          "x1": 25,
+          "y1": 47,
+          "x2": 25,
+          "y2": 60
+        }
       ]
     },
     {
@@ -962,12 +3742,37 @@
       "width": 50,
       "height": 60,
       "ports": [
-        {"id": "process", "name": "过程接口", "x": 25, "y": 60, "direction": "in", "medium": "process"}
+        {
+          "id": "process",
+          "name": "过程接口",
+          "x": 25,
+          "y": 60,
+          "direction": "in",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "circle", "cx": 25, "cy": 25, "r": 22},
-        {"type": "text", "x": 25, "y": 30, "text": "AI", "font_size": 14, "anchor": "middle"},
-        {"type": "line", "x1": 25, "y1": 47, "x2": 25, "y2": 60}
+        {
+          "type": "circle",
+          "cx": 25,
+          "cy": 25,
+          "r": 22
+        },
+        {
+          "type": "text",
+          "x": 25,
+          "y": 30,
+          "text": "AI",
+          "font_size": 14,
+          "anchor": "middle"
+        },
+        {
+          "type": "line",
+          "x1": 25,
+          "y1": 47,
+          "x2": 25,
+          "y2": 60
+        }
       ]
     },
     {
@@ -978,10 +3783,42 @@
       "width": 100,
       "height": 50,
       "ports": [
-        {"id": "connection", "name": "管线接口", "x": 0, "y": 25, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "connection",
+          "name": "管线接口",
+          "x": 0,
+          "y": 25,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "polyline", "points": [[0, 5], [75, 5], [100, 25], [75, 45], [0, 45]], "closed": true}
+        {
+          "type": "polyline",
+          "points": [
+            [
+              0,
+              5
+            ],
+            [
+              75,
+              5
+            ],
+            [
+              100,
+              25
+            ],
+            [
+              75,
+              45
+            ],
+            [
+              0,
+              45
+            ]
+          ],
+          "closed": true
+        }
       ]
     },
     {
@@ -992,13 +3829,55 @@
       "width": 80,
       "height": 90,
       "ports": [
-        {"id": "inlet", "name": "放空入口", "x": 40, "y": 90, "direction": "in", "medium": "vent"}
+        {
+          "id": "inlet",
+          "name": "放空入口",
+          "x": 40,
+          "y": 90,
+          "direction": "in",
+          "medium": "vent"
+        }
       ],
       "shapes": [
-        {"type": "line", "x1": 40, "y1": 90, "x2": 40, "y2": 35},
-        {"type": "polyline", "points": [[20, 25], [40, 5], [60, 25]], "closed": false},
-        {"type": "line", "x1": 18, "y1": 25, "x2": 62, "y2": 25},
-        {"type": "line", "x1": 24, "y1": 32, "x2": 56, "y2": 32}
+        {
+          "type": "line",
+          "x1": 40,
+          "y1": 90,
+          "x2": 40,
+          "y2": 35
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              20,
+              25
+            ],
+            [
+              40,
+              5
+            ],
+            [
+              60,
+              25
+            ]
+          ],
+          "closed": false
+        },
+        {
+          "type": "line",
+          "x1": 18,
+          "y1": 25,
+          "x2": 62,
+          "y2": 25
+        },
+        {
+          "type": "line",
+          "x1": 24,
+          "y1": 32,
+          "x2": 56,
+          "y2": 32
+        }
       ]
     },
     {
@@ -1009,19 +3888,100 @@
       "width": 160,
       "height": 120,
       "ports": [
-        {"id": "l1", "name": "左接口1", "x": 0, "y": 12, "direction": "bidirectional", "medium": "process"},
-        {"id": "l2", "name": "左接口2", "x": 0, "y": 36, "direction": "bidirectional", "medium": "process"},
-        {"id": "l3", "name": "左接口3（居中）", "x": 0, "y": 60, "direction": "bidirectional", "medium": "process"},
-        {"id": "l4", "name": "左接口4", "x": 0, "y": 84, "direction": "bidirectional", "medium": "process"},
-        {"id": "l5", "name": "左接口5", "x": 0, "y": 108, "direction": "bidirectional", "medium": "process"},
-        {"id": "r1", "name": "右接口1", "x": 160, "y": 12, "direction": "bidirectional", "medium": "process"},
-        {"id": "r2", "name": "右接口2", "x": 160, "y": 36, "direction": "bidirectional", "medium": "process"},
-        {"id": "r3", "name": "右接口3（居中）", "x": 160, "y": 60, "direction": "bidirectional", "medium": "process"},
-        {"id": "r4", "name": "右接口4", "x": 160, "y": 84, "direction": "bidirectional", "medium": "process"},
-        {"id": "r5", "name": "右接口5", "x": 160, "y": 108, "direction": "bidirectional", "medium": "process"}
+        {
+          "id": "l1",
+          "name": "左接口1",
+          "x": 0,
+          "y": 12,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "l2",
+          "name": "左接口2",
+          "x": 0,
+          "y": 36,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "l3",
+          "name": "左接口3（居中）",
+          "x": 0,
+          "y": 60,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "l4",
+          "name": "左接口4",
+          "x": 0,
+          "y": 84,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "l5",
+          "name": "左接口5",
+          "x": 0,
+          "y": 108,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "r1",
+          "name": "右接口1",
+          "x": 160,
+          "y": 12,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "r2",
+          "name": "右接口2",
+          "x": 160,
+          "y": 36,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "r3",
+          "name": "右接口3（居中）",
+          "x": 160,
+          "y": 60,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "r4",
+          "name": "右接口4",
+          "x": 160,
+          "y": 84,
+          "direction": "bidirectional",
+          "medium": "process"
+        },
+        {
+          "id": "r5",
+          "name": "右接口5",
+          "x": 160,
+          "y": 108,
+          "direction": "bidirectional",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "rect", "x": 0, "y": 0, "width": 160, "height": 120, "rx": 6, "dash": [14, 8]}
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 160,
+          "height": 120,
+          "rx": 6,
+          "dash": [
+            14,
+            8
+          ]
+        }
       ]
     },
     {
@@ -1032,11 +3992,31 @@
       "width": 60,
       "height": 40,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 20, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 60, "y": 20, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 20,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 60,
+          "y": 20,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "rect", "x": 0, "y": 0, "width": 60, "height": 40}
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 60,
+          "height": 40
+        }
       ]
     },
     {
@@ -1047,11 +4027,31 @@
       "width": 60,
       "height": 40,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 20, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 60, "y": 20, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 20,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 60,
+          "y": 20,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "rect", "x": 0, "y": 0, "width": 60, "height": 40}
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 60,
+          "height": 40
+        }
       ]
     },
     {
@@ -1062,11 +4062,28 @@
       "width": 70,
       "height": 100,
       "ports": [
-        {"id": "in", "name": "入口", "x": 0, "y": 50, "direction": "in", "medium": "process"},
-        {"id": "out", "name": "出口", "x": 70, "y": 50, "direction": "out", "medium": "process"}
+        {
+          "id": "in",
+          "name": "入口",
+          "x": 0,
+          "y": 50,
+          "direction": "in",
+          "medium": "process"
+        },
+        {
+          "id": "out",
+          "name": "出口",
+          "x": 70,
+          "y": 50,
+          "direction": "out",
+          "medium": "process"
+        }
       ],
       "shapes": [
-        {"type": "path", "d": "M 0 35 A 35 35 0 0 1 70 35 L 70 65 A 35 35 0 0 1 0 65 Z"}
+        {
+          "type": "path",
+          "d": "M 0 35 A 35 35 0 0 1 70 35 L 70 65 A 35 35 0 0 1 0 65 Z"
+        }
       ]
     }
   ]

@@ -818,15 +818,7 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                     y=branch_y,
                     label="",
                 )
-                pressure = _CompactVisualNode(
-                    id=generated_id(f"{group.id}_branch_pt{branch_index}"),
-                    symbol_key="pressure_transmitter",
-                    label="",
-                    x=group.x + 140.0,
-                    y=max(10.0, branch_y - 40.0),
-                    rotation=0,
-                )
-                nodes.extend([valve, pressure])
+                nodes.append(valve)
                 junctions.append(tap)
                 connections.extend(
                     [
@@ -849,16 +841,6 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                             flow="none",
                             color="black",
                             stroke_width=1.5,
-                        ),
-                        _CompactVisualConnection(
-                            id=generated_id(f"{group.id}_ptc{branch_index}"),
-                            source_id=tap.id,
-                            source_port="node",
-                            target_id=pressure.id,
-                            target_port="process",
-                            flow="none",
-                            color="black",
-                            stroke_width=1.2,
                         ),
                     ]
                 )
@@ -1309,7 +1291,6 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                 )
 
         exact_instrument_keys = {
-            ("pressure_indicator", "pt"): "pressure_transmitter",
             ("temperature_indicator", "te"): "temperature_element",
             ("flow_indicator", "ai"): "analyzer_indicator",
         }
@@ -1628,33 +1609,7 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                 continue
             source = nodes[connection.source_id]
             target = nodes[connection.target_id]
-            if (
-                source.symbol_key == "horizontal_vessel"
-                and target.symbol_key == "pressure_transmitter"
-                and connection.source_port == "top"
-            ):
-                source_definition = self.symbols.get(source.symbol_key)
-                source_port = next(
-                    port for port in source_definition.ports if port.id == "top"
-                )
-                if source.y <= 100.0:
-                    target_position = {
-                        "x": source.x + source_port.x - 10.0,
-                        "y": source.y - 50.0,
-                    }
-                else:
-                    target_position = {
-                        "x": source.x + source_definition.width + 10.0,
-                        "y": source.y - 10.0,
-                    }
-                    connections[connection.id] = connection.model_copy(
-                        update={"source_port": "out"},
-                        deep=True,
-                    )
-                nodes[target.id] = target.model_copy(
-                    update=target_position,
-                    deep=True,
-                )
+            _ = source, target  # topology fixups reserved for future instrument keys
 
         return graph.model_copy(
             update={
@@ -1750,8 +1705,6 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
             return 90.0, 40.0
         if node.symbol_key in {"off_page_connector_in", "off_page_connector_out"}:
             return min(symbol.width, 90.0), min(symbol.height, 40.0)
-        if node.symbol_key == "pressure_transmitter":
-            return 70.0 / 3.0, 30.0
         if node.symbol_key in {"temperature_element", "analyzer_indicator"}:
             return 20.0, 30.0
         if symbol.category == "仪表":

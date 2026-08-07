@@ -421,7 +421,6 @@ def test_compact_reference_expands_cabinet_branches_before_validation():
 
     assert sum(node.symbol_key == "off_page_connector_out" for node in expanded.nodes) == 16
     assert sum(node.symbol_key == "gate_valve" for node in expanded.nodes) == 16
-    assert sum(node.symbol_key == "pressure_transmitter" for node in expanded.nodes) == 16
-    assert len(expanded.connections) == 80
+    assert len(expanded.connections) == 64
     assert all(group.width <= 100 for group in expanded.groups)
     planner._validate_compact_visual_graph(expanded, evidence)

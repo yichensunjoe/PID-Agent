@@ -64,7 +64,6 @@ REQUIRED_STANDARD_KEYS = {
     "steam_trap",
     "three_way_valve",
     "temperature_element",
-    "pressure_transmitter",
     "vent_to_atmosphere",
 }
 
@@ -124,8 +123,6 @@ def test_builtin_symbol_json_loads_without_duplicate_or_legacy_key_override(monk
     assert opc_in.ports[0].x == 100
     assert opc_out.ports[0].x == 0
     assert opc_in.shapes[0]["points"][2] == [100, 25]
-    # Hidden transmitter definitions remain addressable for existing drawings.
-    assert registry.get("pressure_transmitter").key == "pressure_transmitter"
 
 
 def test_rotated_opc_keeps_embedded_direction_text_upright():
