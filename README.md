@@ -8,6 +8,21 @@ P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 >
 > 仓库 slug 的规范名称为 `PID-Agent`，产品显示名称为 `P&ID-Agent`。Python 导入路径暂时保留为 `agentcad`，避免已有客户端立即失效。
 
+## Purpose
+
+提供一个轻量、浏览器优先、可被人工和 Agent 共同编辑的 P&ID 文档系统；文档、连接拓扑、工程报告和 Agent 事务共享同一个后端真相源。
+
+## Status
+
+WIP / Alpha — 核心文档引擎、浏览器编辑器、REST/Python/MCP 接入、导入导出和共享部署安全已形成完整实现；仍需按下方质量门槛持续验证，不能视为已完成的生产 CAD 替代品。
+
+## Stack
+
+- Python 3.11+、FastAPI、Pydantic、SQLite、CairoSVG。
+- React 19、TypeScript 7、Vite 8、Zustand、SVG。
+- MCP stdio、OpenAI-compatible Chat Completions。
+- Pytest、Ruff、Node test、Playwright；可选 Docker Compose 部署。
+
 ## 产品目标
 
 - 工程人员可以像使用轻量流程图工具一样自由放置设备、阀门、仪表和文字；
@@ -59,7 +74,7 @@ P&ID-Agent 是一款轻量、专注于工艺流程图的浏览器 P&ID 软件。
 - 适用于 OpenAI API、Ollama、LM Studio 及其他 OpenAI-compatible 服务；
 - 模型只生成结构化事务，不能绕过服务层直接写数据库。
 
-## 快速开始
+## Quick Start
 
 要求 Python 3.11+ 和 Node.js 20+。
 
@@ -115,6 +130,23 @@ Kimi Code 使用 OpenAI-compatible 地址 `https://api.kimi.com/coding/v1`，模
 4. 后端重新验证图例 key、端口、连接节点、图层和 revision；
 5. 整个事务一次成功，或完全不写入。
 
+## Commands
+
+```bash
+# 后端静态与单元检查
+pytest -q
+ruff check backend
+pid-agent quality-harness
+
+# 前端单测、构建和浏览器验收
+cd frontend
+npm test
+npm run build
+npm run test:e2e
+```
+
+`npm run test:e2e:shared` 会验证共享部署路径；涉及真实 Provider 的生成能力要另做最小 completion，不能用“模型列表可见”代替。
+
 
 ## 共享部署安全
 
@@ -144,6 +176,8 @@ pid-agent db restore --database /data/pid-agent.db --input /backup/pid-agent.pid
 ```
 
 缺失、损坏或跨实例目标需要显式 `instance_id` 确认。Docker volume、灾难恢复流程和错误处理见 [`docs/sqlite-backup-restore.md`](docs/sqlite-backup-restore.md)。
+
+本机 `data/*.db*` 当前权限已统一为 `0600`；本轮只加固文件权限，未打开、迁移或改写数据库。文件权限不是备份，重要实例仍需独立备份与恢复演练。
 
 ## 单位图例
 
@@ -274,7 +308,31 @@ PDF 图幅、分页、标题栏、预览和 Python Client 用法见 [`docs/pdf-p
 
 `/api/v1` 主要旧端点仍由新文档引擎提供兼容。
 
-## 本地验证
+## Project Structure
+
+```text
+backend/agentcad/       # 文档模型、服务、API、CLI、MCP 与导出
+backend/tests/          # 后端测试
+frontend/src/           # React/SVG 编辑器
+frontend/tests/         # 前端逻辑测试
+frontend/e2e/           # Playwright 验收
+data/                   # 本地 SQLite 运行数据（不入 Git）
+docs/                   # 产品、架构、安全、交换格式和验收说明
+scripts/                # 维护脚本
+reports/                # 本地质量/模型运行产物
+```
+
+## Configuration
+
+- `PID_AGENT_DATABASE_PATH`：SQLite 数据库路径。
+- `PID_AGENT_SYMBOL_PATHS`：公司/项目外部图例路径，按顺序覆盖。
+- `PID_AGENT_LLM_BASE_URL`、`PID_AGENT_LLM_MODEL`、`PID_AGENT_LLM_API_KEY`：OpenAI-compatible Provider。
+- `PID_AGENT_DEPLOYMENT_MODE`、`PID_AGENT_API_TOKEN`、`PID_AGENT_CORS_ORIGINS`：共享部署安全边界。
+- 旧 `AGENTCAD_*` 变量仅为兼容；新部署使用 `PID_AGENT_*`。
+
+真实密钥只放在本地环境或秘密管理系统，不能写入数据库、项目文件、报告或提交。完整安全配置和网络 allowlist 见 `docs/shared-deployment-security.md`。
+
+## Local Verification
 
 本地可独立运行核心检查，无需依赖 GitHub Actions：
 
@@ -302,6 +360,13 @@ Playwright 安装、headed 模式、视觉基线更新和 trace 查看方式见 
 5. 导入单位图例及历史图纸知识；
 6. 自动布局、避让和大型图纸性能优化；
 7. 批量问题修复、项目级规则配置和企业报表模板。
+
+## Notes
+
+- Alpha 版本的数据库 schema、导出格式和 UI 仍可能演进；迁移前先备份并看版本说明。
+- 默认 `local` 模式面向单机；共享部署必须启用 token、严格 CORS 和 Provider 网络策略。
+- P&ID 连接语义、工程正确性和视觉共线需分别验收，不能只看截图。
+- 项目不是通用 CAD、BIM 或三维建模工具。
 
 ## License
 
