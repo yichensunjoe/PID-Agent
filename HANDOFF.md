@@ -11,6 +11,7 @@
 - 备注：项目仍为 Alpha；权限加固不是备份，共享部署与 Docker 行为需要项目级验收。
 
 ## 近期轮次（最新在上，保留全部）
+- 2026-08-17（Git 标准化）：工作区统一规范——.gitignore 补全 .reasonix/ 和 credentials*；无业务代码变更
 
 - 2026-08-13：补齐 README 的 Purpose/Status/Stack/Commands/Structure/Configuration/Notes，新增需求与任务文档；确认本机数据库/WAL/SHM 均为 `0600`，未读写数据库或业务代码。
 - 2026-08-13：依据 README 与产品边界补齐交接；未改业务代码或数据库。
