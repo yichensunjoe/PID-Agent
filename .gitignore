@@ -43,3 +43,4 @@ frontend/dist/
 frontend/test-results/
 frontend/playwright-report/
 !frontend/e2e/visual.spec.ts-snapshots/*.png
+credentials*
