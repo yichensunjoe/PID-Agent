@@ -79,7 +79,12 @@
 }
 
 .runtime-export-png {
-  border-color: #4ade80 !important;
+  border-color: rgba(74, 222, 128, 0.5) !important;
+}
+
+.toolbar-actions button.runtime-export-png:hover {
+  border-color: #4ade80;
+  color: #a7f3d0;
 }
 
 .documents-panel:has(> .runtime-sidebar-switcher) .document-list {
