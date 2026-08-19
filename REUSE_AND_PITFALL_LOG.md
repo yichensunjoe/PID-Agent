@@ -6,6 +6,24 @@
 
 已有记录：
 
+## 2026-08-19 · UI token 化重构与 e2e 环境坑（P055-PID-Agent）
+
+**场景**：分支 `ui-polish-2026-08-19` 对前端做整体视觉重构（美观简洁大方），只改 CSS 不动 JSX/TS，并保持浅/深双主题与 e2e 视觉回归通过。
+
+**结论做法**：
+- 重构策略：`styles.css` 整体重写为设计 token 驱动——`:root` 定义浅色 token、`.app-shell[data-theme="dark"]` 覆盖为深色 token；各文件早已引用但从未定义的 `var(--border)/var(--panel-background)/var(--muted-text)` 等变量顺带生效。工程画布配色（#69778a/#9ba8b8 与 SVG 元素色）严格不动。
+- 验收：临时 Playwright 截图脚本（浅/深/命令面板/Agent 面板四张）人工比对 → `test:e2e:update` 重生成 10 张快照 → 全量 e2e。
+
+**踩坑点**：
+- **Playwright webServer 端口冲突要杀子进程**：`kill` npm/uvicorn 包装进程后，vite preview 与 uvicorn 的子进程仍占着 4173/8000，`reuseExistingServer:false` 直接报错；必须 `lsof -nP -iTCP:8000 -sTCP:LISTEN` 找到真实 PID 再杀。
+- **Playwright 浏览器版本严格绑定**：本机缓存有 chromium-1223/1234，但项目 @playwright/test 1.61.1 只认 1228，需 `npx playwright install chromium`；临时截图脚本可用 `executablePath` 指向其他缓存版本应急。
+- 临时 node 脚本放 `/tmp` 会 ERR_MODULE_NOT_FOUND（ESM 从脚本所在目录解析依赖），必须放进 frontend/ 目录内。
+- e2e 两个存量失败（基线同样失败，与 CSS 无关）：`document-creation`「effective timeout」期望上限 180s，但 playwright.config.ts 的 webServer env 未设 `PID_AGENT_AGENT_TIMEOUT_SECONDS`（后端默认 600）；`flow-runtime`「OPC double click」跳转失败根因未查。UI 改动验收前先跑基线对照，避免把存量失败算到自己头上。
+
+**适用场景**：大型 CSS token 化重构、Playwright webServer/浏览器版本排障、UI 回归的基线对照方法。
+
+（已同步总库 2026-08-19）
+
 ## 2026-08-06 · 全量 review + 修复后提交（P055-PID-Agent）
 
 **场景**：接管 main 分支 63 文件未提交修改（+5118/−373，codex_handoff 称"已准备推送"但实际未提交），两轮 review 子代理 + 未跟踪新文件审查 + 人工验证，修复 4 中危 + 7 低危后分组提交。
