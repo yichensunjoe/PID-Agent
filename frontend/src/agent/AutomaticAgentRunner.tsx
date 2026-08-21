@@ -8,6 +8,7 @@ import {
   automaticAgentRunContextError,
   type AutomaticAgentRunOrigin,
 } from "./automaticAgentRunGuard";
+import { AgentStreamingViewer } from "./AgentStreamingViewer";
 
 const MAX_REPLANS = 5;
 const HIGH_RISK_OPERATIONS = new Set(["delete_element", "delete_layer", "delete_system", "clear_document"]);
@@ -71,9 +72,18 @@ export function AutomaticAgentRunner({
   const [message, setMessage] = useState("");
   const [trace, setTrace] = useState<TraceEntry[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
+  const [streamingThinking, setStreamingThinking] = useState("");
+  const [streamingContent, setStreamingContent] = useState("");
   const cancelRequested = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => () => onRunningChange?.(false), [onRunningChange]);
+  useEffect(() => () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    onRunningChange?.(false);
+  }, [onRunningChange]);
 
   useEffect(() => {
     if (!pendingApproval) return;
@@ -91,6 +101,17 @@ export function AutomaticAgentRunner({
   const updateRunning = (next: boolean) => {
     setRunning(next);
     onRunningChange?.(next);
+  };
+
+  const stopRun = () => {
+    cancelRequested.current = true;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setPhase("");
+    setMessage("已手动停止自动执行");
+    updateRunning(false);
   };
 
   const assertRunContext = (
@@ -184,17 +205,26 @@ export function AutomaticAgentRunner({
     setPendingApproval(null);
     setMessage("");
     setTrace([]);
+    setStreamingThinking("");
+    setStreamingContent("");
     const seenFailures = new Set<string>();
     try {
       setPhase("正在规划并编译…");
-      let result = await api.planSemanticAgent(
+      const firstController = new AbortController();
+      abortControllerRef.current = firstController;
+      let result = await api.planSemanticAgentStream(
         initial.id,
         initial.revision,
         prompt.trim(),
         context,
+        {
+          onThinking: (delta) => setStreamingThinking((prev) => prev + delta),
+          onContent: (delta) => setStreamingContent((prev) => prev + delta),
+        },
         provider,
         images,
         requireVisibleOutput,
+        firstController.signal,
       );
       assertRunContext(origin, result);
       const entries: TraceEntry[] = [traceEntry(result)];
@@ -213,6 +243,8 @@ export function AutomaticAgentRunner({
         }
         const nextAttempt = result.attempt + 1;
         setPhase(`正在按结构化错误自动重规划（${nextAttempt}/${MAX_REPLANS}）…`);
+        const replanController = new AbortController();
+        abortControllerRef.current = replanController;
         result = await api.replanSemanticAgent(
           origin.documentId,
           origin.revision,
@@ -223,6 +255,7 @@ export function AutomaticAgentRunner({
           provider,
           images,
           requireVisibleOutput,
+          replanController.signal,
         );
         assertRunContext(origin, result);
         entries.push(traceEntry(result));
@@ -240,10 +273,15 @@ export function AutomaticAgentRunner({
       }
       await applyResult(result, origin);
     } catch (error) {
-      const text = error instanceof ApiError ? error.message : String(error instanceof Error ? error.message : error);
-      setMessage(`生成失败：${text}`);
+      if (cancelRequested.current) {
+        setMessage("自动执行已手动停止。");
+      } else {
+        const text = error instanceof ApiError ? error.message : String(error instanceof Error ? error.message : error);
+        setMessage(`生成失败：${text}`);
+      }
       setPhase("");
     } finally {
+      abortControllerRef.current = null;
       updateRunning(false);
     }
   };
@@ -266,14 +304,33 @@ export function AutomaticAgentRunner({
     <section className="automatic-agent-runner">
       <div className="automatic-agent-heading">
         <div><strong>自动完成</strong><span>自动规划、修复并应用安全事务</span></div>
-        <button
-          type="button"
-          className="primary"
-          disabled={disabled || running || !prompt.trim() || !document}
-          onClick={() => void run()}
-        >{running ? "自动处理中…" : "自动生成并应用"}</button>
+        {running ? (
+          <button
+            type="button"
+            className="danger"
+            onClick={stopRun}
+          >🛑 停止自动执行</button>
+        ) : (
+          <button
+            type="button"
+            className="primary"
+            disabled={disabled || !prompt.trim() || !document}
+            onClick={() => void run()}
+          >自动生成并应用</button>
+        )}
       </div>
-      {running ? <div className="automatic-agent-progress"><span>{phase}</span><button type="button" onClick={() => { cancelRequested.current = true; }}>完成当前请求后停止</button></div> : null}
+      {running ? (
+        <div className="automatic-agent-progress">
+          <span>{phase}</span>
+          <button type="button" className="danger-inline" onClick={stopRun}>🛑 叫停</button>
+        </div>
+      ) : null}
+      <AgentStreamingViewer
+        thinking={streamingThinking}
+        content={streamingContent}
+        isStreaming={running}
+        onStop={stopRun}
+      />
       {message ? <div className={`automatic-agent-result ${message.startsWith("生成成功") ? "success" : message.includes("需要确认") ? "warning" : "error"}`}>{message}</div> : null}
       {pendingApproval ? <div className="automatic-agent-approval"><button type="button" className="confirm" disabled={running} onClick={() => void confirmHighRisk()}>确认应用高风险事务</button><button type="button" disabled={running} onClick={() => setPendingApproval(null)}>放弃</button></div> : null}
       {trace.length ? <details className="automatic-agent-trace"><summary>执行轨迹 · {trace.length} 次规划</summary><ol>{trace.map((entry) => <li key={entry.planId}><code>attempt {entry.attempt}</code><span>{entry.valid ? "通过" : entry.issueCodes.join(", ") || "未通过"}</span></li>)}</ol></details> : null}

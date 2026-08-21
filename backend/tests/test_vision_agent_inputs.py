@@ -210,7 +210,7 @@ def test_k3_vision_planner_retries_malformed_json_with_low_reasoning(monkeypatch
     try:
         result = planner._request_model_json(
             ProviderConfig(
-                base_url="https://api.kimi.com/coding/v1",
+                base_url="https://api.example.com/v1",
                 model="k3",
                 thinking_enabled=True,
                 thinking_level="high",
@@ -241,7 +241,7 @@ def test_k3_vision_planner_retries_reasoning_only_length_response(monkeypatch):
     try:
         result = planner._request_model_json(
             ProviderConfig(
-                base_url="https://api.kimi.com/coding/v1",
+                base_url="https://api.example.com/v1",
                 model="k3",
                 thinking_enabled=True,
                 thinking_level="high",
@@ -271,7 +271,7 @@ def test_k3_schema_repair_uses_low_reasoning_without_resending_image(monkeypatch
     try:
         result = planner._request_model_json(
             ProviderConfig(
-                base_url="https://api.kimi.com/coding/v1",
+                base_url="https://api.example.com/v1",
                 model="k3",
                 thinking_enabled=True,
                 thinking_level="high",
@@ -303,7 +303,7 @@ def test_k3_vision_request_is_split_into_evidence_then_text_planning(monkeypatch
             prompt="复刻流程图",
             context="保持标签",
             provider=ProviderConfig(
-                base_url="https://api.kimi.com/coding/v1",
+                base_url="https://api.example.com/v1",
                 model="k3",
                 thinking_enabled=True,
                 thinking_level="high",

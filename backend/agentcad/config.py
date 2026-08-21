@@ -33,6 +33,17 @@ def _float_env(primary: str, legacy: str, default: float) -> float:
         raise ValueError(f"{primary} must be a number") from exc
 
 
+def _optional_float_env(primary: str, legacy: str, default: float | None = None) -> float | None:
+    raw = os.getenv(primary, os.getenv(legacy, ""))
+    if not raw.strip() or raw.strip().lower() in {"0", "none", "unlimited", "inf"}:
+        return default
+    try:
+        val = float(raw)
+        return val if val > 0 else None
+    except ValueError as exc:
+        raise ValueError(f"{primary} must be a number") from exc
+
+
 @dataclass(frozen=True)
 class Settings:
     database_path: Path
@@ -48,7 +59,7 @@ class Settings:
     max_import_body_bytes: int = 25 * 1024 * 1024
     provider_max_response_bytes: int = 4 * 1024 * 1024
     max_concurrent_requests: int = 32
-    agent_timeout_seconds: float = 600.0
+    agent_timeout_seconds: float | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -133,10 +144,10 @@ class Settings:
                 "AGENTCAD_MAX_CONCURRENT_REQUESTS",
                 32,
             ),
-            agent_timeout_seconds=_float_env(
+            agent_timeout_seconds=_optional_float_env(
                 "PID_AGENT_AGENT_TIMEOUT_SECONDS",
                 "AGENTCAD_AGENT_TIMEOUT_SECONDS",
-                600.0,
+                None,
             ),
         )
         settings.validate()
@@ -167,7 +178,5 @@ class Settings:
         }.items():
             if value <= 0:
                 raise ValueError(f"{name} must be greater than zero")
-        if self.agent_timeout_seconds <= 0:
+        if self.agent_timeout_seconds is not None and self.agent_timeout_seconds <= 0:
             raise ValueError("agent_timeout_seconds must be greater than zero")
-        if self.agent_timeout_seconds > 600:
-            raise ValueError("agent_timeout_seconds must not exceed 600 seconds")

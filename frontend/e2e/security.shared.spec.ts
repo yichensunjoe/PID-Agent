@@ -78,9 +78,9 @@ test("shared provider policy blocks localhost, permits an allowlisted target, an
   await expect(page.locator(".provider-test-success")).toContainText("连接成功");
   await expect(page.locator(".provider-test-success")).toContainText("test-model");
 
-  await page.getByRole("combobox", { name: "服务预设" }).selectOption("kimi-code");
-  await expect(baseUrl).toHaveValue("https://api.kimi.com/coding/v1");
-  await expect(model).toHaveValue("kimi-for-coding");
+  await page.getByRole("combobox", { name: "服务预设" }).selectOption("openai-compatible");
+  await expect(baseUrl).toHaveValue("https://api.openai.com/v1");
+  await expect(model).toHaveValue("");
 
   const after = await request.get(`${API}/documents/${document.id}`, { headers: authorization });
   expect(after.ok()).toBeTruthy();

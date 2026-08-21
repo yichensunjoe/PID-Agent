@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 from time import perf_counter
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from .agent_semantic import analyze_transaction
 from .agent_semantic_models import (
@@ -247,6 +250,74 @@ def create_semantic_agent_router(
                 **_operation_types(plan, compiled),
             )
         return _result(plan, compiled, attempt=0)
+
+    @router.post("/documents/{document_id}/agent/plan-v2-stream")
+    async def plan_semantic_transaction_stream(
+        document_id: str,
+        request: VisionAgentGenerateRequest,
+    ):
+        try:
+            prepared_request = _with_harness_context(service, document_id, request)
+        except DocumentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"document not found: {exc.args[0]}") from exc
+
+        async def event_generator():
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+
+            def worker():
+                try:
+                    for event_type, chunk in planner.stream_plan_events(document_id, prepared_request):
+                        loop.call_soon_threadsafe(queue.put_nowait, (event_type, chunk))
+                    loop.call_soon_threadsafe(queue.put_nowait, ("EOF", None))
+                except Exception as exc:
+                    loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
+                    loop.call_soon_threadsafe(queue.put_nowait, ("EOF", None))
+
+            thread = threading.Thread(target=worker, daemon=True)
+            thread.start()
+
+            plan = None
+            while True:
+                event_type, chunk = await queue.get()
+                if event_type == "EOF":
+                    break
+                if event_type == "error":
+                    yield f"event: error\ndata: {json.dumps({'message': chunk}, ensure_ascii=False)}\n\n"
+                    return
+                if event_type in ("thinking", "content"):
+                    yield f"event: {event_type}\ndata: {json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
+                elif event_type == "plan":
+                    plan = chunk
+
+            if plan is not None:
+                compiled = compiler.compile(document_id, plan.transaction)
+                compiled = _enforce_visible_output_requirement(
+                    service, document_id, request.require_visible_output, compiled
+                )
+                res = _result(plan, compiled, attempt=0)
+                yield f"event: complete\ndata: {json.dumps(res.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+            else:
+                try:
+                    plan = planner.plan(document_id, prepared_request)
+                    compiled = compiler.compile(document_id, plan.transaction)
+                    compiled = _enforce_visible_output_requirement(
+                        service, document_id, request.require_visible_output, compiled
+                    )
+                    res = _result(plan, compiled, attempt=0)
+                    yield f"event: complete\ndata: {json.dumps(res.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+                except Exception as exc:
+                    yield f"event: error\ndata: {json.dumps({'message': str(exc)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.post(
         "/documents/{document_id}/agent/replan",

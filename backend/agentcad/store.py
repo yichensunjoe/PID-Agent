@@ -288,6 +288,7 @@ class SQLiteDocumentStore:
                     revision=document.revision,
                     element_count=len(document.elements),
                     updated_at=document.updated_at,
+                    metadata=document.metadata,
                 )
             )
         return summaries

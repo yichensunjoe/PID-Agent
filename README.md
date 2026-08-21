@@ -120,7 +120,7 @@ export PID_AGENT_LLM_API_KEY="optional-api-key"
 
 旧的 `AGENTCAD_LLM_*` 环境变量仍可使用，但新部署应使用 `PID_AGENT_*`。
 
-Kimi Code 使用 OpenAI-compatible 地址 `https://api.kimi.com/coding/v1`，模型名可选 `k3`、`kimi-for-coding` 或 `kimi-for-coding-highspeed`。P&ID-Agent 会为这些模型自动发送其要求的 `temperature=1`。在 Agent 设置中选择 **Kimi Code** 预设会自动填入该地址和 `kimi-for-coding`。
+支持任何兼容 OpenAI 接口规范的模型端点（包括本地 Ollama、LM Studio、私有网关或云端 API）。在 Web 界面的 Agent 面板中，输入 Base URL 与 API Key 后可点击「发现模型」动态拉取端点上部署的所有可用模型，或直接手动输入模型名称。系统不会绑定任何硬编码模型。
 
 规划流程：
 

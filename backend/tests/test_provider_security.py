@@ -5,7 +5,6 @@ import pytest
 
 from agentcad.llm import LLMResponseError, ProviderNetworkPolicyError
 from agentcad.models import ProviderConfig
-from agentcad.provider_compat import KIMI_CODING_BASE_URL
 from agentcad.provider_discovery import discover_provider_models
 from agentcad.provider_security import (
     ProviderNetworkPolicy,
@@ -53,10 +52,8 @@ def test_shared_policy_accepts_public_https_and_known_public_providers():
     policy = ProviderNetworkPolicy(mode="shared", resolver=resolver({}))
 
     assert policy.normalize_and_validate("https://api.openai.com") == "https://api.openai.com/v1"
-    assert policy.normalize_and_validate("https://api.deepseek.com") == "https://api.deepseek.com/v1"
-    assert policy.normalize_and_validate("https://openrouter.ai/api") == "https://openrouter.ai/api/v1"
-    assert policy.normalize_and_validate("https://api.groq.com/openai/v1") == "https://api.groq.com/openai/v1"
-    assert policy.normalize_and_validate("https://api.kimi.com/coding/") == KIMI_CODING_BASE_URL
+    assert policy.normalize_and_validate("https://api.example.com") == "https://api.example.com/v1"
+    assert policy.normalize_and_validate("https://api.example.com/v1/chat/completions") == "https://api.example.com/v1"
 
 
 def test_local_policy_keeps_ollama_and_lm_studio_compatible_without_dns():

@@ -111,8 +111,8 @@ export type ProviderModelsResult = {
 };
 
 export type AgentRuntimeConfig = {
-  default_timeout_seconds: number;
-  max_timeout_seconds: number;
+  default_timeout_seconds: number | null;
+  max_timeout_seconds: number | null;
 };
 
 export type DocumentStatus = { id: string; revision: number; updated_at: string };
@@ -211,10 +211,18 @@ function normalizeEditorResponse<T>(payload: T): T {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await authorizedFetch(`${API_ROOT}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
+  let response: Response;
+  try {
+    response = await authorizedFetch(`${API_ROOT}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("已手动停止操作", { status: 0, code: "aborted" });
+    }
+    throw error;
+  }
   const requestId = response.headers.get("X-PID-Agent-Request-ID") || undefined;
   if (!response.ok) {
     const fallback = `${response.status} ${response.statusText}`;
@@ -253,9 +261,29 @@ function providerPayload(provider?: ProviderConfig): ProviderConfig | undefined 
 export const api = {
   listDocuments: () => request<DocumentSummary[]>("/documents"),
   getAgentRuntimeConfig: () => request<AgentRuntimeConfig>("/agent/runtime-config"),
-  createDocument: (name: string) => request<Document>("/documents", { method: "POST", body: JSON.stringify({ name }) }),
+  createDocument: (name: string, options?: { folder_id?: string; metadata?: Record<string, unknown> }) =>
+    request<Document>("/documents", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        metadata: {
+          ...(options?.metadata ?? {}),
+          ...(options?.folder_id ? { folder_id: options.folder_id } : {}),
+        },
+      }),
+    }),
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getDocumentStatus: (id: string) => request<DocumentStatus>(`/documents/${id}/status`),
+  moveDocumentFolder: (id: string, folder_id: string, expectedRevision: number) =>
+    request<Document>(`/documents/${id}/folder`, {
+      method: "PUT",
+      body: JSON.stringify({ folder_id, expected_revision: expectedRevision }),
+    }),
+  renameDocument: (id: string, name: string, expectedRevision: number) =>
+    request<Document>(`/documents/${id}/name`, {
+      method: "PUT",
+      body: JSON.stringify({ name, expected_revision: expectedRevision }),
+    }),
   getEngineeringReport: (id: string, scope: ReportScope = "visible") =>
     request<EngineeringReport>(`/documents/${id}/engineering-report?scope=${encodeURIComponent(scope)}`),
   engineeringReportCsvUrl: (
@@ -333,8 +361,10 @@ export const api = {
     { method: "POST" },
   ),
   listSymbols: () => request<SymbolDefinition[]>("/symbols"),
-  listProviderModels: (provider: ProviderConfig) => request<ProviderModelsResult>("/agent/provider/models", { method: "POST", body: JSON.stringify(provider) }),
-  testProvider: (provider: ProviderConfig) => request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider) }),
+  listProviderModels: (provider: ProviderConfig, signal?: AbortSignal) =>
+    request<ProviderModelsResult>("/agent/provider/models", { method: "POST", body: JSON.stringify(provider), signal }),
+  testProvider: (provider: ProviderConfig, signal?: AbortSignal) =>
+    request<ProviderTestResult>("/agent/provider/test", { method: "POST", body: JSON.stringify(provider), signal }),
   planSemanticAgent: (
     id: string,
     revision: number,
@@ -343,6 +373,7 @@ export const api = {
     provider?: ProviderConfig,
     images: AgentImagePayload[] = [],
     requireVisibleOutput = false,
+    signal?: AbortSignal,
   ) => request<SemanticAgentPlanResult>(`/documents/${id}/agent/plan-v2`, {
     method: "POST",
     body: JSON.stringify({
@@ -354,7 +385,108 @@ export const api = {
       images,
       require_visible_output: requireVisibleOutput,
     }),
+    signal,
   }),
+  planSemanticAgentStream: async (
+    id: string,
+    revision: number,
+    prompt: string,
+    context: string,
+    callbacks: {
+      onThinking?: (delta: string) => void;
+      onContent?: (delta: string) => void;
+    },
+    provider?: ProviderConfig,
+    images: AgentImagePayload[] = [],
+    requireVisibleOutput = false,
+    signal?: AbortSignal,
+  ): Promise<SemanticAgentPlanResult> => {
+    const url = `${API_ROOT}/documents/${id}/agent/plan-v2-stream`;
+    const response = await authorizedFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        context,
+        dry_run: true,
+        expected_revision: revision,
+        provider: providerPayload(provider),
+        images,
+        require_visible_output: requireVisibleOutput,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      let detail = `请求失败: HTTP ${response.status}`;
+      try {
+        const json = await response.json();
+        if (json.detail) detail = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
+      } catch {
+        // use fallback detail
+      }
+      throw new ApiError(detail, { status: response.status });
+    }
+
+    if (!response.body) {
+      throw new ApiError("No response stream body", { status: response.status });
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: SemanticAgentPlanResult | null = null;
+    let errorMessage: string | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const normalized = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const blocks = normalized.split("\n\n");
+      buffer = blocks.pop() ?? "";
+
+      for (const block of blocks) {
+        if (!block.trim()) continue;
+        const lines = block.split("\n");
+        let eventType = "message";
+        const dataLines: string[] = [];
+
+        for (const line of lines) {
+          if (line.startsWith("event:")) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).trim());
+          }
+        }
+
+        if (!dataLines.length) continue;
+        const dataStr = dataLines.join("\n");
+        try {
+          const dataJson = JSON.parse(dataStr);
+          if (eventType === "thinking" && callbacks.onThinking) {
+            callbacks.onThinking(dataJson.delta);
+          } else if (eventType === "content" && callbacks.onContent) {
+            callbacks.onContent(dataJson.delta);
+          } else if (eventType === "complete") {
+            finalResult = dataJson;
+          } else if (eventType === "error") {
+            errorMessage = dataJson.message;
+          }
+        } catch {
+          // ignore partial parse error
+        }
+      }
+    }
+
+    if (errorMessage) {
+      throw new ApiError(errorMessage, { status: 500 });
+    }
+    if (!finalResult) {
+      throw new ApiError("流式规划未返回有效结果", { status: 500 });
+    }
+    return finalResult;
+  },
   replanSemanticAgent: (
     id: string,
     revision: number,
@@ -365,6 +497,7 @@ export const api = {
     provider?: ProviderConfig,
     images: AgentImagePayload[] = [],
     requireVisibleOutput = false,
+    signal?: AbortSignal,
   ) => request<SemanticAgentPlanResult>(`/documents/${id}/agent/replan`, {
     method: "POST",
     body: JSON.stringify({
@@ -377,6 +510,7 @@ export const api = {
       images,
       require_visible_output: requireVisibleOutput,
     }),
+    signal,
   }),
   planAgent: (
     id: string,

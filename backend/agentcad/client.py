@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -23,24 +24,29 @@ from .project_io import (
     ProjectSettings,
 )
 
+DEFAULT_CLIENT_BASE_URL = os.getenv("PID_AGENT_BASE_URL", "http://127.0.0.1:8000")
+DEFAULT_CLIENT_TIMEOUT = float(os.getenv("PID_AGENT_CLIENT_TIMEOUT", "120.0"))
+
 
 class AgentCADClient:
     """Small synchronous client for AgentCAD's v2 REST API."""
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:8000",
+        base_url: str | None = None,
         *,
-        timeout: float = 120,
+        timeout: float | None = None,
         headers: dict[str, str] | None = None,
         token: str | None = None,
     ):
+        effective_base_url = (base_url or DEFAULT_CLIENT_BASE_URL).rstrip("/")
+        effective_timeout = timeout if timeout is not None else DEFAULT_CLIENT_TIMEOUT
         request_headers = dict(headers or {})
         if token:
             request_headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.Client(
-            base_url=base_url.rstrip("/") + "/api/v2",
-            timeout=timeout,
+            base_url=effective_base_url + "/api/v2",
+            timeout=effective_timeout,
             headers=request_headers,
         )
 

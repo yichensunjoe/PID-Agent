@@ -67,7 +67,7 @@
 
 ## LongCat 跨模型精确复现
 
-使用 `/Users/joe/ai/cc/P002-可用模型清单/.env` 中已有的 LongCat 配置启动 P009，未输出或复制密钥内容。`LongCat-2.0` 真实最小 completion 测试成功，连接测试耗时约 18.9 秒。
+使用环境配置中已有的 LongCat 配置启动服务，未输出或复制密钥内容。`LongCat-2.0` 真实最小 completion 测试成功，连接测试耗时约 18.9 秒。
 
 在网页中新建空白文档 `LongCat复现-严格对齐废气冷凝器-20260727`（`doc_53d1ba949772`），通过 Automatic Agent Runner 提交施工级提示词。LongCat 首次规划即通过，`attempt=0`、无修复重试，约 106.8 秒生成 48 个语义操作，并以唯一一条 `source=llm` 历史从 revision 0 更新到 revision 1。
 
@@ -80,7 +80,7 @@
 2026-07-27 重新拉起体验实例：
 
 - 服务：`pid-agent serve --host 0.0.0.0 --port 8001`
-- 数据库：`/Users/joe/Documents/Codex/projects/active/P009-PID-Agent/data/pid-agent.db`
+- 数据库：`./data/pid-agent.db`
 - 环境：`PID_AGENT_AGENT_TIMEOUT_SECONDS=600`
-- 日志：`/Users/joe/Documents/Codex/projects/active/P009-PID-Agent/logs/server-8001.log`
+- 日志：`./logs/server-8001.log`
 - 健康检查：`http://127.0.0.1:8001/health` 返回 `{"status":"ok","service":"P&ID-Agent","version":"2.1.0-alpha.1"}`

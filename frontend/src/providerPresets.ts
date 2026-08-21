@@ -4,68 +4,37 @@ export type ProviderPreset = {
   baseUrl: string;
   requiresApiKey: boolean;
   note: string;
-  defaultModel?: string;
   aliases?: string[];
 };
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
-    id: "openai",
-    label: "OpenAI",
+    id: "openai-compatible",
+    label: "OpenAI 兼容端点",
     baseUrl: "https://api.openai.com/v1",
     requiresApiKey: true,
-    note: "OpenAI 官方 API",
-  },
-  {
-    id: "kimi-code",
-    label: "Kimi Code",
-    baseUrl: "https://api.kimi.com/coding/v1",
-    requiresApiKey: true,
-    note: "Kimi Coding OpenAI-compatible API；Kimi 模型自动使用 temperature=1",
-    defaultModel: "kimi-for-coding",
-    aliases: ["https://api.kimi.com/coding"],
-  },
-  {
-    id: "deepseek",
-    label: "DeepSeek",
-    baseUrl: "https://api.deepseek.com",
-    requiresApiKey: true,
-    note: "DeepSeek OpenAI-compatible API",
-  },
-  {
-    id: "openrouter",
-    label: "OpenRouter",
-    baseUrl: "https://openrouter.ai/api/v1",
-    requiresApiKey: true,
-    note: "统一访问多家模型",
-  },
-  {
-    id: "groq",
-    label: "Groq",
-    baseUrl: "https://api.groq.com/openai/v1",
-    requiresApiKey: true,
-    note: "Groq OpenAI-compatible API",
+    note: "标准 OpenAI-compatible API 端点",
   },
   {
     id: "ollama",
-    label: "Ollama（本机）",
+    label: "Ollama（本地）",
     baseUrl: "http://127.0.0.1:11434/v1",
     requiresApiKey: false,
-    note: "本机 Ollama 服务",
+    note: "本地 Ollama 开源模型服务",
   },
   {
     id: "lmstudio",
-    label: "LM Studio（本机）",
+    label: "LM Studio（本地）",
     baseUrl: "http://127.0.0.1:1234/v1",
     requiresApiKey: false,
-    note: "本机 LM Studio 服务",
+    note: "本地 LM Studio 模型服务",
   },
   {
     id: "custom",
-    label: "自定义",
+    label: "自定义端点",
     baseUrl: "",
     requiresApiKey: false,
-    note: "手工输入任意 OpenAI-compatible 服务",
+    note: "手动输入任意 OpenAI-compatible 服务地址",
   },
 ];
 
@@ -78,8 +47,4 @@ export function presetForBaseUrl(baseUrl: string): string {
   return PROVIDER_PRESETS.find((preset) =>
     [preset.baseUrl, ...(preset.aliases ?? [])].some((candidate) => normalizePresetUrl(candidate) === normalized),
   )?.id ?? "custom";
-}
-
-export function defaultModelForPreset(presetId: string): string {
-  return PROVIDER_PRESETS.find((preset) => preset.id === presetId)?.defaultModel ?? "";
 }

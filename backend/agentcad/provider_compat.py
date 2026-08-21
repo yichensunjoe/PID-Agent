@@ -1,22 +1,39 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from .models import ProviderConfig
 
-KIMI_CODING_BASE_URL = "https://api.kimi.com/coding/v1"
-KIMI_CODING_MODEL_IDS = frozenset(
-    {
-        "k3",
-        "kimi-for-coding",
-        "kimi-for-coding-highspeed",
-    }
+
+def _env_str(key: str, default: str) -> str:
+    return os.getenv(key, default).strip()
+
+
+def _env_csv_frozenset(key: str, default: str) -> frozenset[str]:
+    raw = os.getenv(key, default)
+    return frozenset(item.strip().lower() for item in raw.split(",") if item.strip())
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+REASONING_MODEL_IDS = _env_csv_frozenset("PID_AGENT_REASONING_MODELS", "")
+REASONING_MAX_COMPLETION_TOKENS = _env_int(
+    "PID_AGENT_REASONING_MAX_COMPLETION_TOKENS", 8_192
 )
-KIMI_K3_MODEL_IDS = frozenset({"k3", "k3-256k", "kimi-k3"})
-KIMI_K3_MAX_COMPLETION_TOKENS = 8_192
-KIMI_K3_VISION_MAX_COMPLETION_TOKENS = 16_384
+REASONING_VISION_MAX_COMPLETION_TOKENS = _env_int(
+    "PID_AGENT_REASONING_VISION_MAX_COMPLETION_TOKENS", 16_384
+)
 
 
 def normalize_openai_base_url(base_url: str) -> str:
@@ -35,44 +52,22 @@ def normalize_openai_base_url(base_url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
 
 
-def is_kimi_coding_provider(provider: ProviderConfig) -> bool:
+def is_reasoning_provider(provider: ProviderConfig) -> bool:
+    """Return whether a provider request targets a configured reasoning model or explicit thinking."""
     model = (provider.model or "").strip().lower()
-    if model in KIMI_CODING_MODEL_IDS:
+    if model and model in REASONING_MODEL_IDS:
         return True
-    if not provider.base_url:
-        return False
-    parsed = urlsplit(provider.base_url)
-    path = parsed.path.rstrip("/").lower()
-    return parsed.hostname == "api.kimi.com" and (
-        path == "/coding" or path.startswith("/coding/")
-    )
-
-
-def is_kimi_k3_provider(provider: ProviderConfig) -> bool:
-    """Return whether a provider request targets Kimi K3's reasoning API."""
-    model = (provider.model or "").strip().lower()
-    return is_kimi_coding_provider(provider) and model in KIMI_K3_MODEL_IDS
+    return bool(provider.thinking_enabled or provider.thinking_level)
 
 
 def completion_temperature(provider: ProviderConfig, requested: float) -> float:
     """Return a provider-compatible sampling temperature."""
-    # Kimi's coding API rejects any temperature other than 1 for K3/K2.x
-    # ("only 1 is allowed for this model"), so keep 1 for every Kimi model.
-    return 1.0 if is_kimi_coding_provider(provider) else requested
+    return requested
 
 
 def thinking_request_fields(provider: ProviderConfig) -> dict[str, Any]:
     """Return optional OpenAI-compatible thinking controls for a provider request."""
     fields: dict[str, Any] = {}
-    if is_kimi_k3_provider(provider):
-        # K3 always reasons and only accepts reasoning_effort. A disabled toggle
-        # therefore maps to the lowest available effort instead of sending the
-        # K2.x-only thinking object, which K3 may reject.
-        if provider.thinking_enabled is False:
-            fields["reasoning_effort"] = "low"
-        elif provider.thinking_level is not None:
-            fields["reasoning_effort"] = provider.thinking_level
-        return fields
     if provider.thinking_enabled is not None:
         fields["thinking"] = {
             "type": "enabled" if provider.thinking_enabled else "disabled"
@@ -85,14 +80,13 @@ def thinking_request_fields(provider: ProviderConfig) -> dict[str, Any]:
 def completion_budget_fields(
     provider: ProviderConfig, *, vision: bool = False
 ) -> dict[str, int]:
-    """Bound K3's otherwise very large default completion budget.
-
-    K3 defaults to a 131k completion budget. That is useful for long coding
-    sessions but makes a structured diagram plan prone to provider-side 504s.
-    Other providers keep their existing defaults for compatibility.
-    """
-    if is_kimi_k3_provider(provider):
-        limit = KIMI_K3_VISION_MAX_COMPLETION_TOKENS if vision else KIMI_K3_MAX_COMPLETION_TOKENS
+    """Bound completion budget if specified for reasoning models."""
+    if is_reasoning_provider(provider) and REASONING_MODEL_IDS:
+        limit = (
+            REASONING_VISION_MAX_COMPLETION_TOKENS
+            if vision
+            else REASONING_MAX_COMPLETION_TOKENS
+        )
         return {"max_completion_tokens": limit}
     return {}
 
@@ -123,13 +117,6 @@ def _structured_json_fallback(text: str) -> str:
 
     Reasoning fields often contain private analysis rather than the final answer.
     They are therefore accepted only when a complete JSON object can be decoded.
-
-    Reasoning models (e.g. LongCat-2.0, DeepSeek-R1) frequently emit intermediate
-    JSON fragments such as coordinate objects ``{"x": .., "y": ..}`` after the
-    real answer. Simply taking the last decodable object can therefore select a
-    stray fragment instead of the semantic transaction. To avoid this, candidates
-    that look like a semantic plan (containing ``transaction`` or ``operations``)
-    are preferred; only when none qualify does the last decodable object win.
     """
     stripped = text.strip()
     if not stripped:

@@ -6,7 +6,7 @@ Date: 2026-08-06
 
 Main branch `main` 已包含本文件描述的工作批次（2026-08-06 提交）。
 
-Remote: `origin https://github.com/yichensunjoe/PID-Agent.git`
+Remote: `origin https://github.com/<owner>/PID-Agent.git`
 
 ## What Changed (2026-08-06 batch)
 

@@ -3,6 +3,8 @@ import { useEditorPreferences } from "../editorPreferences";
 import { SpatialIndex, type SpatialBounds } from "../spatialIndex";
 import { useWorkspace } from "../store";
 import { requestTextInput } from "./InputDialogHost";
+import { requestItemProperties } from "./ItemPropertyDialogHost";
+import { isBasicShapeSymbol } from "./engineeringProperties";
 import type {
   ConnectorElement,
   ConnectorEndpoint,
@@ -67,9 +69,13 @@ import {
   evaluateInlineSymbolInsertion,
   fitRectToAspect,
   rectForElement,
+  shiftPoint,
+  snapPointToGuides,
   snapSelectionToGuides,
   splitInlineConnectorPoints,
+  translateElement,
   unionRects,
+  updatePatch,
   type AlignmentGuide,
   type AlignmentMode,
   type DistributionAxis,
@@ -280,43 +286,7 @@ function renderElement(element: Element, symbols: Map<string, SymbolDefinition>)
   </g>;
 }
 
-function shiftPoint(point: Point, dx: number, dy: number): Point {
-  return { x: point.x + dx, y: point.y + dy };
-}
 
-function translateElement(element: Element, dx: number, dy: number): Element {
-  const lockedRoutePoints = element.type === "connector" ? readLockedRoutePoints(element) : [];
-  const clone = structuredClone(element);
-  if (clone.type === "line") {
-    clone.start = shiftPoint(clone.start, dx, dy);
-    clone.end = shiftPoint(clone.end, dx, dy);
-  } else if (clone.type === "rectangle") {
-    clone.x += dx;
-    clone.y += dy;
-  } else if (clone.type === "circle") {
-    clone.center = shiftPoint(clone.center, dx, dy);
-  } else if (clone.type === "text" || clone.type === "symbol" || clone.type === "junction") {
-    clone.position = shiftPoint(clone.position, dx, dy);
-  } else {
-    clone.points = clone.points.map((point) => shiftPoint(point, dx, dy));
-    if (clone.type === "connector") {
-      if (clone.source && !clone.source.element_id) clone.source.point = shiftPoint(clone.source.point, dx, dy);
-      if (clone.target && !clone.target.element_id) clone.target.point = shiftPoint(clone.target.point, dx, dy);
-      const shiftedLocks = lockedRoutePoints.map((point) => shiftPoint(point, dx, dy));
-      clone.metadata = metadataWithLockedRoutePoints(clone, shiftedLocks);
-    }
-  }
-  return clone;
-}
-
-function updatePatch(element: Element): Record<string, unknown> {
-  if (element.type === "line") return { start: element.start, end: element.end };
-  if (element.type === "rectangle") return { x: element.x, y: element.y };
-  if (element.type === "circle") return { center: element.center };
-  if (element.type === "text" || element.type === "symbol" || element.type === "junction") return { position: element.position };
-  if (element.type === "connector") return { points: element.points, source: element.source, target: element.target, routing: element.routing, metadata: element.metadata };
-  return { points: element.points };
-}
 
 function symbolPortPoint(element: SymbolElement, definition: SymbolDefinition, port: SymbolPort): Point {
   const localX = (port.x / definition.width) * element.width;
@@ -1187,13 +1157,36 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     const shapePayload = event.dataTransfer.getData(SHAPE_DRAG_MIME);
     if (!symbolKey && !shapePayload) return;
     event.preventDefault();
-    const point = applyGrid(pointFromClient(event.clientX, event.clientY));
+    let point = applyGrid(pointFromClient(event.clientX, event.clientY));
+    const guideTargets = visibleElements.filter((element) => element.type === "symbol" || element.type === "junction");
+    const tolerance = (7 * view.width) / (svgRef.current?.clientWidth || 1000);
+    if (guideTargets.length) {
+      const snapped = snapPointToGuides(point, guideTargets.map(rectForElement), tolerance);
+      point = snapped.point;
+    }
     if (symbolKey) {
       const definition = symbolMap.get(symbolKey);
       if (!definition) return;
-      const label = await requestTextInput({ title: "放置设备", label: "设备位号/标签", initialValue: "", allowEmpty: true, confirmLabel: "放置" });
-      if (label === null) return;
-      await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
+      const isBasic = isBasicShapeSymbol(definition);
+      const res = isBasic
+        ? { label: "", properties: {} }
+        : await requestItemProperties({
+            title: `放置 ${definition.name}`,
+            symbol: definition,
+            confirmLabel: "确认并放置",
+          });
+      if (res === null) return;
+      await addElement({
+        type: "symbol",
+        symbol_key: definition.key,
+        position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 },
+        width: definition.width,
+        height: definition.height,
+        rotation: 0,
+        label: res.label,
+        properties: res.properties,
+        metadata: { ...res.properties },
+      }, `Add ${definition.name}`);
       setTool("select");
       return;
     }
@@ -1232,9 +1225,26 @@ export function EditorCanvas({ agentPreview = null, focusRequest = null, command
     if (tool === "symbol" && selectedSymbolKey) {
       const definition = symbolMap.get(selectedSymbolKey);
       if (!definition) return;
-      const label = await requestTextInput({ title: "放置设备", label: "设备位号/标签", initialValue: "", allowEmpty: true, confirmLabel: "放置" });
-      if (label === null) return;
-      await addElement({ type: "symbol", symbol_key: definition.key, position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 }, width: definition.width, height: definition.height, rotation: 0, label }, `Add ${definition.name}`);
+      const isBasic = isBasicShapeSymbol(definition);
+      const res = isBasic
+        ? { label: "", properties: {} }
+        : await requestItemProperties({
+            title: `放置 ${definition.name}`,
+            symbol: definition,
+            confirmLabel: "确认并放置",
+          });
+      if (res === null) return;
+      await addElement({
+        type: "symbol",
+        symbol_key: definition.key,
+        position: { x: point.x - definition.width / 2, y: point.y - definition.height / 2 },
+        width: definition.width,
+        height: definition.height,
+        rotation: 0,
+        label: res.label,
+        properties: res.properties,
+        metadata: { ...res.properties },
+      }, `Add ${definition.name}`);
       setTool("select");
       return;
     }

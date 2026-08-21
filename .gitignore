@@ -18,8 +18,8 @@ logs/
 *.sqlite3
 *.pidbak
 
-# Frontend
-frontend/node_modules/
+# Node / Frontend
+node_modules/
 frontend/.vite/
 frontend/*.tsbuildinfo
 frontend/vite.config.js

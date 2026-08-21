@@ -23,6 +23,11 @@ class RenameDocumentRequest(BaseModel):
         return normalized
 
 
+class MoveDocumentFolderRequest(BaseModel):
+    folder_id: str = Field(default="", max_length=120)
+    expected_revision: int = Field(ge=0)
+
+
 class CanvasGridRequest(BaseModel):
     grid_size: float = Field(ge=1, le=100)
     expected_revision: int = Field(ge=0)
@@ -99,6 +104,35 @@ def create_documents_router(service: DocumentService) -> APIRouter:
             document,
             previous_revision=previous_revision,
             label=f"Rename document to {request.name}",
+        )
+
+    @router.put("/documents/{document_id}/folder", response_model=Document)
+    def move_document_folder(document_id: str, request: MoveDocumentFolderRequest):
+        stored, document = _require_current_document(
+            service, document_id, request.expected_revision
+        )
+        current_folder = str(document.metadata.get("folder_id", ""))
+        target_folder = request.folder_id.strip()
+        if current_folder == target_folder:
+            return document
+
+        previous_revision = document.revision
+        stored.undo_stack.append(document.model_dump(mode="json"))
+        if len(stored.undo_stack) > service.history_limit:
+            stored.undo_stack = stored.undo_stack[-service.history_limit :]
+        stored.redo_stack.clear()
+        next_metadata = dict(document.metadata)
+        if target_folder:
+            next_metadata["folder_id"] = target_folder
+        else:
+            next_metadata.pop("folder_id", None)
+        document.metadata = next_metadata
+        return _save_document_mutation(
+            service,
+            stored,
+            document,
+            previous_revision=previous_revision,
+            label=f"Move document to folder {target_folder or 'root'}",
         )
 
     @router.put("/documents/{document_id}/canvas-grid", response_model=Document)

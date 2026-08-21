@@ -1,22 +1,18 @@
-from __future__ import annotations
-
+import importlib
 import json
 
 import httpx
 import pytest
 
+import agentcad.provider_compat
 from agentcad.llm import LLMResponseError, OpenAICompatiblePlanner
 from agentcad.models import AgentGenerateRequest, Document, ProviderConfig
 from agentcad.provider_compat import (
-    KIMI_CODING_BASE_URL,
-    completion_budget_fields,
     completion_temperature,
     extract_chat_content,
-    is_kimi_coding_provider,
     normalize_openai_base_url,
     thinking_request_fields,
 )
-from agentcad.semantic_planner import SemanticAgentPlanner
 
 
 class _CompletionResponse:
@@ -84,45 +80,36 @@ class _PlanClient(_RecordingClient):
         return _PlanResponse()
 
 
-def test_kimi_coding_base_url_and_model_detection():
-    assert normalize_openai_base_url("https://api.kimi.com/coding/") == KIMI_CODING_BASE_URL
+def test_openai_compatible_base_url_normalization():
+    assert normalize_openai_base_url("https://api.example.com/v1") == "https://api.example.com/v1"
+    assert normalize_openai_base_url("https://api.example.com/v1/") == "https://api.example.com/v1"
     assert (
-        normalize_openai_base_url(
-            "https://api.kimi.com/coding/v1/chat/completions"
-        )
-        == KIMI_CODING_BASE_URL
+        normalize_openai_base_url("https://api.example.com/v1/chat/completions")
+        == "https://api.example.com/v1"
     )
-    assert is_kimi_coding_provider(
-        ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="custom-alias")
-    )
-    assert is_kimi_coding_provider(
-        ProviderConfig(base_url="https://proxy.example/v1", model="kimi-for-coding")
-    )
-    assert not is_kimi_coding_provider(
-        ProviderConfig(base_url="https://api.openai.com/v1", model="gpt-test")
+    assert (
+        normalize_openai_base_url("https://api.example.com/v1/models")
+        == "https://api.example.com/v1"
     )
 
 
-def test_kimi_coding_temperature_is_forced_to_one():
-    provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="k3")
-    assert completion_temperature(provider, 0) == 1.0
-    assert completion_temperature(provider, 0.1) == 1.0
-    assert completion_temperature(provider, 0.05) == 1.0
-    assert completion_temperature(
-        ProviderConfig(base_url="https://provider.test/v1", model="other"), 0.1
-    ) == 0.1
+def test_sampling_temperature_is_preserved_or_configurable():
+    provider = ProviderConfig(base_url="https://api.example.com/v1", model="test-model")
+    assert completion_temperature(provider, 0.2) == 0.2
+    assert completion_temperature(provider, 0.0) == 0.0
+    assert completion_temperature(provider, 1.0) == 1.0
 
 
 def test_thinking_request_fields_are_optional_and_provider_compatible():
     provider = ProviderConfig(
-        base_url="https://api.deepseek.com",
-        model="deepseek-v4-flash",
+        base_url="https://api.example.com/v1",
+        model="reasoning-model",
         thinking_enabled=True,
-        thinking_level="max",
+        thinking_level="high",
     )
     assert thinking_request_fields(provider) == {
         "thinking": {"type": "enabled"},
-        "reasoning_effort": "max",
+        "reasoning_effort": "high",
     }
     assert thinking_request_fields(
         provider.model_copy(update={"thinking_enabled": False})
@@ -130,93 +117,64 @@ def test_thinking_request_fields_are_optional_and_provider_compatible():
     assert thinking_request_fields(ProviderConfig()) == {}
 
 
-def test_kimi_k3_uses_reasoning_effort_without_k2_thinking_flag():
+def test_reasoning_provider_budget_and_detection(monkeypatch):
+    monkeypatch.setenv("PID_AGENT_REASONING_MODELS", "reasoning-preview,reasoning-pro")
+    importlib.reload(agentcad.provider_compat)
+
     provider = ProviderConfig(
-        base_url=KIMI_CODING_BASE_URL,
-        model="k3",
+        base_url="https://api.example.com/v1",
+        model="reasoning-preview",
         thinking_enabled=True,
-        thinking_level="high",
     )
+    assert agentcad.provider_compat.is_reasoning_provider(provider) is True
+    assert agentcad.provider_compat.completion_budget_fields(provider) == {
+        "max_completion_tokens": 8_192
+    }
+    assert agentcad.provider_compat.completion_budget_fields(provider, vision=True) == {
+        "max_completion_tokens": 16_384
+    }
 
-    assert thinking_request_fields(provider) == {"reasoning_effort": "high"}
-    assert thinking_request_fields(
-        provider.model_copy(update={"thinking_enabled": False})
-    ) == {"reasoning_effort": "low"}
-    assert completion_budget_fields(provider) == {"max_completion_tokens": 8_192}
-    assert completion_budget_fields(provider, vision=True) == {"max_completion_tokens": 16_384}
 
-
-def test_classic_plan_uses_kimi_compatible_temperature(monkeypatch):
+def test_classic_plan_sends_standard_chat_completion(monkeypatch):
     client = _PlanClient()
     monkeypatch.setattr("agentcad.llm.httpx.Client", lambda *, timeout, follow_redirects=False, transport=None: client)
     planner = OpenAICompatiblePlanner(service=_PlanService(), symbols=_Symbols())  # type: ignore[arg-type]
 
     plan = planner.plan(
-        "doc_kimi",
+        "doc_standard",
         AgentGenerateRequest(
             prompt="Clear the drawing",
             provider=ProviderConfig(
-                base_url="https://api.kimi.com/coding/",
-                model="kimi-for-coding",
+                base_url="https://api.example.com/v1",
+                model="test-model",
                 thinking_enabled=True,
-                thinking_level="max",
+                thinking_level="high",
             ),
         ),
     )
 
     assert plan.transaction.operations[0].op == "clear_document"
-    assert client.requests[0]["url"] == "https://api.kimi.com/coding/v1/chat/completions"
-    assert client.requests[0]["json"]["temperature"] == 1.0  # type: ignore[index]
+    assert client.requests[0]["url"] == "https://api.example.com/v1/chat/completions"
+    assert client.requests[0]["json"]["temperature"] == 0.1  # type: ignore[index]
     assert client.requests[0]["json"]["thinking"] == {"type": "enabled"}  # type: ignore[index]
-    assert client.requests[0]["json"]["reasoning_effort"] == "max"  # type: ignore[index]
-
-
-def test_minimal_completion_uses_kimi_compatible_temperature():
-    planner = OpenAICompatiblePlanner(service=object(), symbols=object())  # type: ignore[arg-type]
-    client = _RecordingClient()
-    provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="kimi-for-coding")
-
-    result = planner._test_with_minimal_completion(client, provider, {})
-
-    assert result["ok"] is True
-    assert client.requests[0]["json"]["temperature"] == 1.0  # type: ignore[index]
-
-
-def test_semantic_request_uses_kimi_compatible_temperature(monkeypatch):
-    client = _RecordingClient()
-    monkeypatch.setattr(
-        "agentcad.semantic_planner.httpx.Client",
-        lambda *, timeout, follow_redirects=False, transport=None: client,
-    )
-    planner = SemanticAgentPlanner(service=object(), symbols=object())  # type: ignore[arg-type]
-    provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="k3")
-
-    result = planner._request_model_json(
-        provider,
-        system_prompt="system",
-        user_prompt="user",
-        temperature=0.1,
-    )
-
-    assert result == {"ok": True}
-    assert client.requests[0]["json"]["temperature"] == 1.0  # type: ignore[index]
+    assert client.requests[0]["json"]["reasoning_effort"] == "high"  # type: ignore[index]
 
 
 def test_invalid_temperature_error_is_actionable():
-    provider = ProviderConfig(base_url=KIMI_CODING_BASE_URL, model="k3")
+    provider = ProviderConfig(base_url="https://api.example.com/v1", model="test-model")
     response = httpx.Response(
         400,
         json={
             "error": {
-                "message": "invalid temperature: only 1 is allowed for this model"
+                "message": "invalid temperature: custom temperature not supported"
             }
         },
     )
 
-    with pytest.raises(LLMResponseError, match="temperature=1") as exc_info:
+    with pytest.raises(LLMResponseError, match="temperature") as exc_info:
         OpenAICompatiblePlanner._raise_for_response(response, provider)
 
-    assert KIMI_CODING_BASE_URL in str(exc_info.value)
+    assert "temperature" in str(exc_info.value).lower()
 
 
 def test_extract_chat_content_standard_string():
@@ -225,7 +183,6 @@ def test_extract_chat_content_standard_string():
 
 
 def test_extract_chat_content_falls_back_to_reasoning_content():
-    # LongCat-2.0 / DeepSeek-R1 style: content null, answer in reasoning_content
     data = {
         "choices": [
             {"message": {"content": None, "reasoning_content": '{"ok": true}'},
@@ -236,9 +193,6 @@ def test_extract_chat_content_falls_back_to_reasoning_content():
 
 
 def test_extract_chat_content_prefers_transaction_over_stray_json_in_reasoning():
-    # LongCat-2.0 reasoning often emits stray coordinate JSON {"x":..,"y":..}
-    # after the real answer. The structured fallback must prefer the semantic
-    # transaction object over the last decodable fragment.
     reasoning = (
         'Let me place the equipment at {"x": 340, "y": 420}.\n'
         '{"explanation": "add pump", "transaction": '
@@ -326,8 +280,6 @@ class _StaleRevisionClient(_RecordingClient):
 
 
 def test_plan_overwrites_stale_llm_expected_revision(monkeypatch):
-    """Reasoning models (LongCat/Agnes) echo a stale expected_revision; the
-    planner must trust the system-known revision, not the LLM's value."""
     client = _StaleRevisionClient()
     monkeypatch.setattr(
         "agentcad.llm.httpx.Client",
@@ -344,4 +296,4 @@ def test_plan_overwrites_stale_llm_expected_revision(monkeypatch):
         ),
     )
 
-    assert plan.transaction.expected_revision == 7  # not the LLM's stale 3
+    assert plan.transaction.expected_revision == 7

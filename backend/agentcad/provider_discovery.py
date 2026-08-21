@@ -32,7 +32,7 @@ def discover_provider_models(
     *,
     provider_policy: ProviderNetworkPolicy | None = None,
     max_response_bytes: int = 4 * 1024 * 1024,
-    max_timeout_seconds: float = 600,
+    max_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """List models from an OpenAI-compatible provider without persisting credentials."""
     if not request.base_url:
@@ -47,10 +47,13 @@ def discover_provider_models(
         raise ProviderNetworkPolicyError(
             str(exc), category=exc.category, provider=request
         ) from exc
+    timeout = request.timeout_seconds
+    if max_timeout_seconds is not None:
+        timeout = min(timeout, max_timeout_seconds) if timeout is not None else max_timeout_seconds
     provider = request.model_copy(
         update={
             "base_url": normalized_base_url,
-            "timeout_seconds": min(request.timeout_seconds, max_timeout_seconds),
+            "timeout_seconds": timeout,
         },
         deep=True,
     )

@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { AutomaticAgentRunner } from "./agent/AutomaticAgentRunner";
+import { AgentStreamingViewer } from "./agent/AgentStreamingViewer";
 import { VisionImageInput } from "./agent/VisionImageInput";
 import { shouldRequireVisibleOutput } from "./agent/visibleOutputIntent";
 import { toAgentImagePayload, type VisionAttachment } from "./agent/visionImageTypes";
 import { EditorCanvas, type AgentCanvasPreview, type CanvasCommandId, type CanvasCommandRequest, type CanvasFocusRequest, type CanvasViewportRequest } from "./editor/EditorCanvas";
 import { CommandPalette } from "./editor/CommandPalette";
 import { CreateDocumentDialog } from "./editor/CreateDocumentDialog";
+import { DocumentTree } from "./editor/DocumentTree";
+import { CreateFolderDialog, RenameFolderDialog } from "./editor/FolderDialogs";
+import { BasicShapesToolbar } from "./editor/BasicShapesToolbar";
 import { ExperienceSettings } from "./editor/ExperienceSettings";
 import { EngineeringReportPanel } from "./editor/EngineeringReportPanel";
 import { ViewNavigator } from "./editor/ViewNavigator";
@@ -21,14 +25,13 @@ import { api, ApiError, clearServiceAccessToken, downloadApiResource, getService
 import { documentDeletionConfirmation } from "./documentDeletion";
 import {
   PROVIDER_PRESETS,
-  defaultModelForPreset,
   presetForBaseUrl,
 } from "./providerPresets";
 import { parseImportJson } from "./projectImport";
 import { commandForShortcut, resolvedShortcutMap, shortcutFromKeyboardEvent, useEditorPreferences, useResolvedAppearance } from "./editorPreferences";
 import { installE2EBridge } from "./e2eBridge";
 import { useWorkspace } from "./store";
-import type { SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
+import type { ProjectFolder, SemanticAgentPlanResult, SemanticOperation, Tool } from "./types";
 import { CIRCLE_VARIETIES, LINE_VARIETIES, RECTANGLE_VARIETIES, SHAPE_DRAG_MIME } from "./editor/shapeVarieties";
 import "./issue1.css";
 
@@ -159,10 +162,8 @@ export default function App() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [serviceToken, setServiceToken] = useState(() => getServiceAccessToken());
   const [showServiceToken, setShowServiceToken] = useState(false);
-  const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [thinkingLevel, setThinkingLevel] = useState<ProviderConfig["thinking_level"]>("high");
-  const [maxTimeoutSeconds, setMaxTimeoutSeconds] = useState(600);
   const [testingProvider, setTestingProvider] = useState(false);
   const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
   const [providerTestError, setProviderTestError] = useState("");
@@ -178,30 +179,61 @@ export default function App() {
   const [automaticAgentRunning, setAutomaticAgentRunning] = useState(false);
   const [agentError, setAgentError] = useState("");
   const [pendingPlan, setPendingPlan] = useState<SemanticAgentPlanResult | null>(null);
+  const [streamingThinking, setStreamingThinking] = useState("");
+  const [streamingContent, setStreamingContent] = useState("");
   const [canvasFocusRequest, setCanvasFocusRequest] = useState<CanvasFocusRequest | null>(null);
   const [canvasCommandRequest, setCanvasCommandRequest] = useState<CanvasCommandRequest | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [createDocumentOpen, setCreateDocumentOpen] = useState(false);
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [renameFolderTarget, setRenameFolderTarget] = useState<ProjectFolder | null>(null);
+  const [createDocumentFolderId, setCreateDocumentFolderId] = useState<string | undefined>(undefined);
   const [experienceSettingsOpen, setExperienceSettingsOpen] = useState(false);
   const [viewNavigatorOpen, setViewNavigatorOpen] = useState(false);
   const [canvasView, setCanvasView] = useState<CanvasView | null>(null);
   const [canvasViewportRequest, setCanvasViewportRequest] = useState<CanvasViewportRequest | null>(null);
+  const [leftPanelTab, setLeftPanelTab] = useState<"all" | "documents" | "symbols">("all");
   const [namedViews, setNamedViews] = useState<NamedCanvasView[]>([]);
   const [importError, setImportError] = useState("");
   const documentImportRef = useRef<HTMLInputElement>(null);
   const projectImportRef = useRef<HTMLInputElement>(null);
+  const planningAbortControllerRef = useRef<AbortController | null>(null);
+  const testProviderAbortControllerRef = useRef<AbortController | null>(null);
+  const discoverModelsAbortControllerRef = useRef<AbortController | null>(null);
+
+  const projectFolders = useMemo(() => {
+    return ((state.projectSettings.metadata?.folders as ProjectFolder[] | undefined) ?? []);
+  }, [state.projectSettings.metadata]);
+
+  const stopAgentPlanning = () => {
+    if (planningAbortControllerRef.current) {
+      planningAbortControllerRef.current.abort();
+      planningAbortControllerRef.current = null;
+    }
+    setPlanningAgent(false);
+    setRepairingAgent(false);
+    setAgentError("已手动停止生成。");
+  };
+
+  const stopProviderTest = () => {
+    if (testProviderAbortControllerRef.current) {
+      testProviderAbortControllerRef.current.abort();
+      testProviderAbortControllerRef.current = null;
+    }
+    setTestingProvider(false);
+    setProviderTestError("已停止测试连接。");
+  };
+
+  const stopProviderDiscovery = () => {
+    if (discoverModelsAbortControllerRef.current) {
+      discoverModelsAbortControllerRef.current.abort();
+      discoverModelsAbortControllerRef.current = null;
+    }
+    setLoadingModels(false);
+    setModelDiscoveryError("已停止模型发现。");
+  };
 
   useEffect(() => { void state.loadWorkspace(); }, []);
-  useEffect(() => {
-    void api.getAgentRuntimeConfig()
-      .then((config) => {
-        setMaxTimeoutSeconds(config.max_timeout_seconds);
-        setTimeoutSeconds((current) => Math.min(config.max_timeout_seconds, current));
-      })
-      .catch(() => {
-        // Match the historical server default when connected to an older backend.
-      });
-  }, []);
   useEffect(() => {
     if (import.meta.env.MODE !== "e2e") return;
     return installE2EBridge(() => pendingPlan, setPendingPlan);
@@ -265,21 +297,17 @@ export default function App() {
     base_url: baseUrl.trim() || undefined,
     model: model.trim() || undefined,
     api_key: apiKey.trim() || undefined,
-    timeout_seconds: timeoutSeconds,
     thinking_enabled: thinkingEnabled,
     thinking_level: thinkingEnabled ? thinkingLevel : undefined,
   });
-  const minimumTimeoutSeconds = Math.min(10, maxTimeoutSeconds);
-  const defaultTimeoutSeconds = Math.min(120, maxTimeoutSeconds);
 
   const selectProviderPreset = (presetId: string) => {
     setProviderPreset(presetId);
     const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
     if (preset && preset.id !== "custom") {
       setBaseUrl(preset.baseUrl);
-      setModel(defaultModelForPreset(presetId));
     }
-    if (presetId === "custom") setModel("");
+    setModel("");
     setApiKey("");
     setAvailableModels([]);
     setModelDiscoveryError("");
@@ -291,7 +319,7 @@ export default function App() {
     const presetId = presetForBaseUrl(value);
     setBaseUrl(value);
     setProviderPreset(presetId);
-    setModel(defaultModelForPreset(presetId));
+    setModel("");
     setApiKey("");
     setAvailableModels([]);
     setModelDiscoveryError("");
@@ -301,14 +329,16 @@ export default function App() {
 
   const discoverProviderModels = async (silent = false) => {
     if (!baseUrl.trim()) return;
+    if (discoverModelsAbortControllerRef.current) discoverModelsAbortControllerRef.current.abort();
+    const controller = new AbortController();
+    discoverModelsAbortControllerRef.current = controller;
     setLoadingModels(true);
     setModelDiscoveryError("");
     try {
       const result = await api.listProviderModels({
         base_url: baseUrl.trim(),
         api_key: apiKey.trim() || undefined,
-        timeout_seconds: timeoutSeconds,
-      });
+      }, controller.signal);
       setAvailableModels(result.models);
       if (result.models.length) {
         setModel((current) => result.models.some((item) => item.id === current) ? current : result.models[0].id);
@@ -316,9 +346,14 @@ export default function App() {
         setModelDiscoveryError("服务连接成功，但 /models 没有返回可用模型。仍可手工输入模型名称。");
       }
     } catch (error) {
-      setAvailableModels([]);
-      setModelDiscoveryError(error instanceof ApiError ? error.message : String(error));
+      if (!controller.signal.aborted) {
+        setAvailableModels([]);
+        setModelDiscoveryError(error instanceof ApiError ? error.message : String(error));
+      }
     } finally {
+      if (discoverModelsAbortControllerRef.current === controller) {
+        discoverModelsAbortControllerRef.current = null;
+      }
       setLoadingModels(false);
     }
   };
@@ -331,7 +366,7 @@ export default function App() {
     }
     const timer = window.setTimeout(() => { void discoverProviderModels(true); }, 450);
     return () => window.clearTimeout(timer);
-  }, [baseUrl, apiKey, providerPreset, timeoutSeconds]);
+  }, [baseUrl, apiKey, providerPreset]);
 
   const scopedContext = () => {
     const document = state.document;
@@ -353,23 +388,38 @@ export default function App() {
 
   const planAgent = async () => {
     if (!prompt.trim() || !state.document) return;
+    if (planningAbortControllerRef.current) planningAbortControllerRef.current.abort();
+    const controller = new AbortController();
+    planningAbortControllerRef.current = controller;
     setPlanningAgent(true);
     setAgentError("");
     setPendingPlan(null);
+    setStreamingThinking("");
+    setStreamingContent("");
     try {
-      const response = await api.planSemanticAgent(
+      const response = await api.planSemanticAgentStream(
         state.document.id,
         state.document.revision,
         prompt.trim(),
         scopedContext(),
+        {
+          onThinking: (delta) => setStreamingThinking((prev) => prev + delta),
+          onContent: (delta) => setStreamingContent((prev) => prev + delta),
+        },
         providerConfig(),
         toAgentImagePayload(referenceImages),
         shouldRequireVisibleOutput(prompt, state.document.elements.length),
+        controller.signal,
       );
       setPendingPlan(response);
     } catch (error) {
-      setAgentError(error instanceof ApiError ? error.message : String(error));
+      if (!controller.signal.aborted) {
+        setAgentError(error instanceof ApiError ? error.message : String(error));
+      }
     } finally {
+      if (planningAbortControllerRef.current === controller) {
+        planningAbortControllerRef.current = null;
+      }
       setPlanningAgent(false);
     }
   };
@@ -377,6 +427,9 @@ export default function App() {
   const replanAgent = async () => {
     const document = state.document;
     if (!document || !pendingPlan || !prompt.trim()) return;
+    if (planningAbortControllerRef.current) planningAbortControllerRef.current.abort();
+    const controller = new AbortController();
+    planningAbortControllerRef.current = controller;
     const attempt = Math.min(5, pendingPlan.attempt + 1);
     setRepairingAgent(true);
     setAgentError("");
@@ -391,11 +444,17 @@ export default function App() {
         providerConfig(),
         toAgentImagePayload(referenceImages),
         shouldRequireVisibleOutput(prompt, document.elements.length),
+        controller.signal,
       );
       setPendingPlan(response);
     } catch (error) {
-      setAgentError(error instanceof ApiError ? error.message : String(error));
+      if (!controller.signal.aborted) {
+        setAgentError(error instanceof ApiError ? error.message : String(error));
+      }
     } finally {
+      if (planningAbortControllerRef.current === controller) {
+        planningAbortControllerRef.current = null;
+      }
       setRepairingAgent(false);
     }
   };
@@ -463,15 +522,23 @@ export default function App() {
 
   const testCustomProvider = async () => {
     if (!baseUrl.trim() || !model.trim()) return;
+    if (testProviderAbortControllerRef.current) testProviderAbortControllerRef.current.abort();
+    const controller = new AbortController();
+    testProviderAbortControllerRef.current = controller;
     setTestingProvider(true);
     setProviderTest(null);
     setProviderTestError("");
     try {
-      const result = await api.testProvider(providerConfig());
+      const result = await api.testProvider(providerConfig(), controller.signal);
       setProviderTest(result);
     } catch (error) {
-      setProviderTestError(error instanceof ApiError ? error.message : String(error));
+      if (!controller.signal.aborted) {
+        setProviderTestError(error instanceof ApiError ? error.message : String(error));
+      }
     } finally {
+      if (testProviderAbortControllerRef.current === controller) {
+        testProviderAbortControllerRef.current = null;
+      }
       setTestingProvider(false);
     }
   };
@@ -682,6 +749,8 @@ export default function App() {
             }
             return <SimpleToolButton key={tool.id} tool={tool.id} label={tool.label} shortcut={shortcut} active={state.tool === tool.id} onSelect={() => state.setTool(tool.id)} />;
           })}
+          <div style={{ width: 1, height: 18, background: "var(--border)", margin: "0 4px" }} />
+          <BasicShapesToolbar />
         </div>
         <div className="toolbar-actions">
           <button type="button" data-testid="command-palette-trigger" className="command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} title={`命令面板 (${shortcutMap["palette:open"]})`}>命令 <kbd>{shortcutMap["palette:open"]}</kbd></button>
@@ -698,71 +767,112 @@ export default function App() {
 
       <main className="workspace">
         <aside className="sidebar documents-panel" data-testid="documents-panel">
-          <div className="panel-heading"><h2>文档</h2><button data-testid="create-document" onClick={() => { state.clearError(); setCreateDocumentOpen(true); }}>新建</button></div>
-          <div className="document-import-actions">
-            <button type="button" data-testid="import-document-json" disabled={state.importing} onClick={() => documentImportRef.current?.click()}>导入 JSON</button>
-            <button type="button" data-testid="import-project-package" disabled={state.importing} onClick={() => projectImportRef.current?.click()}>导入项目包</button>
-            <input ref={documentImportRef} data-testid="import-document-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "document"); }} />
-            <input ref={projectImportRef} data-testid="import-project-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "project"); }} />
+          <div className="left-panel-nav">
+            <button
+              type="button"
+              className={`left-panel-nav-btn ${leftPanelTab === "all" ? "active" : ""}`}
+              onClick={() => setLeftPanelTab("all")}
+              title="显示全部（文档与图例）"
+            >
+              全部
+            </button>
+            <button
+              type="button"
+              className={`left-panel-nav-btn ${leftPanelTab === "documents" ? "active" : ""}`}
+              onClick={() => setLeftPanelTab("documents")}
+              title="聚焦图纸管理与项目分类"
+            >
+              📁 图纸 ({state.documents.length})
+            </button>
+            <button
+              type="button"
+              className={`left-panel-nav-btn ${leftPanelTab === "symbols" ? "active" : ""}`}
+              onClick={() => setLeftPanelTab("symbols")}
+              title="聚焦单位图例"
+            >
+              📐 图例
+            </button>
           </div>
-          {importError || state.error ? <div className="document-import-error" role="alert"><span>{importError || state.error}</span><button type="button" onClick={() => { setImportError(""); state.clearError(); }}>关闭</button></div> : null}
-          <details className="service-access-settings">
-            <summary>共享部署访问令牌</summary>
-            <label>Service token
-              <div className="secret-input-row">
-                <input
-                  data-testid="service-token-input"
-                  type={showServiceToken ? "text" : "password"}
-                  value={serviceToken}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => setServiceToken(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Enter") applyServiceToken(); }}
-                  placeholder="共享部署要求的 Bearer token"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <button type="button" onClick={() => setShowServiceToken(!showServiceToken)}>{showServiceToken ? "隐藏" : "显示"}</button>
+
+          {leftPanelTab !== "symbols" ? (
+            <div className="left-panel-section">
+              <div className="panel-heading"><h2>文档</h2><button data-testid="create-document" onClick={() => { state.clearError(); setCreateDocumentOpen(true); }}>新建</button></div>
+              <div className="document-import-actions">
+                <button type="button" data-testid="import-document-json" disabled={state.importing} onClick={() => documentImportRef.current?.click()}>导入 JSON</button>
+                <button type="button" data-testid="import-project-package" disabled={state.importing} onClick={() => projectImportRef.current?.click()}>导入项目包</button>
+                <input ref={documentImportRef} data-testid="import-document-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "document"); }} />
+                <input ref={projectImportRef} data-testid="import-project-input" type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importJsonFile(file, "project"); }} />
               </div>
-            </label>
-            <div className="provider-actions">
-              <button type="button" data-testid="service-token-apply" onClick={applyServiceToken}>应用并重新连接</button>
-              <button type="button" data-testid="service-token-clear" onClick={clearServiceToken}>清除</button>
+              {importError || state.error ? <div className="document-import-error" role="alert"><span>{importError || state.error}</span><button type="button" onClick={() => { setImportError(""); state.clearError(); }}>关闭</button></div> : null}
+              <details className="service-access-settings">
+                <summary>共享部署访问令牌</summary>
+                <label>Service token
+                  <div className="secret-input-row">
+                    <input
+                      data-testid="service-token-input"
+                      type={showServiceToken ? "text" : "password"}
+                      value={serviceToken}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) => setServiceToken(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === "Enter") applyServiceToken(); }}
+                      placeholder="共享部署要求的 Bearer token"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <button type="button" onClick={() => setShowServiceToken(!showServiceToken)}>{showServiceToken ? "隐藏" : "显示"}</button>
+                  </div>
+                </label>
+                <div className="provider-actions">
+                  <button type="button" data-testid="service-token-apply" onClick={applyServiceToken}>应用并重新连接</button>
+                  <button type="button" data-testid="service-token-clear" onClick={clearServiceToken}>清除</button>
+                </div>
+                <p>令牌仅保存在当前浏览器标签页的 sessionStorage；不会写入 URL 或 localStorage，关闭标签页后失效。</p>
+              </details>
+              <div className="project-summary" data-testid="project-summary"><strong>{state.projectSettings.name}</strong><span>{state.documents.length} 个文档</span></div>
+              <div className="document-list">
+                <DocumentTree
+                  documents={state.documents}
+                  activeDocumentId={state.document?.id}
+                  folders={projectFolders}
+                  busy={state.loading || state.importing || state.isMutating || busyAgent}
+                  onOpenDocument={(id) => void state.openDocument(id)}
+                  onDeleteDocument={(doc) => {
+                    if (window.confirm(documentDeletionConfirmation(doc.name))) {
+                      void state.deleteDocument(doc.id);
+                    }
+                  }}
+                  onCreateDocumentInFolder={(folderId) => {
+                    state.clearError();
+                    setCreateDocumentFolderId(folderId);
+                    setCreateDocumentOpen(true);
+                  }}
+                  onCreateFolder={() => {
+                    state.clearError();
+                    setCreateFolderOpen(true);
+                  }}
+                  onRenameFolder={(folder) => {
+                    setRenameFolderTarget(folder);
+                  }}
+                  onDeleteFolder={(folder) => {
+                    if (window.confirm(`确定要删除项目分类「${folder.name}」吗？\n该分类下的所有图纸将保留并转入「未分类」。`)) {
+                      void state.deleteFolder(folder.id);
+                    }
+                  }}
+                  onMoveDocument={(docId, folderId) => {
+                    void state.moveDocumentToFolder(docId, folderId);
+                  }}
+                />
+              </div>
             </div>
-            <p>令牌仅保存在当前浏览器标签页的 sessionStorage；不会写入 URL 或 localStorage，关闭标签页后失效。</p>
-          </details>
-          <div className="project-summary" data-testid="project-summary"><strong>{state.projectSettings.name}</strong><span>{state.documents.length} 个文档</span></div>
-          <div className="document-list">
-            {state.documents.map((document) => <div key={document.id} className="document-list-item">
-              <button
-                type="button"
-                data-document-id={document.id}
-                className={`document-open${state.document?.id === document.id ? " active" : ""}`}
-                disabled={state.loading || state.importing || state.isMutating || busyAgent}
-                onClick={() => void state.openDocument(document.id)}
-              >
-                <strong>{document.name}</strong>
-                <span>{document.element_count} 个元素 · r{document.revision}</span>
-              </button>
-              <button
-                type="button"
-                className="document-delete"
-                data-testid="delete-document"
-                data-document-id={document.id}
-                aria-label={`删除文档 ${document.name}`}
-                title={`删除 ${document.name}`}
-                disabled={state.loading || state.importing || state.isMutating || busyAgent}
-                onClick={() => {
-                  if (window.confirm(documentDeletionConfirmation(document.name))) {
-                    void state.deleteDocument(document.id);
-                  }
-                }}
-              >
-                删除
-              </button>
-            </div>)}
-          </div>
-          <div className="divider" />
-          <h2>单位图例</h2>
-          <SymbolPalette />
+          ) : null}
+
+          {leftPanelTab === "all" ? <div className="divider" /> : null}
+
+          {leftPanelTab !== "documents" ? (
+            <div className="left-panel-section symbols-section">
+              <h2>单位图例</h2>
+              <SymbolPalette />
+            </div>
+          ) : null}
         </aside>
 
         <section className="canvas-stage" data-testid="canvas-stage" onPointerDownCapture={() => setCanvasPointerActive(true)} onPointerUpCapture={() => setCanvasPointerActive(false)} onPointerCancelCapture={() => setCanvasPointerActive(false)}>
@@ -812,7 +922,20 @@ export default function App() {
                 setReferenceImages([]);
               }}
             />
-            <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>{planningAgent ? "模型规划并编译中…" : "仅生成事务预览（手动模式）"}</button>
+            {planningAgent ? (
+              <div className="agent-running-row">
+                <button className="primary" disabled>模型规划并编译中…</button>
+                <button type="button" className="danger" onClick={stopAgentPlanning}>🛑 停止生成</button>
+              </div>
+            ) : (
+              <button className="primary" disabled={busyAgent || !prompt.trim()} onClick={() => void planAgent()}>仅生成事务预览（手动模式）</button>
+            )}
+            <AgentStreamingViewer
+              thinking={streamingThinking}
+              content={streamingContent}
+              isStreaming={planningAgent || repairingAgent}
+              onStop={stopAgentPlanning}
+            />
             <details className="agent-provider-settings">
               <summary>模型服务与高级设置{model ? ` · ${model}` : ""}</summary>
               <label>服务预设<select value={providerPreset} onChange={(event: ChangeEvent<HTMLSelectElement>) => selectProviderPreset(event.target.value)}>{PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></label>
@@ -821,11 +944,14 @@ export default function App() {
               {loadingModels ? <div className="provider-model-status">正在读取模型列表…</div> : null}
               {availableModels.length ? <label>可用模型<select value={availableModels.some((item) => item.id === model) ? model : ""} onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}><option value="" disabled>选择模型</option>{availableModels.map((item) => <option key={item.id} value={item.id}>{item.id}{item.owned_by ? ` · ${item.owned_by}` : ""}</option>)}</select></label> : null}
               <label>Model name（可手工覆盖）<input value={model} onChange={(event: ChangeEvent<HTMLInputElement>) => setModel(event.target.value)} placeholder="从列表选择，或直接输入模型名称" /></label>
-              <label>超时（秒）<input type="number" min={minimumTimeoutSeconds} max={maxTimeoutSeconds} value={timeoutSeconds} onChange={(event: ChangeEvent<HTMLInputElement>) => setTimeoutSeconds(Math.min(maxTimeoutSeconds, Math.max(minimumTimeoutSeconds, Number(event.target.value) || defaultTimeoutSeconds)))} /></label>
               <label className="provider-thinking-toggle"><span>思考模式</span><input type="checkbox" checked={thinkingEnabled} onChange={(event: ChangeEvent<HTMLInputElement>) => setThinkingEnabled(event.target.checked)} /></label>
               <label>思考等级<select value={thinkingLevel ?? "high"} disabled={!thinkingEnabled} onChange={(event: ChangeEvent<HTMLSelectElement>) => setThinkingLevel(event.target.value as ProviderConfig["thinking_level"])}><option value="low">低</option><option value="high">高</option><option value="max">最大</option></select></label>
-              <div className="provider-model-status">服务端有效上限：{maxTimeoutSeconds} 秒</div>
-              <div className="provider-actions"><button type="button" onClick={() => void discoverProviderModels()} disabled={loadingModels || !baseUrl.trim()}>{loadingModels ? "读取中…" : "刷新模型列表"}</button><button type="button" onClick={() => void testCustomProvider()} disabled={testingProvider || !baseUrl.trim() || !model.trim()}>{testingProvider ? "正在测试…" : "测试连接"}</button></div>
+              <div className="provider-actions">
+                <button type="button" onClick={() => void discoverProviderModels()} disabled={loadingModels || !baseUrl.trim()}>{loadingModels ? "读取中…" : "刷新模型列表"}</button>
+                {loadingModels ? <button type="button" className="danger-inline" onClick={stopProviderDiscovery}>停止发现</button> : null}
+                <button type="button" onClick={() => void testCustomProvider()} disabled={testingProvider || !baseUrl.trim() || !model.trim()}>{testingProvider ? "正在测试…" : "测试连接"}</button>
+                {testingProvider ? <button type="button" className="danger-inline" onClick={stopProviderTest}>停止测试</button> : null}
+              </div>
               {modelDiscoveryError ? <div className="provider-test provider-test-error">{modelDiscoveryError}</div> : null}
               {providerTest ? <div className={`provider-test provider-test-${providerTest.model_available === false ? "warning" : "success"}`}><strong>{providerTest.message}</strong><span>{providerTest.model} · {providerTest.latency_ms} ms · {providerTest.method}</span></div> : null}
               {providerTestError ? <div className="provider-test provider-test-error">{providerTestError}</div> : null}
@@ -871,7 +997,11 @@ export default function App() {
               </section> : null}
               <div className="agent-preview-actions">
                 <button type="button" className="confirm" disabled={busyAgent || !pendingPlan.assessment.valid || !pendingPlan.compiled_plan} onClick={() => void applyAgentPlan()}>{applyingAgent ? "正在应用…" : "确认应用"}</button>
-                <button type="button" className="repair" disabled={busyAgent || pendingPlan.attempt >= 5 || pendingPlan.assessment.valid} onClick={() => void replanAgent()}>{repairingAgent ? "局部重规划中…" : `按失败原因重规划${pendingPlan.attempt ? `（${pendingPlan.attempt + 1}/5）` : ""}`}</button>
+                {repairingAgent ? (
+                  <button type="button" className="danger" onClick={stopAgentPlanning}>🛑 停止重规划</button>
+                ) : (
+                  <button type="button" className="repair" disabled={busyAgent || pendingPlan.attempt >= 5 || pendingPlan.assessment.valid} onClick={() => void replanAgent()}>{`按失败原因重规划${pendingPlan.attempt ? `（${pendingPlan.attempt + 1}/5）` : ""}`}</button>
+                )}
                 <button type="button" disabled={busyAgent} onClick={discardAgentPlan}>放弃预览</button>
               </div>
             </details> : null}
@@ -885,9 +1015,32 @@ export default function App() {
         open={createDocumentOpen}
         busy={state.loading}
         error={state.error}
-        onClose={() => setCreateDocumentOpen(false)}
-        onCreate={state.createDocument}
+        folders={projectFolders}
+        defaultFolderId={createDocumentFolderId}
+        onClose={() => {
+          setCreateDocumentOpen(false);
+          setCreateDocumentFolderId(undefined);
+        }}
+        onCreate={(name, folderId) => state.createDocument(name, folderId)}
       />
+      <CreateFolderDialog
+        open={createFolderOpen}
+        busy={state.loading}
+        error={state.error}
+        onClose={() => setCreateFolderOpen(false)}
+        onCreate={(name) => state.createFolder(name)}
+      />
+      {renameFolderTarget ? (
+        <RenameFolderDialog
+          open={Boolean(renameFolderTarget)}
+          folderId={renameFolderTarget.id}
+          currentName={renameFolderTarget.name}
+          busy={state.loading}
+          error={state.error}
+          onClose={() => setRenameFolderTarget(null)}
+          onRename={(folderId, newName) => state.renameFolder(folderId, newName)}
+        />
+      ) : null}
       <CommandPalette
         open={commandPaletteOpen}
         commands={paletteCommands}

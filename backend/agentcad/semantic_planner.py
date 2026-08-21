@@ -362,6 +362,210 @@ class SemanticAgentPlanner:
             raise LLMResponseError(str(exc), provider=provider) from exc
         return OpenAICompatiblePlanner._parse_json(content, provider)
 
+    def _stream_model_json(
+        self,
+        provider: ProviderConfig,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+    ):
+        payload = {
+            "model": provider.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": completion_temperature(provider, temperature),
+            "stream": True,
+        }
+        payload.update(completion_budget_fields(provider))
+        payload.update(thinking_request_fields(provider))
+        headers = OpenAICompatiblePlanner._headers(provider)
+        endpoint = provider.base_url.rstrip("/") + "/chat/completions"
+
+        full_content: list[str] = []
+        full_thinking: list[str] = []
+        inside_think = False
+
+        def _stream_lines(client: httpx.Client, req_payload: dict[str, Any]):
+            with client.stream("POST", endpoint, json=req_payload, headers=headers) as resp:
+                self.provider_transport._inspect_response(resp, provider, endpoint)
+                if resp.status_code in {400, 404, 422} and any(
+                    k in req_payload for k in ("thinking", "reasoning_effort", "max_completion_tokens")
+                ):
+                    fallback = dict(req_payload)
+                    fallback.pop("thinking", None)
+                    fallback.pop("reasoning_effort", None)
+                    fallback.pop("max_completion_tokens", None)
+                    with client.stream("POST", endpoint, json=fallback, headers=headers) as fallback_resp:
+                        self.provider_transport._inspect_response(fallback_resp, provider, endpoint)
+                        if fallback_resp.is_error:
+                            raise httpx.HTTPStatusError(
+                                f"HTTP {fallback_resp.status_code}",
+                                request=fallback_resp.request,
+                                response=fallback_resp,
+                            )
+                        for line in fallback_resp.iter_lines():
+                            yield line
+                elif resp.is_error:
+                    raise httpx.HTTPStatusError(
+                        f"HTTP {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
+                else:
+                    for line in resp.iter_lines():
+                        yield line
+
+        try:
+            with httpx.Client(
+                timeout=provider.timeout_seconds,
+                follow_redirects=False,
+                transport=provider_http_transport(self.provider_transport.provider_policy),
+            ) as client:
+                for line in _stream_lines(client, payload):
+                    if not line:
+                        continue
+                    line_str = line.strip()
+                    if not line_str.startswith("data:"):
+                        continue
+                    data_part = line_str[5:].strip()
+                    if data_part == "[DONE]":
+                        break
+                    try:
+                        chunk_json = json.loads(data_part)
+                    except ValueError:
+                        continue
+                    choices = chunk_json.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    delta = choice.get("delta") or {}
+
+                    # 1. Extract reasoning / thinking tokens (DeepSeek, Kimi, GLM, Ark, OpenRouter, Qwen, etc.)
+                    reasoning_chunk = (
+                        delta.get("reasoning_content")
+                        or delta.get("reasoning")
+                        or delta.get("thought")
+                        or delta.get("thinking")
+                        or choice.get("reasoning_content")
+                        or choice.get("reasoning")
+                        or ""
+                    )
+                    if reasoning_chunk:
+                        full_thinking.append(reasoning_chunk)
+                        yield ("thinking", reasoning_chunk)
+
+                    # 2. Extract content tokens (also handling embedded <think> tags)
+                    content_chunk = delta.get("content") or ""
+                    if content_chunk:
+                        if "<think>" in content_chunk or "<thought>" in content_chunk:
+                            tag = "<think>" if "<think>" in content_chunk else "<thought>"
+                            inside_think = True
+                            parts = content_chunk.split(tag, 1)
+                            if parts[0]:
+                                full_content.append(parts[0])
+                                yield ("content", parts[0])
+                            content_chunk = parts[1]
+
+                        if inside_think:
+                            end_tag = (
+                                "</think>"
+                                if "</think>" in content_chunk
+                                else "</thought>"
+                                if "</thought>" in content_chunk
+                                else None
+                            )
+                            if end_tag:
+                                inside_think = False
+                                parts = content_chunk.split(end_tag, 1)
+                                if parts[0]:
+                                    full_thinking.append(parts[0])
+                                    yield ("thinking", parts[0])
+                                if parts[1]:
+                                    full_content.append(parts[1])
+                                    yield ("content", parts[1])
+                            else:
+                                full_thinking.append(content_chunk)
+                                yield ("thinking", content_chunk)
+                        else:
+                            full_content.append(content_chunk)
+                            yield ("content", content_chunk)
+        except Exception:
+            raw = self._request_model_json(
+                provider,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+            )
+            if "explanation" in raw and raw["explanation"]:
+                yield ("thinking", f"【工艺拓扑与改动分析】\n{raw['explanation']}")
+            yield ("content", json.dumps(raw, ensure_ascii=False, indent=2))
+            return raw
+
+        accumulated = "".join(full_content)
+        if not accumulated.strip():
+            raw = self._request_model_json(
+                provider,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+            )
+            if "explanation" in raw and raw["explanation"]:
+                yield ("thinking", f"【工艺拓扑与改动分析】\n{raw['explanation']}")
+            yield ("content", json.dumps(raw, ensure_ascii=False, indent=2))
+            return raw
+
+        parsed = OpenAICompatiblePlanner._parse_json(accumulated, provider)
+        if not full_thinking and "explanation" in parsed and parsed["explanation"]:
+            yield ("thinking", f"【工艺拓扑与改动分析】\n{parsed['explanation']}")
+        return parsed
+
+    def stream_plan_events(
+        self,
+        document_id: str,
+        request: AgentGenerateRequest,
+    ):
+        provider = self.provider_transport._resolve_provider(
+            request.provider,
+            self.provider_transport.provider_policy,
+            self.provider_transport.max_timeout_seconds,
+        )
+        document = self.service.get_document(document_id)
+        scene = self.service.scene_summary(document_id)
+        user_prompt = (
+            f"Current document JSON:\n{document.model_dump_json(indent=2)}\n\n"
+            f"Scene summary:\n{json.dumps(scene, ensure_ascii=False, indent=2)}\n\n"
+            f"Additional process/design context:\n{request.context or '(none)'}\n\n"
+            f"User request:\n{request.prompt}"
+        )
+        full_diagram = not document.elements
+        transaction_model = FullDiagramTransaction if full_diagram else SemanticTransaction
+        schema = transaction_model.model_json_schema()
+        system_prompt = self._system_prompt(schema, repair=False, full_diagram=full_diagram)
+
+        raw_plan = yield from self._stream_model_json(
+            provider,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.1,
+        )
+
+        shaped = self._coerce_plan_shape(raw_plan)
+        normalized, _, _ = self._normalize_raw_plan(shaped, document)
+        plan = SemanticAgentPlan.model_validate(normalized)
+        if full_diagram:
+            FullDiagramTransaction.model_validate(
+                plan.transaction.model_dump(mode="python")
+            )
+        plan.transaction.expected_revision = (
+            request.expected_revision
+            if request.expected_revision is not None
+            else document.revision
+        )
+        yield ("plan", plan)
+
     @staticmethod
     def _coerce_plan_shape(raw_plan: dict[str, Any]) -> dict[str, Any]:
         if "transaction" in raw_plan or "operations" not in raw_plan:

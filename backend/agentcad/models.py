@@ -359,6 +359,7 @@ class DocumentSummary(StrictModel):
     revision: int
     element_count: int
     updated_at: datetime
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SymbolPort(StrictModel):
@@ -386,7 +387,7 @@ class ProviderConfig(StrictModel):
     base_url: str | None = None
     model: str | None = None
     api_key: str | None = None
-    timeout_seconds: float = Field(default=120, gt=0, le=600)
+    timeout_seconds: float | None = Field(default=None, gt=0)
     thinking_enabled: bool | None = None
     thinking_level: Literal["low", "high", "max"] | None = None
 

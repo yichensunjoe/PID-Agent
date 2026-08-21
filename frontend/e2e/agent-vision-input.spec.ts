@@ -24,7 +24,7 @@ test("uploads a reference image and sends it with the natural-language plan requ
   await expect(page.getByTestId("agent-reference-image-list")).toContainText("reference.png");
 
   let captured: Record<string, any> | null = null;
-  await page.route("**/api/v2/documents/*/agent/plan-v2", async (route) => {
+  await page.route("**/api/v2/documents/*/agent/plan-v2*", async (route) => {
     captured = route.request().postDataJSON() as Record<string, any>;
     await route.fulfill({
       status: 422,

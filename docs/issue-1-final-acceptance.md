@@ -45,9 +45,9 @@ Issue #1 的确定性编辑、语义事务、诊断、自动整理和大型图�
 
 至少提供 3 份 `accepted=true` 的不同模型报告：
 
-1. Agnes API，例如 `agnes-2.0-flash`；
-2. Ollama 本地模型；
-3. 另一个 OpenAI-compatible 云端或本地模型。
+1. OpenAI 或标准云端 API，例如 `gpt-4o-mini`；
+2. Ollama 本地模型，例如 `qwen3.6:35b`；
+3. 另一个 OpenAI-compatible 云端或本地模型（如 `deepseek-v4-flash`）。
 
 同时完成：
 
@@ -80,7 +80,7 @@ API Key 只存在页面内存和当前请求中，不使用 localStorage、sessi
 
 ## CLI 运行
 
-Agnes 示例：
+OpenAI / 兼容端点示例：
 
 ```bash
 read -s PID_AGENT_MATRIX_API_KEY
@@ -88,12 +88,12 @@ export PID_AGENT_MATRIX_API_KEY
 echo
 
 pid-agent model-matrix \
-  --base-url https://apihub.agnes-ai.com/v1 \
-  --model agnes-2.0-flash \
+  --base-url https://api.openai.com/v1 \
+  --model gpt-4o-mini \
   --timeout 180 \
   --repetitions 3 \
   --max-replans 3 \
-  --output reports/agnes-2.0-flash.json
+  --output reports/gpt-4o-mini.json
 ```
 
 `pid-agent model-matrix` 默认从 `PID_AGENT_MATRIX_API_KEY` 读取 Key。也可使用 `--api-key-env OTHER_ENV_NAME` 指定其他环境变量。`--api-key` 仅用于兼容，不建议用于正式验收，因为命令参数可能进入 shell 历史或进程列表。
@@ -144,8 +144,8 @@ Content-Type: application/json
 ```json
 {
   "provider": {
-    "base_url": "https://apihub.agnes-ai.com/v1",
-    "model": "agnes-2.0-flash",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini",
     "api_key": "request-memory-only",
     "timeout_seconds": 600,
     "thinking_enabled": true,

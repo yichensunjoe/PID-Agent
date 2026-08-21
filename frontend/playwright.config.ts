@@ -51,6 +51,7 @@ export default defineConfig({
         PID_AGENT_DIAGNOSTICS_PATH: diagnosticsPath,
         PID_AGENT_FRONTEND_DIST: path.resolve("dist"),
         PID_AGENT_CORS_ORIGINS: "http://127.0.0.1:4173",
+        PID_AGENT_AGENT_TIMEOUT_SECONDS: "180",
       },
       url: "http://127.0.0.1:8000/health",
       timeout: 30_000,

@@ -23,7 +23,6 @@ from .llm import (
     LLMResponseError,
     OpenAICompatiblePlanner,
     PlannerError,
-    ProviderConfig,
     ProviderConnectionError,
     ProviderNetworkPolicyError,
     ProviderResponseTooLargeError,
@@ -44,7 +43,7 @@ from .provider_compat import (
     completion_budget_fields,
     completion_temperature,
     extract_chat_content,
-    is_kimi_k3_provider,
+    is_reasoning_provider,
     thinking_request_fields,
 )
 from .provider_security import (
@@ -222,10 +221,11 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
         request: VisionAgentGenerateRequest,
     ) -> SemanticAgentPlan:
         compact_provider = self._compact_k3_provider(document_id, request)
+        images = tuple(getattr(request, "images", ()))
         if compact_provider is not None:
             evidence = self._extract_k3_visual_evidence(
                 compact_provider,
-                tuple(request.images),
+                images,
                 request.prompt,
             )
             return self._plan_k3_compact_visual_graph(
@@ -235,9 +235,21 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                 evidence,
             )
         prepared = self._prepare_k3_vision_request(request)
-        token = self._request_images.set(tuple(prepared.images))
+        token = self._request_images.set(tuple(getattr(prepared, "images", ())))
         try:
             return super().plan(document_id, prepared)
+        finally:
+            self._request_images.reset(token)
+
+    def stream_plan_events(
+        self,
+        document_id: str,
+        request: VisionAgentGenerateRequest,
+    ):
+        prepared = self._prepare_k3_vision_request(request)
+        token = self._request_images.set(tuple(getattr(prepared, "images", ())))
+        try:
+            yield from super().stream_plan_events(document_id, prepared)
         finally:
             self._request_images.reset(token)
 
@@ -248,10 +260,11 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
         failure: AgentTransactionAssessment,
     ) -> SemanticAgentPlan:
         compact_provider = self._compact_k3_provider(document_id, request)
+        images = tuple(getattr(request, "images", ()))
         if compact_provider is not None:
             evidence = self._extract_k3_visual_evidence(
                 compact_provider,
-                tuple(request.images),
+                images,
                 request.prompt,
             )
             return self._plan_k3_compact_visual_graph(
@@ -262,7 +275,7 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
                 repair_context=failure.model_dump(mode="json"),
             )
         prepared = self._prepare_k3_vision_request(request)
-        token = self._request_images.set(tuple(prepared.images))
+        token = self._request_images.set(tuple(getattr(prepared, "images", ())))
         try:
             return super().replan(document_id, prepared, failure)
         finally:
@@ -273,14 +286,15 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
         document_id: str,
         request: VisionAgentGenerateRequest | VisionSemanticAgentReplanRequest,
     ) -> ProviderConfig | None:
-        if not request.images or self.service.get_document(document_id).elements:
+        images = getattr(request, "images", None)
+        if not images or self.service.get_document(document_id).elements:
             return None
         provider = self.provider_transport._resolve_provider(
             request.provider,
             self.provider_transport.provider_policy,
             self.provider_transport.max_timeout_seconds,
         )
-        return provider if is_kimi_k3_provider(provider) else None
+        return provider if is_reasoning_provider(provider) else None
 
     def _plan_k3_compact_visual_graph(
         self,
@@ -1772,16 +1786,17 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
 
     def _prepare_k3_vision_request(
         self,
-        request: VisionAgentGenerateRequest | VisionSemanticAgentReplanRequest,
-    ) -> VisionAgentGenerateRequest | VisionSemanticAgentReplanRequest:
-        if not request.images:
+        request: Any,
+    ) -> Any:
+        images = getattr(request, "images", None)
+        if not images:
             return request
         provider = self.provider_transport._resolve_provider(
             request.provider,
             self.provider_transport.provider_policy,
             self.provider_transport.max_timeout_seconds,
         )
-        if not is_kimi_k3_provider(provider):
+        if not is_reasoning_provider(provider):
             return request
         evidence = self._extract_k3_visual_evidence(
             provider,
@@ -1906,7 +1921,7 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
         schema_repair = repair
         request_images = () if schema_repair else attached_images
         request_provider = provider
-        if attached_images and is_kimi_k3_provider(provider):
+        if attached_images and is_reasoning_provider(provider):
             request_provider = provider.model_copy(
                 update={"thinking_enabled": True, "thinking_level": "low"}
             )
@@ -1936,7 +1951,7 @@ class VisionSemanticAgentPlanner(SemanticAgentPlanner):
         except (LLMPlanValidationError, LLMResponseError) as exc:
             if isinstance(exc, LLMResponseError) and "finish_reason=length" not in str(exc):
                 raise
-            if not is_kimi_k3_provider(provider):
+            if not is_reasoning_provider(provider):
                 raise
             recovery_provider = provider.model_copy(
                 update={"thinking_enabled": True, "thinking_level": "low"}

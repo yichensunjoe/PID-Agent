@@ -13,7 +13,7 @@ function dedupePoints(points: Point[]): Point[] {
 }
 
 export type Rect = { x1: number; y1: number; x2: number; y2: number };
-export type AlignmentGuide = { axis: "x" | "y"; value: number; source: "edge" | "center" };
+export type AlignmentGuide = { axis: "x" | "y"; value: number; source: "edge" | "center" | "equidistant" };
 export type AlignmentMode = "left" | "center" | "right" | "top" | "middle" | "bottom";
 export type DistributionAxis = "horizontal" | "vertical";
 export type Translation = { id: string; dx: number; dy: number };
@@ -161,12 +161,73 @@ export function snapSelectionToGuides(
         }
       }
     }
+    if (!best && targetRects.length >= 2) {
+      const movingCenter = axis === "x" ? (shifted.x1 + shifted.x2) / 2 : (shifted.y1 + shifted.y2) / 2;
+      const targetCenters = targetRects.map((r) => axis === "x" ? (r.x1 + r.x2) / 2 : (r.y1 + r.y2) / 2).sort((a, b) => a - b);
+      for (let i = 0; i < targetCenters.length - 1; i += 1) {
+        const c1 = targetCenters[i];
+        const c2 = targetCenters[i + 1];
+        const dist = c2 - c1;
+        const candidates = [c1 - dist, c2 + dist, (c1 + c2) / 2];
+        for (const cand of candidates) {
+          const correction = cand - movingCenter;
+          if (Math.abs(correction) <= tolerance && (!best || Math.abs(correction) < Math.abs(best.correction))) {
+            best = {
+              correction,
+              guide: {
+                axis,
+                value: cand,
+                source: "equidistant",
+              },
+            };
+          }
+        }
+      }
+    }
     if (!best) continue;
     if (axis === "x") result.dx += best.correction;
     else result.dy += best.correction;
     result.guides.push(best.guide);
   }
   return result;
+}
+
+export function snapPointToGuides(
+  point: Point,
+  targetRects: Rect[],
+  tolerance: number,
+): { point: Point; guides: AlignmentGuide[] } {
+  if (!targetRects.length) return { point, guides: [] };
+  let px = point.x;
+  let py = point.y;
+  const guides: AlignmentGuide[] = [];
+
+  for (const axis of ["x", "y"] as const) {
+    const val = axis === "x" ? px : py;
+    let best: { correction: number; guide: AlignmentGuide } | null = null;
+    for (const target of targetRects) {
+      for (const targetAnchor of axisAnchors(target, axis)) {
+        const correction = targetAnchor.value - val;
+        if (Math.abs(correction) > tolerance) continue;
+        if (!best || Math.abs(correction) < Math.abs(best.correction)) {
+          best = {
+            correction,
+            guide: {
+              axis,
+              value: targetAnchor.value,
+              source: targetAnchor.source,
+            },
+          };
+        }
+      }
+    }
+    if (best) {
+      if (axis === "x") px += best.correction;
+      else py += best.correction;
+      guides.push(best.guide);
+    }
+  }
+  return { point: { x: px, y: py }, guides };
 }
 
 export function alignmentTranslations(elements: Element[], mode: AlignmentMode): Translation[] {
@@ -318,4 +379,52 @@ export function splitInlineConnectorPoints(
     first: dedupePoints([...connector.points.slice(0, plan.segmentIndex + 1), plan.firstPoint]),
     second: dedupePoints([plan.secondPoint, ...connector.points.slice(plan.segmentIndex + 1)]),
   };
+}
+
+export function shiftPoint(point: Point, dx: number, dy: number): Point {
+  return { x: point.x + dx, y: point.y + dy };
+}
+
+export function translateElement(element: Element, dx: number, dy: number): Element {
+  const clone = structuredClone(element);
+  if (clone.type === "line") {
+    clone.start = shiftPoint(clone.start, dx, dy);
+    clone.end = shiftPoint(clone.end, dx, dy);
+  } else if (clone.type === "rectangle") {
+    clone.x += dx;
+    clone.y += dy;
+  } else if (clone.type === "circle") {
+    clone.center = shiftPoint(clone.center, dx, dy);
+  } else if (clone.type === "text" || clone.type === "symbol" || clone.type === "junction") {
+    clone.position = shiftPoint(clone.position, dx, dy);
+  } else {
+    clone.points = clone.points.map((point) => shiftPoint(point, dx, dy));
+    if (clone.type === "connector") {
+      if (clone.source && !clone.source.element_id) clone.source.point = shiftPoint(clone.source.point, dx, dy);
+      if (clone.target && !clone.target.element_id) clone.target.point = shiftPoint(clone.target.point, dx, dy);
+      const locked = clone.metadata.locked_route_points;
+      if (Array.isArray(locked)) {
+        clone.metadata = {
+          ...clone.metadata,
+          locked_route_points: locked.map((value) => {
+            if (!value || typeof value !== "object") return value;
+            const point = value as { x?: unknown; y?: unknown };
+            return typeof point.x === "number" && typeof point.y === "number"
+              ? shiftPoint({ x: point.x, y: point.y }, dx, dy)
+              : value;
+          }),
+        };
+      }
+    }
+  }
+  return clone;
+}
+
+export function updatePatch(element: Element): Record<string, unknown> {
+  if (element.type === "line") return { start: element.start, end: element.end };
+  if (element.type === "rectangle") return { x: element.x, y: element.y };
+  if (element.type === "circle") return { center: element.center };
+  if (element.type === "text" || element.type === "symbol" || element.type === "junction") return { position: element.position };
+  if (element.type === "connector") return { points: element.points, source: element.source, target: element.target, routing: element.routing, metadata: element.metadata };
+  return { points: element.points };
 }

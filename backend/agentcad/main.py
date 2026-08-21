@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from math import ceil, isfinite
 from time import perf_counter
+from urllib.parse import parse_qsl
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -30,6 +31,119 @@ from .symbols import SymbolRegistry
 from .vision_semantic_planner import VisionSemanticAgentPlanner
 
 VERSION = __version__
+
+
+class RequestDiagnosticsASGIMiddleware:
+    def __init__(self, app, diagnostics: DiagnosticLogger, service: DocumentService):
+        self.app = app
+        self.diagnostics = diagnostics
+        self.service = service
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path", "")
+        should_log = path.startswith("/api/") or path == "/health"
+        if not should_log:
+            return await self.app(scope, receive, send)
+
+        request_id = uuid4().hex
+        started = perf_counter()
+        query_string = scope.get("query_string", b"").decode("utf-8", errors="replace")
+        method = scope.get("method", "GET")
+        client = scope.get("client")
+        client_host = client[0] if client else None
+
+        self.diagnostics.emit(
+            "http.request.started",
+            request_id=request_id,
+            method=method,
+            path=path,
+            query=redact_query_string(query_string),
+            client=client_host,
+        )
+
+        legacy_prefix = "/api/v2/documents/"
+        legacy_suffix = "/export.png"
+        if method == "GET" and path.startswith(legacy_prefix) and path.endswith(legacy_suffix):
+            document_id = path[len(legacy_prefix) : -len(legacy_suffix)].strip("/")
+            try:
+                params = dict(parse_qsl(query_string, keep_blank_values=True))
+                scale = float(params.get("scale", "1"))
+                if isfinite(scale) and 0.1 <= scale <= 8:
+                    document = self.service.get_document(document_id)
+                    output_width = max(1, ceil(document.canvas.width * scale))
+                    output_height = max(1, ceil(document.canvas.height * scale))
+                    requested_pixels = output_width * output_height
+                    max_pixels = _max_export_pixels()
+                    if requested_pixels > max_pixels:
+                        self.diagnostics.emit(
+                            "export.rejected",
+                            request_id=request_id,
+                            document_id=document.id,
+                            revision=document.revision,
+                            format="png",
+                            export_range="canvas",
+                            legacy_route=True,
+                            error_code="export_too_large",
+                            requested_pixels=requested_pixels,
+                            max_pixels=max_pixels,
+                            output_width=output_width,
+                            output_height=output_height,
+                        )
+                        response = JSONResponse(
+                            status_code=413,
+                            content={
+                                "detail": {
+                                    "error": "export_too_large",
+                                    "message": "PNG export exceeds the configured pixel limit",
+                                    "retryable": True,
+                                    "requested_pixels": requested_pixels,
+                                    "max_pixels": max_pixels,
+                                    "output": {
+                                        "width": output_width,
+                                        "height": output_height,
+                                    },
+                                    "suggestions": [
+                                        "降低 scale",
+                                        "使用 export-v2 的 content 或 viewport 范围",
+                                        "使用 SVG 导出超大图纸",
+                                    ],
+                                }
+                            },
+                        )
+                        return await response(scope, receive, send)
+            except Exception:
+                pass
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-pid-agent-request-id", request_id.encode("ascii")))
+                message["headers"] = headers
+                self.diagnostics.emit(
+                    "http.request.completed",
+                    request_id=request_id,
+                    method=method,
+                    path=path,
+                    status_code=message.get("status", 200),
+                    duration_ms=round((perf_counter() - started) * 1000, 2),
+                )
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception as exc:
+            self.diagnostics.emit(
+                "http.request.failed",
+                request_id=request_id,
+                method=method,
+                path=path,
+                duration_ms=round((perf_counter() - started) * 1000, 2),
+                error=exc,
+            )
+            raise
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -120,105 +234,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ],
     )
 
-    @app.middleware("http")
-    async def record_request_diagnostics(request: Request, call_next):
-        should_log = request.url.path.startswith("/api/") or request.url.path == "/health"
-        if not should_log:
-            return await call_next(request)
-        request_id = uuid4().hex
-        started = perf_counter()
-        diagnostics.emit(
-            "http.request.started",
-            request_id=request_id,
-            method=request.method,
-            path=request.url.path,
-            query=redact_query_string(request.url.query),
-            client=request.client.host if request.client else None,
-        )
-        response = None
-        legacy_prefix = "/api/v2/documents/"
-        legacy_suffix = "/export.png"
-        if (
-            request.method == "GET"
-            and request.url.path.startswith(legacy_prefix)
-            and request.url.path.endswith(legacy_suffix)
-        ):
-            document_id = request.url.path[len(legacy_prefix) : -len(legacy_suffix)].strip("/")
-            try:
-                scale = float(request.query_params.get("scale", "1"))
-                if isfinite(scale) and 0.1 <= scale <= 8:
-                    document = service.get_document(document_id)
-                    output_width = max(1, ceil(document.canvas.width * scale))
-                    output_height = max(1, ceil(document.canvas.height * scale))
-                    requested_pixels = output_width * output_height
-                    max_pixels = _max_export_pixels()
-                    if requested_pixels > max_pixels:
-                        diagnostics.emit(
-                            "export.rejected",
-                            request_id=request_id,
-                            document_id=document.id,
-                            revision=document.revision,
-                            format="png",
-                            export_range="canvas",
-                            legacy_route=True,
-                            error_code="export_too_large",
-                            requested_pixels=requested_pixels,
-                            max_pixels=max_pixels,
-                            output_width=output_width,
-                            output_height=output_height,
-                        )
-                        response = JSONResponse(
-                            status_code=413,
-                            content={
-                                "detail": {
-                                    "error": "export_too_large",
-                                    "message": "PNG export exceeds the configured pixel limit",
-                                    "retryable": True,
-                                    "requested_pixels": requested_pixels,
-                                    "max_pixels": max_pixels,
-                                    "output": {
-                                        "width": output_width,
-                                        "height": output_height,
-                                    },
-                                    "suggestions": [
-                                        "降低 scale",
-                                        "使用 export-v2 的 content 或 viewport 范围",
-                                        "使用 SVG 导出超大图纸",
-                                    ],
-                                }
-                            },
-                        )
-            except (TypeError, ValueError, LookupError):
-                response = None
-        if response is None:
-            try:
-                response = await call_next(request)
-            except Exception as exc:
-                diagnostics.emit(
-                    "http.request.failed",
-                    request_id=request_id,
-                    method=request.method,
-                    path=request.url.path,
-                    duration_ms=round((perf_counter() - started) * 1000, 2),
-                    error=exc,
-                )
-                raise
-        response.headers["X-PID-Agent-Request-ID"] = request_id
-        diagnostics.emit(
-            "http.request.completed",
-            request_id=request_id,
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=round((perf_counter() - started) * 1000, 2),
-        )
-        return response
+    app.add_middleware(
+        RequestDiagnosticsASGIMiddleware,
+        diagnostics=diagnostics,
+        service=service,
+    )
 
-    request_boundary = RequestBoundary(settings)
-
-    @app.middleware("http")
-    async def enforce_request_boundaries(request: Request, call_next):
-        return await request_boundary(request, call_next)
+    app.add_middleware(
+        RequestBoundary,
+        settings=settings,
+    )
 
     app.include_router(create_v2_router(service, planner, diagnostics, VERSION))
     app.include_router(create_documents_router(service))

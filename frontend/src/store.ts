@@ -22,6 +22,7 @@ import type {
   CircleVariety,
   Operation,
   Point,
+  ProjectFolder,
   ProjectSettings,
   RectangleVariety,
   SymbolDefinition,
@@ -118,7 +119,11 @@ type State = {
   syncMessage: string;
   pendingExternalRevision: number | null;
   loadWorkspace: () => Promise<void>;
-  createDocument: (name: string) => Promise<boolean>;
+  createDocument: (name: string, folderId?: string) => Promise<boolean>;
+  createFolder: (name: string) => Promise<boolean>;
+  renameFolder: (folderId: string, newName: string) => Promise<boolean>;
+  deleteFolder: (folderId: string) => Promise<boolean>;
+  moveDocumentToFolder: (documentId: string, folderId: string) => Promise<boolean>;
   deleteDocument: (id: string) => Promise<void>;
   importDocumentPayload: (payload: unknown) => Promise<void>;
   importProjectPackagePayload: (payload: unknown) => Promise<void>;
@@ -208,12 +213,12 @@ export const useWorkspace = create<State>((set, get) => ({
     }
   },
 
-  createDocument: async (name) => {
+  createDocument: async (name, folderId) => {
     const normalizedName = name.trim();
     if (!normalizedName) return false;
     set({ loading: true, error: null, syncState: "checking", syncMessage: "正在创建文档…" });
     try {
-      const document = await api.createDocument(normalizedName);
+      const document = await api.createDocument(normalizedName, { folder_id: folderId });
       set({
         document,
         documents: await api.listDocuments(),
@@ -231,6 +236,94 @@ export const useWorkspace = create<State>((set, get) => ({
         syncState: "error",
         syncMessage: "文档创建失败",
       });
+      return false;
+    }
+  },
+
+  createFolder: async (name) => {
+    const normalized = name.trim();
+    if (!normalized) return false;
+    const currentSettings = get().projectSettings;
+    const existingFolders = ((currentSettings.metadata?.folders as ProjectFolder[] | undefined) ?? []);
+    const newFolder: ProjectFolder = {
+      id: `folder_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: normalized,
+      created_at: new Date().toISOString(),
+    };
+    const nextSettings: ProjectSettings = {
+      ...currentSettings,
+      metadata: {
+        ...(currentSettings.metadata ?? {}),
+        folders: [...existingFolders, newFolder],
+      },
+    };
+    try {
+      const saved = await api.updateProjectSettings(nextSettings);
+      set({ projectSettings: saved });
+      return true;
+    } catch (error) {
+      set({ error: messageFromError(error) });
+      return false;
+    }
+  },
+
+  renameFolder: async (folderId, newName) => {
+    const normalized = newName.trim();
+    if (!normalized) return false;
+    const currentSettings = get().projectSettings;
+    const existingFolders = ((currentSettings.metadata?.folders as ProjectFolder[] | undefined) ?? []);
+    const nextSettings: ProjectSettings = {
+      ...currentSettings,
+      metadata: {
+        ...(currentSettings.metadata ?? {}),
+        folders: existingFolders.map((f) => (f.id === folderId ? { ...f, name: normalized } : f)),
+      },
+    };
+    try {
+      const saved = await api.updateProjectSettings(nextSettings);
+      set({ projectSettings: saved });
+      return true;
+    } catch (error) {
+      set({ error: messageFromError(error) });
+      return false;
+    }
+  },
+
+  deleteFolder: async (folderId) => {
+    const currentSettings = get().projectSettings;
+    const existingFolders = ((currentSettings.metadata?.folders as ProjectFolder[] | undefined) ?? []);
+    const nextSettings: ProjectSettings = {
+      ...currentSettings,
+      metadata: {
+        ...(currentSettings.metadata ?? {}),
+        folders: existingFolders.filter((f) => f.id !== folderId),
+      },
+    };
+    try {
+      const saved = await api.updateProjectSettings(nextSettings);
+      const docs = await api.listDocuments();
+      set({ projectSettings: saved, documents: docs });
+      return true;
+    } catch (error) {
+      set({ error: messageFromError(error) });
+      return false;
+    }
+  },
+
+  moveDocumentToFolder: async (documentId, folderId) => {
+    const docs = get().documents;
+    const target = docs.find((d) => d.id === documentId);
+    if (!target) return false;
+    try {
+      const updated = await api.moveDocumentFolder(documentId, folderId, target.revision);
+      const nextDocs = await api.listDocuments();
+      set((state) => ({
+        documents: nextDocs,
+        document: state.document?.id === documentId ? updated : state.document,
+      }));
+      return true;
+    } catch (error) {
+      set({ error: messageFromError(error) });
       return false;
     }
   },
@@ -398,8 +491,13 @@ export const useWorkspace = create<State>((set, get) => ({
     try {
       const document = await api.getDocument(id);
       if (requestGeneration !== documentRequestGeneration) return;
+      const documents = get().documents.some((item) => item.id === id)
+        ? get().documents
+        : await api.listDocuments();
+      if (requestGeneration !== documentRequestGeneration) return;
       set({
         document,
+        documents,
         loading: false,
         syncState: "synced",
         syncMessage: `已同步至 r${document.revision}`,

@@ -96,15 +96,17 @@ function RuntimeEnhancementsEnabled() {
   }, [documentsOpen, sidebar, symbolsOpen]);
 
   const openDocument = async (documentId: string, rememberCurrent = true) => {
-    if (!workspace.documents.some((item) => item.id === documentId)) {
-      setRuntimeMessage("关联的 P&ID 已不存在，请重新设置 OPC 目标。");
-      return;
-    }
-    if (rememberCurrent && workspace.document) {
-      sessionStorage.setItem("pid-agent:opc-return-document", workspace.document.id);
+    if (!documentId) return;
+    const currentDoc = useWorkspace.getState().document;
+    if (rememberCurrent && currentDoc) {
+      sessionStorage.setItem("pid-agent:opc-return-document", currentDoc.id);
     }
     setRuntimeMessage("");
-    await workspace.openDocument(documentId);
+    try {
+      await useWorkspace.getState().openDocument(documentId);
+    } catch {
+      setRuntimeMessage("关联的 P&ID 已不存在，请重新设置 OPC 目标。");
+    }
   };
 
   useEffect(() => {
@@ -112,8 +114,9 @@ function RuntimeEnhancementsEnabled() {
       const eventTarget = event.target;
       if (!(eventTarget instanceof Element)) return;
       if (!eventTarget.closest('svg[data-testid="editor-canvas"]')) return;
+      const jumpElement = eventTarget.closest("[data-opc-jump-for]");
       const group = eventTarget.closest("[data-element-id]");
-      const elementId = group?.getAttribute("data-element-id");
+      const elementId = jumpElement?.getAttribute("data-opc-jump-for") ?? group?.getAttribute("data-element-id");
       const currentDocument = useWorkspace.getState().document;
       const symbol = currentDocument?.elements.find(
         (element): element is SymbolElement => element.id === elementId && element.type === "symbol",
@@ -123,7 +126,12 @@ function RuntimeEnhancementsEnabled() {
       if (!isOpcDefinition(definition, symbol.symbol_key)) return;
       event.preventDefault();
       event.stopPropagation();
-      startOpcEdit(symbol);
+      const targetId = targetDocumentId(symbol);
+      if (targetId) {
+        void openDocument(targetId);
+      } else {
+        startOpcEdit(symbol);
+      }
     };
     document.addEventListener("dblclick", onDoubleClick, true);
     return () => document.removeEventListener("dblclick", onDoubleClick, true);
@@ -323,9 +331,9 @@ function RuntimeEnhancementsEnabled() {
                   fill="transparent"
                   pointerEvents="all"
                   style={{ cursor: "pointer" }}
-                  onClick={(event) => {
+                  onDoubleClick={(event) => {
                     event.stopPropagation();
-                    workspace.setSelection([symbol.id]);
+                    void openDocument(targetId);
                   }}
                 />
                 <text
@@ -436,11 +444,11 @@ function RuntimeEnhancementsEnabled() {
           type="button"
           disabled={!targetDocumentId(selectedOpc)}
           onClick={() => void openDocument(targetDocumentId(selectedOpc))}
-        >跳转到关联 P&amp;ID</button>
+        >跳转到关联 P&ID</button>
         <small>在画布上双击 OPC 可编辑框内文字描述；关联图纸后可通过上方按钮跳转，往返需在目标图放置相反方向 OPC。</small>
       </section> : null}
 
-      {canReturn ? <button type="button" onClick={() => void openDocument(returnDocumentId, false)}>返回上一张 P&amp;ID</button> : null}
+      {canReturn ? <button type="button" onClick={() => void openDocument(returnDocumentId, false)}>返回上一张 P&ID</button> : null}
       {runtimeMessage ? <div className="runtime-flow-message" role="status">{runtimeMessage}</div> : null}
     </aside> : null}
     {opcEditing ? createPortal(

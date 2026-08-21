@@ -1,6 +1,7 @@
 import type { SymbolDefinition } from "../types";
 
 const CATEGORY_ORDER = [
+  "基础图元",
   "阀门",
   "安全附件",
   "泵",

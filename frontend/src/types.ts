@@ -72,7 +72,21 @@ export type Document = {
   updated_at: string;
 };
 
-export type DocumentSummary = { id: string; name: string; revision: number; element_count: number; updated_at: string };
+export type ProjectFolder = {
+  id: string;
+  name: string;
+  color?: string;
+  created_at?: string;
+};
+
+export type DocumentSummary = {
+  id: string;
+  name: string;
+  revision: number;
+  element_count: number;
+  updated_at: string;
+  metadata?: Record<string, unknown>;
+};
 
 export type HistoryChange = {
   entity_kind: "element" | "layer" | "system";

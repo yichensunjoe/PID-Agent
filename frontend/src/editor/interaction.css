@@ -258,6 +258,10 @@
   stroke: #8b5cf6;
 }
 
+.alignment-guide.equidistant {
+  stroke: #10b981;
+}
+
 .inline-target-preview {
   fill: none;
   stroke-width: 6;

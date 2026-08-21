@@ -154,9 +154,13 @@ def create_v2_router(
         return {"status": "ok", "service": "P&ID-Agent", "api_version": "v2"}
 
     @router.get("/agent/runtime-config")
-    def agent_runtime_config() -> dict[str, float]:
+    def agent_runtime_config() -> dict[str, float | None]:
         return {
-            "default_timeout_seconds": min(120.0, planner.max_timeout_seconds),
+            "default_timeout_seconds": (
+                min(120.0, planner.max_timeout_seconds)
+                if planner.max_timeout_seconds is not None
+                else None
+            ),
             "max_timeout_seconds": planner.max_timeout_seconds,
         }
 

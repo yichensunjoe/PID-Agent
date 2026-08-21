@@ -142,7 +142,7 @@ class OpenAICompatiblePlanner:
         *,
         provider_policy: ProviderNetworkPolicy | None = None,
         max_response_bytes: int = 4 * 1024 * 1024,
-        max_timeout_seconds: float = 600,
+        max_timeout_seconds: float | None = None,
     ):
         self.service = service
         self.symbols = symbols
@@ -443,9 +443,8 @@ class OpenAICompatiblePlanner:
                 )
             if response.status_code == 400 and "invalid temperature" in body.lower():
                 raise LLMResponseError(
-                    "模型拒绝了 temperature 参数。Kimi Coding 模型要求 temperature=1；"
-                    "请使用 OpenAI 兼容 Base URL https://api.kimi.com/coding/v1，"
-                    "并选择 k3、kimi-for-coding 或 kimi-for-coding-highspeed。",
+                    "模型拒绝了 temperature 参数。部分推理模型要求固定采样温度或不支持显式 temperature；"
+                    "请在提供商配置中检查模型与端点设置。",
                     provider=provider,
                     provider_status=response.status_code,
                 )
@@ -472,7 +471,7 @@ class OpenAICompatiblePlanner:
     def _resolve_provider(
         override: ProviderConfig | None,
         policy: ProviderNetworkPolicy | None = None,
-        max_timeout_seconds: float = 600,
+        max_timeout_seconds: float | None = None,
     ) -> ProviderConfig:
         provider = override or ProviderConfig()
         custom_connection = bool(
@@ -493,6 +492,9 @@ class OpenAICompatiblePlanner:
                 "or pass provider.base_url and provider.model"
             )
         active_policy = policy or ProviderNetworkPolicy()
+        timeout = provider.timeout_seconds
+        if max_timeout_seconds is not None:
+            timeout = min(timeout, max_timeout_seconds) if timeout is not None else max_timeout_seconds
         try:
             normalized = active_policy.normalize_and_validate(base_url)
         except ProviderURLPolicyError as exc:
@@ -501,7 +503,7 @@ class OpenAICompatiblePlanner:
                 model=model,
                 thinking_enabled=provider.thinking_enabled,
                 thinking_level=provider.thinking_level,
-                timeout_seconds=min(provider.timeout_seconds, max_timeout_seconds),
+                timeout_seconds=timeout,
             )
             raise ProviderNetworkPolicyError(
                 str(exc), category=exc.category, provider=unsafe_provider
@@ -512,7 +514,7 @@ class OpenAICompatiblePlanner:
             api_key=api_key,
             thinking_enabled=provider.thinking_enabled,
             thinking_level=provider.thinking_level,
-            timeout_seconds=min(provider.timeout_seconds, max_timeout_seconds),
+            timeout_seconds=timeout,
         )
 
     @staticmethod

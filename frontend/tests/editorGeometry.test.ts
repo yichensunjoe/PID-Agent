@@ -7,6 +7,7 @@ import {
   evaluateInlineSymbolInsertion,
   fitRectToAspect,
   rectForElement,
+  snapPointToGuides,
   snapSelectionToGuides,
   splitInlineConnectorPoints,
 } from "../src/editor/editorGeometry.ts";
@@ -163,4 +164,28 @@ test("inline insertion rejects symbols with ambiguous port counts", () => {
   const definition = { ...horizontalValve, ports: [...horizontalValve.ports, { id: "tap", name: "Tap", x: 20, y: 0, direction: "bidirectional" as const, medium: "" }] };
   const result = evaluateInlineSymbolInsertion(symbol("v1", 0, 0), definition, connector([{ x: 0, y: 100 }, { x: 300, y: 100 }]), 0, { x: 150, y: 100 }, 20);
   assert.equal(result.ok, false);
+});
+
+test("smart guides snap moving rectangle to equidistant position between multiple targets", () => {
+  // Target A center at x=50, Target B center at x=150 (dist = 100)
+  // Moving center near x=250 (e.g. 248) -> should snap to x=250 with equidistant guide
+  const targets = [
+    { x1: 40, y1: 50, x2: 60, y2: 70 },
+    { x1: 140, y1: 50, x2: 160, y2: 70 },
+  ];
+  const moving = [{ x1: 0, y1: 0, x2: 20, y2: 20 }]; // width 20, center 10
+  // start center 10 + dx 239 = 249 (1px away from 250)
+  const result = snapSelectionToGuides(moving, targets, 239, 0, 3);
+  assert.equal(result.dx, 240); // center becomes 250
+  assert.ok(result.guides.some((g) => g.source === "equidistant" && g.value === 250));
+});
+
+test("snapPointToGuides snaps point to target anchors", () => {
+  const targets = [
+    { x1: 100, y1: 100, x2: 200, y2: 200 }, // center is (150, 150), edges at 100, 200
+  ];
+  const snapped = snapPointToGuides({ x: 151, y: 99 }, targets, 3);
+  assert.equal(snapped.point.x, 150); // snapped to center 150
+  assert.equal(snapped.point.y, 100); // snapped to edge 100
+  assert.equal(snapped.guides.length, 2);
 });
