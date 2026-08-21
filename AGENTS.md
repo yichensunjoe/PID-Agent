@@ -1,12 +1,12 @@
 # AGENTS.md — 项目规则（P055-PID-Agent）
 
-> 本文件包含「总库复用与踩坑日志」一节，是 Codex 项目库的统一约定，见 `/Users/joe/ai/reasonix/NEW_PROJECT_SOP.md`。
+> 本项目位于 reasonix 工作区时继承工作区根 `AGENTS.md`（相对路径 `../../../AGENTS.md`）；发生冲突时遵循上级规则。本文件包含「总库复用与踩坑日志」一节，是 Codex 项目库的统一约定，见 `/Users/joe/ai/reasonix/NEW_PROJECT_SOP.md`。
 
 ## 项目概览
 
 - Purpose：轻量浏览器 P&ID 软件，让工程人员与 AI Agent 共用同一套单位图例、结构化图纸和连接语义，共同创建、修改、解释和检查工艺流程图。
 - Stack：Python 后端（`backend/agentcad`）+ React/TypeScript 前端（`frontend/`，Vite），Docker 部署。
-- 产品显示名：P&ID-Agent；仓库 slug 规范名：PID-Agent；Python 导入路径暂保留 `agentcad`。
+- 产品显示名：P&ID-Agent；仓库 slug 规范名：p055-pid-agent；Python 导入路径暂保留 `agentcad`。
 
 ## 编码规则
 
